@@ -25,6 +25,7 @@ export function mountLayout() {
           <button class="game-card" data-page="overview" aria-label="Open Star Conflict">
             <span class="game-card-art"></span><span class="game-card-info"><img class="game-emblem" src="assets/starforge-emblem.svg" alt="" /><span><strong>Star Conflict</strong><small>Open game</small></span><span data-icon="arrow"></span></span>
           </button>
+          <div class="home-join"><p>Got a pack link from a server, maybe on Discord? Add it here to join.</p><button class="button" id="home-add-server"><span data-icon="plus"></span>Add a server or paste a pack link</button></div>
         </section>
         <section id="overview-page" class="overview-page" hidden>
           <div class="profile-summary"><span class="eyebrow">Server profile</span><h1 id="summary-name">No profile selected</h1>

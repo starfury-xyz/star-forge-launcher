@@ -1,6 +1,7 @@
 //! Server profiles: list, add, edit and delete from the launcher, and install
 //! or update server packs.
 
+use crate::Locked;
 use sc_launch::{packs, profiles};
 use sc_profile::{Local, Pack, FILES_DIR};
 use serde::{Deserialize, Serialize};
@@ -214,6 +215,9 @@ fn write_own_pack(dir: &std::path::Path, pack: &Pack) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_profile(app: AppHandle, id: String) -> Result<(), String> {
+    if crate::game::busy(&app) {
+        return Err("Close the game before deleting a profile.".into());
+    }
     let dir = profile_dir(&id)?;
     let pack_id = profiles::read_pack(&dir).map(|p| p.id);
     std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -429,7 +433,7 @@ pub async fn inspect_pack(app: AppHandle, source: String) -> Result<PackReview, 
         .map_err(|e| e.to_string())??;
     let reviews = app.state::<PackReviews>();
     let token = {
-        let mut next = reviews.next.lock().unwrap();
+        let mut next = reviews.next.locked();
         *next += 1;
         *next
     };
@@ -440,17 +444,19 @@ pub async fn inspect_pack(app: AppHandle, source: String) -> Result<PackReview, 
             return Err(e);
         }
     };
-    reviews.staged.lock().unwrap().insert(token, staged);
+    reviews.staged.locked().insert(token, staged);
     Ok(review)
 }
 
 #[tauri::command]
 pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> {
+    if crate::game::busy(&app) {
+        return Err("Close the game before installing or updating a pack.".into());
+    }
     let staged = app
         .state::<PackReviews>()
         .staged
-        .lock()
-        .unwrap()
+        .locked()
         .remove(&token)
         .ok_or("This pack review has expired; open the pack again.")?;
     let root = profiles_dir()?;
@@ -467,7 +473,7 @@ pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> 
 
 #[tauri::command]
 pub fn discard_pack(app: AppHandle, token: u64) {
-    if let Some(staged) = app.state::<PackReviews>().staged.lock().unwrap().remove(&token) {
+    if let Some(staged) = app.state::<PackReviews>().staged.locked().remove(&token) {
         packs::discard(staged);
     }
 }
@@ -550,7 +556,7 @@ pub async fn check_pack_updates() -> Result<Vec<UpdateAvailable>, String> {
 /// Hands a `starforge://` link to the interface, or keeps it until it listens.
 pub fn receive_link(app: &AppHandle, url: String) {
     let reviews = app.state::<PackReviews>();
-    let mut links = reviews.links.lock().unwrap();
+    let mut links = reviews.links.locked();
     if links.0 {
         crate::lifecycle::restore(app);
         if let Err(e) = app.emit_to("main", "pack-link", url) {
@@ -565,7 +571,7 @@ pub fn receive_link(app: &AppHandle, url: String) {
 #[tauri::command]
 pub fn take_pending_link(app: AppHandle) -> Option<String> {
     let reviews = app.state::<PackReviews>();
-    let mut links = reviews.links.lock().unwrap();
+    let mut links = reviews.links.locked();
     links.0 = true;
     links.1.take()
 }

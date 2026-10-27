@@ -6,6 +6,18 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Home has an **Add a server or paste a pack link** button, so a pack link
+  from Discord (where `starforge://` links can't be clicked) is easy to use
+- A failed pack install offers **Try again** instead of a dead Install button
+- Broken profiles can be selected, so they can be edited or deleted
+- Game settings changed while the launcher was closed (launch behaviour
+  "Exit") are shared with other profiles the next time the launcher starts
+- Packs can't be installed, updated or deleted while the game is running
+- Pack file lists and zips: names Windows would read as a different file
+  (trailing dot or space, device names like `con`) are refused
+- The launcher keeps working after an internal error instead of failing every
+  later action
+
 ## 0.2.3
 
 - Linux: Proton now always runs inside the Steam Linux Runtime its build asks

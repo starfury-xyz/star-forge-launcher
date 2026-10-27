@@ -140,6 +140,8 @@ export async function bindPacks(profiles, locked) {
   /** @type {PackReview | null} */
   let review = null;
   let busy = false;
+  /** Where the open review came from, so a failed install can start over. */
+  let source = '';
 
   const checkUpdates = async () => {
     const found = array(await invoke('check_pack_updates'), (item) => {
@@ -150,16 +152,17 @@ export async function bindPacks(profiles, locked) {
   };
 
   /** @param {string} source a path, https link or starforge:// link */
-  const open = async (source) => {
-    if (busy || !source.trim()) return;
+  const open = async (next) => {
+    if (busy || !next.trim()) return;
     busy = true;
     importButtons.forEach((b) => (b.disabled = true));
-    const remote = /^(https?|starforge):/i.test(source.trim());
+    const remote = /^(https?|starforge):/i.test(next.trim());
     if (remote) notice('Downloading the server pack…');
     try {
-      const next = parseReview(await invoke('inspect_pack', { source }));
+      const opened = parseReview(await invoke('inspect_pack', { source: next }));
       if (review) await invoke('discard_pack', { token: review.token });
-      review = next;
+      review = opened;
+      source = next;
       profiles.closeDialog();
       renderReview(review);
       install.disabled = false;
@@ -185,6 +188,7 @@ export async function bindPacks(profiles, locked) {
       return;
     }
     install.disabled = true;
+    const from = source;
     run(async () => {
       try {
         const id = string(await invoke('install_pack', { token: target.token }));
@@ -193,6 +197,13 @@ export async function bindPacks(profiles, locked) {
         await profiles.refresh(id);
         notice(target.update ? `Updated ${target.name} to ${target.version}.` : `Installed ${target.name}.`, 'success');
         run(checkUpdates);
+      } catch (error) {
+        // The review is used up either way; reopening the pack starts a fresh one.
+        dialog.close();
+        notice(`Could not install ${target.name}: ${errorMessage(error)}`, 'error', {
+          label: 'Try again',
+          action: () => run(() => open(from)),
+        });
       } finally {
         install.disabled = false;
       }

@@ -269,6 +269,10 @@ select:focus-visible {
   overflow: auto;
   transition: right 0.28s ease;
 }
+/* Home has no play dock, so its content can use the bottom of the window. */
+#launcher[data-page='home'] .content-area {
+  bottom: 36px;
+}
 .content-area > section:not([hidden]) {
   animation: page-arrive 180ms ease-out;
 }
@@ -284,6 +288,20 @@ select:focus-visible {
 }
 .home-page {
   padding-top: 10px;
+}
+.home-join {
+  max-width: 430px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.home-join p {
+  margin: 0 0 10px;
+}
+.home-join .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .section-heading {
   display: flex;
@@ -472,6 +490,14 @@ progress::-webkit-progress-value {
   padding: 0 3px;
   margin-left: auto;
   color: var(--muted);
+}
+.notice .notice-action {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.notice .notice-action + button {
+  margin-left: 0;
 }
 dialog {
   color: #ece8e3;

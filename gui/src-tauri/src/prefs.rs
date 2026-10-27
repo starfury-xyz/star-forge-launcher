@@ -1,5 +1,6 @@
 //! Launcher preferences, kept in `<data dir>/launcher.json`.
 
+use crate::Locked;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -81,11 +82,11 @@ pub fn load(app: &AppHandle) {
         .and_then(|f| std::fs::read_to_string(f).ok())
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default();
-    *app.state::<PrefsState>().0.lock().unwrap() = prefs;
+    *app.state::<PrefsState>().0.locked() = prefs;
 }
 
 pub fn get(app: &AppHandle) -> Preferences {
-    app.state::<PrefsState>().0.lock().unwrap().clone()
+    app.state::<PrefsState>().0.locked().clone()
 }
 
 fn save(prefs: &Preferences) -> Result<(), String> {
@@ -102,7 +103,7 @@ fn save(prefs: &Preferences) -> Result<(), String> {
 /// Applies `f` to the preferences and saves them.
 pub fn modify(app: &AppHandle, f: impl FnOnce(&mut Preferences)) -> Result<Preferences, String> {
     let state = app.state::<PrefsState>();
-    let mut guard = state.0.lock().unwrap();
+    let mut guard = state.0.locked();
     let mut next = guard.clone();
     f(&mut next);
     save(&next)?;

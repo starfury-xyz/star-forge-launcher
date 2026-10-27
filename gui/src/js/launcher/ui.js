@@ -50,8 +50,12 @@ export function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** @param {string} message @param {'info' | 'error' | 'success'} [level] */
-export function notice(message, level = 'info') {
+/**
+ * @param {string} message
+ * @param {'info' | 'error' | 'success'} [level]
+ * @param {{ label: string, action: () => void }} [button] runs once and dismisses the notice
+ */
+export function notice(message, level = 'info', button) {
   const area = required('notices');
   const messageText = message.replace(/<br\s*\/?\s*>/gi, '\n');
   if (Array.from(area.querySelectorAll('p')).some((node) => node.textContent === messageText))
@@ -65,7 +69,18 @@ export function notice(message, level = 'info') {
   close.textContent = '×';
   close.setAttribute('aria-label', 'Dismiss notification');
   close.addEventListener('click', () => item.remove());
-  item.append(text, close);
+  item.append(text);
+  if (button) {
+    const act = document.createElement('button');
+    act.className = 'notice-action';
+    act.textContent = button.label;
+    act.addEventListener('click', () => {
+      item.remove();
+      button.action();
+    });
+    item.append(act);
+  }
+  item.append(close);
   area.append(item);
   if (level !== 'error') setTimeout(() => item.remove(), 8000);
 }

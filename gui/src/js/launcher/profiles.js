@@ -111,17 +111,18 @@ export function bindProfiles(preferences, onChange) {
           brand(profile.error ? `${profile.name} (invalid)` : profile.name),
           profile.id,
         );
-        option.disabled = Boolean(profile.error);
         select.add(option);
       }
       const saved = prefer ?? preferences.get().selectedProfile;
       const usable = profiles.filter((p) => !p.error);
-      const choice = usable.find((p) => p.id === saved) || usable[0];
+      // Invalid profiles stay selectable so they can be edited or deleted; Play stays off.
+      const choice = profiles.find((p) => p.id === saved) || usable[0];
       select.value = choice ? choice.id : '';
       if ((choice?.id || '') !== preferences.get().selectedProfile)
         await preferences.update('selectedProfile', choice?.id || '');
       loaded = true;
       select.disabled = !profiles.length;
+      required('home-add-server').classList.toggle('primary', !profiles.length);
     } catch (error) {
       notice(`Could not load server profiles: ${errorMessage(error)}`, 'error');
     } finally {
@@ -163,6 +164,10 @@ export function bindProfiles(preferences, onChange) {
     });
   });
   required('add-profile').addEventListener('click', () => open(null));
+  required('home-add-server').addEventListener('click', () => {
+    open(null);
+    control('pack-link', HTMLInputElement).focus();
+  });
   required('summary-update').addEventListener('click', () => {
     const update = updates.get(current()?.id || '');
     if (update) onReviewUpdate(update.url);

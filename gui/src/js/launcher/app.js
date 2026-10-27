@@ -51,13 +51,15 @@ async function start() {
       (state.primaryAction === 'launch' && !profiles.ready());
     const status = required('launch-status');
     status.textContent =
-      state.phase === 'ready' && !profiles.ready()
-        ? 'Choose or add a server profile'
-        : state.phase === 'failed' && state.fixLabel
-          ? state.primaryAction === 'fix'
-            ? state.fixLabel
-            : 'Press Retry when Steam is done'
-          : statuses[state.phase];
+      state.phase === 'ready' && profiles.current()?.error
+        ? 'This profile is broken – edit or delete it'
+        : state.phase === 'ready' && !profiles.ready()
+          ? 'Choose or add a server profile'
+          : state.phase === 'failed' && state.fixLabel
+            ? state.primaryAction === 'fix'
+              ? state.fixLabel
+              : 'Press Retry when Steam is done'
+            : statuses[state.phase];
     status.dataset.ready = String(state.phase === 'ready' && profiles.ready());
     if (state.blockingReason && state.blockingReason !== lastReason)
       notice(state.blockingReason, 'error');

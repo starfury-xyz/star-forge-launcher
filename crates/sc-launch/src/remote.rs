@@ -102,7 +102,7 @@ struct JsonEntry {
 fn clean_path(raw: &str) -> Result<String, String> {
     let parts: Vec<&str> = raw.trim().split(['/', '\\']).collect();
     let ok = !parts.is_empty()
-        && parts.iter().all(|p| !p.is_empty() && *p != "." && *p != ".." && !p.contains(':') && !p.contains('\0'));
+        && parts.iter().all(|p| crate::plain_part(p));
     if !ok {
         return Err(format!("{raw:?} is not a plain path inside the game folder"));
     }
@@ -400,6 +400,14 @@ pub fn forget(profile_dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clean_path_rejects_escapes() {
+        for bad in ["../x", "/x", "C:\\x", "\\\\srv\\x", "data/address.cfg.", "data/con.lua", "a//b"] {
+            assert!(clean_path(bad).is_err(), "{bad:?}");
+        }
+        assert_eq!(clean_path("data\\a.lua").unwrap(), "data/a.lua");
+    }
 
     const HASH: &str = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae";
 

@@ -614,7 +614,7 @@ fn allowed(rel: &str) -> bool {
 /// Relative path with `/` separators if every part is a plain name.
 fn clean_rel(path: &str) -> Option<String> {
     let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
-    let ok = !parts.is_empty() && parts.iter().all(|p| *p != "." && *p != ".." && !p.contains(':'));
+    let ok = !parts.is_empty() && parts.iter().all(|p| crate::plain_part(p));
     ok.then(|| parts.join("/"))
 }
 
@@ -733,6 +733,8 @@ mod tests {
         assert!(!allowed("files/data/.gitkeep"));
         assert_eq!(clean_rel("a/../b"), None);
         assert_eq!(clean_rel("C:/x"), None);
+        assert_eq!(clean_rel("files/data/a.cfg."), None);
+        assert_eq!(clean_rel("files/con.lua"), None);
         assert_eq!(clean_rel("/a//b\\c").as_deref(), Some("a/b/c"));
     }
 

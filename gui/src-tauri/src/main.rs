@@ -55,6 +55,18 @@ fn app_version(app: tauri::AppHandle) -> String {
 
 /// `starforge://install?url=...` links, from the command line, the desktop, or
 /// a second launcher instance (which hands its link over and exits).
+/// `Mutex::lock` that keeps going after a panic in another command, instead
+/// of making every later command panic too.
+pub trait Locked<T> {
+    fn locked(&self) -> std::sync::MutexGuard<'_, T>;
+}
+
+impl<T> Locked<T> for std::sync::Mutex<T> {
+    fn locked(&self) -> std::sync::MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
 fn setup_pack_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
     sc_launch::packs::clear_staging();
