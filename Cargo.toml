@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/sc-profile", "crates/sc-patch", "crates/sc-inject", "crates/sc-agent", "crates/sc-launch", "gui/src-tauri"]
 
 [workspace.package]
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 license = "MIT"
 

@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.2.4
+
 - Game-file downloads finish all at once: files wait in a staging folder
   until every one has arrived and matched its checksum, so a failed or
   cancelled download never leaves a mix of old and new files (and finished
