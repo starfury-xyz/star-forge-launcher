@@ -56,6 +56,22 @@ export function bindProfiles(preferences, onChange) {
 
   const current = () => profiles.find((p) => p.id === select.value) || null;
 
+  /** @param {ProfileInfo} profile */
+  const optionLabel = (profile) =>
+    brand(
+      profile.error
+        ? `${profile.name} (invalid)`
+        : updates.has(profile.id)
+          ? `${profile.name} (update available)`
+          : profile.name,
+    );
+  const relabel = () => {
+    for (const option of Array.from(select.options)) {
+      const profile = profiles.find((p) => p.id === option.value);
+      if (profile) option.textContent = optionLabel(profile);
+    }
+  };
+
   const summarize = () => {
     const profile = current();
     required('summary-name').textContent = profile ? brand(profile.name) : 'No profile selected';
@@ -110,13 +126,7 @@ export function bindProfiles(preferences, onChange) {
       profiles = array(await invoke('list_profiles'), parseProfile);
       select.replaceChildren();
       if (!profiles.length) select.add(new Option('No profiles yet – add one', ''));
-      for (const profile of profiles) {
-        const option = new Option(
-          brand(profile.error ? `${profile.name} (invalid)` : profile.name),
-          profile.id,
-        );
-        select.add(option);
-      }
+      for (const profile of profiles) select.add(new Option(optionLabel(profile), profile.id));
       const saved = prefer ?? preferences.get().selectedProfile;
       const usable = profiles.filter((p) => !p.error);
       // Invalid profiles stay selectable so they can be edited or deleted; Play stays off.
@@ -189,9 +199,11 @@ export function bindProfiles(preferences, onChange) {
         const value = found === null ? null : object(found);
         if (value) {
           updates.set(profile.id, { version: string(value.version), url: string(value.url) });
+          relabel();
           notice(`Version ${string(value.version)} of ${profile.name} is available.`);
         } else {
           updates.delete(profile.id);
+          relabel();
           notice(`${profile.name} ${profile.version ?? ''} is up to date.`, 'success');
         }
       } catch (error) {
@@ -269,6 +281,13 @@ export function bindProfiles(preferences, onChange) {
     /** @param {Map<string, { version: string, url: string }>} found */
     setUpdates: (found) => {
       updates = found;
+      relabel();
+      summarize();
+    },
+    /** One pack's newer version, found at launch. @param {string} id @param {{ version: string, url: string }} update */
+    setUpdate: (id, update) => {
+      updates.set(id, update);
+      relabel();
       summarize();
     },
     /** @param {(url: string) => void} handler */

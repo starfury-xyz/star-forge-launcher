@@ -17,10 +17,9 @@ use crate::signing::{self, Depth};
 use crate::trust::{self, Trust};
 use sc_profile::{Pack, FILES_DIR, MANIFEST_FILE, PACK_FILE, PATCHES_DIR, RESOURCES_DIR, SIGNATURE_FILE};
 use sha2::{Digest, Sha256};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
 
 /// Largest pack we unpack or download. Packs may carry whole `.pak` archives.
 const MAX_PACK_BYTES: u64 = 8 << 30;
@@ -406,6 +405,8 @@ fn install_inner(staged: &Staged, profiles_dir: &Path) -> Result<String, String>
     // Checked again: another install may have pinned a key since the review.
     let trust = trust::check(&staged.pack.id, staged.trust.key().map_or(signing::Signature::Unsigned, signing::Signature::Signed))?;
     let name = if let Some(existing) = profiles::find_pack(profiles_dir, &staged.pack.id) {
+        // Not while a launch is syncing its game files.
+        let _lock = crate::remote::lock_profile(&existing)?;
         replace_pack(&staged.root, &existing)?;
         existing.file_name().unwrap().to_string_lossy().into_owned()
     } else {
@@ -495,7 +496,9 @@ pub fn check_update(pack: &Pack) -> Result<Option<Available>, String> {
     check_url(&update.url)?;
     let dir = new_staging_dir()?;
     let path = dir.join("pack.json");
-    let result = fetch(&update.url, &path, MAX_MANIFEST_BYTES, None).and_then(|()| read_published(&path, &update.url));
+    let result = fetch(&update.url, &path, MAX_MANIFEST_BYTES, None)
+        .map_err(String::from)
+        .and_then(|()| read_published(&path, &update.url));
     let _ = std::fs::remove_dir_all(&dir);
     let published = result?;
     if published.id != pack.id {
@@ -512,24 +515,6 @@ pub fn check_update(pack: &Pack) -> Result<Option<Available>, String> {
     Ok(newer.then(|| Available { version: published.version, url: update.url.clone(), required }))
 }
 
-/// Before a launch: asks the pack's server whether the installed version is
-/// still accepted. `Err` means it isn't (update first); a warning means it
-/// couldn't tell (the player should know they may be missing an update), or a
-/// newer optional version exists.
-pub fn launch_check(pack: &Pack) -> Result<Option<String>, String> {
-    if pack.update.is_none() {
-        return Ok(None);
-    }
-    match check_update(pack) {
-        Ok(Some(a)) if a.required => Err(format!(
-            "{}'s server needs pack version {} or newer (you have {}). Update the pack first.",
-            pack.name, a.version, pack.version
-        )),
-        Ok(Some(a)) => Ok(Some(format!("{} {} is available.", pack.name, a.version))),
-        Ok(None) => Ok(None),
-        Err(e) => Ok(Some(format!("Could not check {} for updates: {e}", pack.name))),
-    }
-}
 
 fn read_published(path: &Path, url: &str) -> Result<Pack, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{url}: {e}"))?;
@@ -544,50 +529,7 @@ fn looks_like_json(path: &Path) -> bool {
     buf[..n].iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'{')
 }
 
-/// Downloads `url` to `dest`, at most `limit` bytes, optionally hashing it.
-pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, hasher: Option<&mut Sha256>) -> Result<(), String> {
-    fetch_with(url, dest, limit, hasher, &mut |_, _| Ok(()))
-}
-
-/// [`fetch`], calling `on_bytes` after each chunk with the bytes received so
-/// far and the size the server announced, if it did. An error from
-/// `on_bytes` stops the download with that error.
-pub(crate) fn fetch_with(
-    url: &str,
-    dest: &Path,
-    limit: u64,
-    mut hasher: Option<&mut Sha256>,
-    on_bytes: &mut dyn FnMut(u64, Option<u64>) -> Result<(), String>,
-) -> Result<(), String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(60))
-        .user_agent(concat!("star-forge-launcher/", env!("CARGO_PKG_VERSION")))
-        .https_only(!url.starts_with("http://"))
-        .build();
-    let response = agent.get(url).call().map_err(|e| format!("{url}: {e}"))?;
-    let announced = response.header("Content-Length").and_then(|v| v.trim().parse().ok());
-    let mut reader = response.into_reader().take(limit + 1);
-    let mut file = std::fs::File::create(dest).map_err(|e| format!("{}: {e}", dest.display()))?;
-    let mut buf = vec![0u8; 64 * 1024];
-    let mut total = 0u64;
-    loop {
-        let n = reader.read(&mut buf).map_err(|e| format!("{url}: {e}"))?;
-        if n == 0 {
-            break;
-        }
-        total += n as u64;
-        if total > limit {
-            return Err(format!("{url}: larger than the {} MB limit", limit >> 20));
-        }
-        if let Some(h) = hasher.as_deref_mut() {
-            h.update(&buf[..n]);
-        }
-        file.write_all(&buf[..n]).map_err(|e| format!("{}: {e}", dest.display()))?;
-        on_bytes(total, announced)?;
-    }
-    Ok(())
-}
+pub(crate) use crate::net::fetch;
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -720,6 +662,7 @@ fn find_root(content: &Path) -> Result<PathBuf, String> {
 mod tests {
     use super::*;
     use crate::remote::quiet;
+    use std::io::Write;
 
     #[test]
     fn parses_sources() {

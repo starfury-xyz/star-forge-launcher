@@ -181,27 +181,23 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         return Err("Choose a server profile first.".into());
     }
     let dir = crate::profiles::profiles_dir()?.join(&selected);
-    let profile = profiles::load(&dir)?;
-    if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let trust = sc_launch::packs::verify_installed(&dir)?;
-    let pack = profiles::read_pack(&dir)?;
-    if let Some(warning) = sc_launch::packs::launch_check(&pack)? {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let mut download = crate::downloads::Session::new(app, "update", &pack.name);
-    let synced = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref(), &mut |e| download.report(e));
-    download.finish(synced.as_ref().err().map(String::as_str));
-    if let Some(note) = synced? {
-        notify(app, note, NotificationLevel::Info);
-    }
-    for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let shared = sc_launch::state::shared_local_appdata(&setup);
-    sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
-    let mut cmd = launch::command(&setup, &dir, &[])?;
+    let pack_name = profiles::read_pack(&dir).map(|p| p.name).unwrap_or_else(|_| selected.clone());
+    let mut download = Some(crate::downloads::Session::new(app, "update", &pack_name));
+    let prepared = sc_launch::prepare::prepare(&setup, &dir, &[], &mut |event| {
+        use sc_launch::prepare::Event;
+        match event {
+            Event::Note(note) => notify(app, note, NotificationLevel::Info),
+            Event::Update(found) => crate::profiles::announce_update(app, &selected, found),
+            Event::Sync(e) => return download.as_mut().map_or(Ok(()), |d| d.report(e)),
+            Event::SyncDone(error) => {
+                if let Some(d) = download.take() {
+                    d.finish(error);
+                }
+            }
+        }
+        Ok(())
+    })?;
+    let sc_launch::prepare::Prepared { command: mut cmd, profile, shared, .. } = prepared;
 
     // Proton and the injector are chatty; keep their output for troubleshooting.
     let (out, err) = match launch_log().and_then(|p| {

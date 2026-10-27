@@ -6,8 +6,10 @@
 pub mod compat;
 pub mod env;
 pub mod launch;
+pub mod net;
 pub mod packs;
 pub mod patching;
+pub mod prepare;
 pub mod profiles;
 pub mod remote;
 pub mod signing;

@@ -6,6 +6,22 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Game-file downloads finish all at once: files wait in a staging folder
+  until every one has arrived and matched its checksum, so a failed or
+  cancelled download never leaves a mix of old and new files (and finished
+  files are reused on the next try)
+- Only one download per profile at a time; installing or updating a pack
+  waits for a launch's download, and the other way round
+- Downloads retry passing network trouble twice, give up on a stalled
+  server after 20 s, check the announced size first, and say what went wrong
+  in plain words ("Can't reach …", "… arrived damaged")
+- A file list whose signature can't be fetched because of the network now
+  starts the game with the last good files, like an unreachable list
+- Pack updates are checked again when the launcher comes back into view
+  (at most every 30 minutes) and every few hours; profiles with an update say
+  so in the profile list, and an update found at launch (including one the
+  server requires) shows **Review update** right away
+- `sc-launch run` and the launcher share one launch sequence
 - First-run setup: **Express** (recommended folders, one click) or
   **Custom** (pick the Star Conflict folder, checked as you go, and the
   profiles folder, with an offer to move existing profiles). Settings →

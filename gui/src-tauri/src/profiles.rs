@@ -551,7 +551,7 @@ pub async fn pick_pack_file(app: AppHandle) -> Option<String> {
     file.into_path().ok().map(|p| p.to_string_lossy().into_owned())
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAvailable {
     id: String,
@@ -598,6 +598,15 @@ pub async fn check_pack_update(id: String) -> Result<Option<UpdateAvailable>, St
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Tells the interface a pack has a newer version (found at launch), so it
+/// can offer the update.
+pub fn announce_update(app: &AppHandle, id: &str, found: &packs::Available) {
+    let update = UpdateAvailable { id: id.to_string(), version: found.version.clone(), url: found.url.clone() };
+    if let Err(e) = app.emit_to("main", "pack-update-found", update) {
+        eprintln!("could not announce the pack update: {e}");
+    }
 }
 
 /// Hands a `starforge://` link to the interface, or keeps it until it listens.

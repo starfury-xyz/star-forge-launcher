@@ -237,5 +237,22 @@ export async function bindPacks(profiles, locked) {
   });
   const pending = await invoke('take_pending_link');
   if (typeof pending === 'string') run(() => open(pending));
-  run(checkUpdates);
+
+  // Pack updates: at startup, then when the launcher comes back into view
+  // after a while, and every few hours if it stays open.
+  const RECHECK_MS = 30 * 60 * 1000;
+  let lastCheck = 0;
+  const checkSoon = () => {
+    if (Date.now() - lastCheck < RECHECK_MS) return;
+    lastCheck = Date.now();
+    run(checkUpdates);
+  };
+  checkSoon();
+  window.addEventListener('focus', checkSoon);
+  setInterval(checkSoon, 3 * 60 * 60 * 1000);
+  // Found by a launch (including a version the server now requires).
+  await listen('pack-update-found', (input) => {
+    const value = object(input);
+    profiles.setUpdate(string(value.id), { version: string(value.version), url: string(value.url) });
+  });
 }
