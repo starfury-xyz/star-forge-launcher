@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- The injector no longer opens a terminal window when the game starts, which
+  on Linux also gave the game the wrong taskbar icon
 - Home has an **Add a server or paste a pack link** button, so a pack link
   from Discord (where `starforge://` links can't be clicked) is easy to use
 - A failed pack install offers **Try again** instead of a dead Install button
