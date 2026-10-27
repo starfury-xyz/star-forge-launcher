@@ -31,7 +31,7 @@ Each server you play on is a **profile**. Open **Add profile** (the + next to
 the server list) and pick one of:
 
 - **Community servers**: one click for the servers that ship with the
-  launcher.
+  launcher. STARFURY installs the server's own signed pack.
 - **A link** from the server's website or Discord, pasted into the box
   (`https://…/pack.json` or `starforge://install?url=…`). Clicking a
   `starforge://` link in your browser opens the launcher directly.

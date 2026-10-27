@@ -2,6 +2,7 @@
 //! key are in tauri.conf.json (`plugins.updater`); release builds publish a
 //! signed `latest.json` next to the packages (see .github/workflows/release.yml).
 
+use crate::Locked;
 use crate::{notify, NotificationLevel};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -47,7 +48,7 @@ pub async fn check_launcher_update(app: AppHandle) -> Result<Option<LauncherUpda
         current: u.current_version.clone(),
         page: page_of(u),
     });
-    *app.state::<UpdaterState>().0.lock().unwrap() = update;
+    *app.state::<UpdaterState>().0.locked() = update;
     Ok(info)
 }
 
@@ -63,8 +64,7 @@ pub async fn install_launcher_update(app: AppHandle) -> Result<(), String> {
     let update = app
         .state::<UpdaterState>()
         .0
-        .lock()
-        .unwrap()
+        .locked()
         .take()
         .ok_or("Check for updates first.")?;
     let mut downloaded = 0u64;
@@ -82,7 +82,7 @@ pub async fn install_launcher_update(app: AppHandle) -> Result<(), String> {
         .await;
     if let Err(e) = result {
         // Keep it so the player can retry without checking again.
-        *app.state::<UpdaterState>().0.lock().unwrap() = Some(update);
+        *app.state::<UpdaterState>().0.locked() = Some(update);
         return Err(format!("could not install the launcher update: {e}"));
     }
     // The Windows installer closes and restarts the launcher itself; the
@@ -96,8 +96,7 @@ pub fn open_launcher_release(app: AppHandle) -> Result<(), String> {
     let page = app
         .state::<UpdaterState>()
         .0
-        .lock()
-        .unwrap()
+        .locked()
         .as_ref()
         .and_then(page_of)
         .ok_or("No release page for this update.")?;

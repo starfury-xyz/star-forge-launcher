@@ -6,6 +6,58 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Game-file downloads finish all at once: files wait in a staging folder
+  until every one has arrived and matched its checksum, so a failed or
+  cancelled download never leaves a mix of old and new files (and finished
+  files are reused on the next try)
+- Only one download per profile at a time; installing or updating a pack
+  waits for a launch's download, and the other way round
+- Downloads retry passing network trouble twice, give up on a stalled
+  server after 20 s, check the announced size first, and say what went wrong
+  in plain words ("Can't reach …", "… arrived damaged")
+- A file list whose signature can't be fetched because of the network now
+  starts the game with the last good files, like an unreachable list
+- Pack updates are checked again when the launcher comes back into view
+  (at most every 30 minutes) and every few hours; profiles with an update say
+  so in the profile list, and an update found at launch (including one the
+  server requires) shows **Review update** right away
+- `sc-launch run` and the launcher share one launch sequence
+- First-run setup: **Express** (recommended folders, one click) or
+  **Custom** (pick the Star Conflict folder, checked as you go, and the
+  profiles folder, with an offer to move existing profiles). Settings →
+  Star Conflict → **Run setup…** opens it again. As an AppImage it also
+  offers to move itself into `~/Applications` with a menu entry, so
+  `starforge://` links and self-updates keep working. Existing installs
+  keep their folders and skip it
+- The profiles folder can live anywhere; `sc-launch` uses the same one
+  (`STAR_FORGE_PROFILES_DIR` overrides it)
+- Closing the launcher exits by default (it used to go to the tray)
+- The STARFURY community-server button installs STARFURY's own signed pack
+- Star Conflict page: **Check for updates** for the selected pack (says when
+  it's up to date, or why the check failed); a folder icon by the profile name
+  opens its folder; one **Edit profile** button instead of two
+- Tidier launch bar: no globe icon, and the status line only shows when it
+  says more than the play button
+- The notices bell is always in the rail; an empty history says so
+- Menus (settings, profiles, pack review, downloads) slide out from the left
+  rail and blur only the main area, so the rail and window controls stay
+  usable and another menu opens in one click; Esc closes them
+- Notifications stack in the bottom right, above any menu, at most three at a
+  time; they clear after 5 s (errors 10 s, hovering holds them) and repeats
+  count up. A bell in the rail opens the history
+- The injector no longer opens a terminal window when the game starts, which
+  on Linux also gave the game the wrong taskbar icon
+- Home has an **Add a server or paste a pack link** button, so a pack link
+  from Discord (where `starforge://` links can't be clicked) is easy to use
+- A failed pack install offers **Try again** instead of a dead Install button
+- Broken profiles can be selected, so they can be edited or deleted
+- Game settings changed while the launcher was closed (launch behaviour
+  "Exit") are shared with other profiles the next time the launcher starts
+- Packs can't be installed, updated or deleted while the game is running
+- Pack file lists and zips: names Windows would read as a different file
+  (trailing dot or space, device names like `con`) are refused
+- The launcher keeps working after an internal error instead of failing every
+  later action
 - Download window: when a pack's game files download (on install, or before
   a launch when the list changed), a window shows the percentage, a progress
   bar, speed, time left, a throughput graph and a log of each file as it

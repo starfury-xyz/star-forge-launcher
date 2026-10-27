@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use crate::Locked;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// What a download the player cancelled fails with.
@@ -71,7 +72,7 @@ impl Session {
         let downloads = app.state::<Downloads>();
         let id = downloads.next.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = Arc::new(AtomicBool::new(false));
-        downloads.running.lock().unwrap().insert(id, cancel.clone());
+        downloads.running.locked().insert(id, cancel.clone());
         Session { app: app.clone(), id, action, title: title.to_string(), cancel, shown: false, last_tick: None }
     }
 
@@ -121,6 +122,11 @@ impl Session {
         Ok(())
     }
 
+    /// The player pressed Cancel.
+    pub fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
+
     /// Ends the download in the window, with what went wrong, if anything.
     pub fn finish(self, error: Option<&str>) {
         if self.shown {
@@ -131,14 +137,14 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        self.app.state::<Downloads>().running.lock().unwrap().remove(&self.id);
+        self.app.state::<Downloads>().running.locked().remove(&self.id);
     }
 }
 
 /// Stops a download at its next chunk. Files that finished are kept.
 #[tauri::command]
 pub fn cancel_download(app: AppHandle, id: u64) {
-    if let Some(flag) = app.state::<Downloads>().running.lock().unwrap().get(&id) {
+    if let Some(flag) = app.state::<Downloads>().running.locked().get(&id) {
         flag.store(true, Ordering::Relaxed);
     }
 }

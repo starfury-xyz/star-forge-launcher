@@ -41,8 +41,77 @@ pub fn data_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
-pub fn default_profiles_dir() -> Option<PathBuf> {
+/// File in the data folder naming a profiles folder chosen by the player.
+const PROFILES_LOCATION: &str = "profiles-location";
+
+/// The profiles folder under the data folder, used unless the player picks another.
+pub fn standard_profiles_dir() -> Option<PathBuf> {
     data_dir().map(|d| d.join("profiles"))
+}
+
+/// The profiles folder: `STAR_FORGE_PROFILES_DIR`, else the one picked in the
+/// launcher's setup, else [`standard_profiles_dir`].
+pub fn default_profiles_dir() -> Option<PathBuf> {
+    if let Some(dir) = crate::env::path(crate::env::PROFILES_DIR) {
+        return Some(dir);
+    }
+    let chosen = data_dir()
+        .and_then(|d| std::fs::read_to_string(d.join(PROFILES_LOCATION)).ok())
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .map(PathBuf::from);
+    chosen.or_else(standard_profiles_dir)
+}
+
+/// Remembers `dir` as the profiles folder; `None` goes back to the standard one.
+pub fn set_profiles_location(dir: Option<&Path>) -> Result<(), String> {
+    let data = data_dir().ok_or("cannot work out the launcher data folder")?;
+    let file = data.join(PROFILES_LOCATION);
+    match dir {
+        Some(dir) => {
+            std::fs::create_dir_all(&data).map_err(|e| format!("{}: {e}", data.display()))?;
+            let text = dir.to_str().ok_or_else(|| format!("{} is not valid Unicode", dir.display()))?;
+            write_atomic(&file, text)
+        }
+        None => match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("{}: {e}", file.display())),
+            _ => Ok(()),
+        },
+    }
+}
+
+/// Moves every profile in `from` into `to`. Stops at the first profile that
+/// can't move; ones already moved stay moved. Returns how many moved.
+pub fn move_profiles(from: &Path, to: &Path) -> Result<usize, String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+    let mut moved = 0;
+    for entry in list(from) {
+        let target = to.join(&entry.name);
+        if target.exists() {
+            return Err(format!("{} already has a profile called {}", to.display(), entry.name));
+        }
+        if std::fs::rename(&entry.dir, &target).is_err() {
+            // Another drive: copy, then remove the original.
+            copy_dir(&entry.dir, &target)?;
+            std::fs::remove_dir_all(&entry.dir).map_err(|e| format!("{}: {e}", entry.dir.display()))?;
+        }
+        moved += 1;
+    }
+    Ok(moved)
+}
+
+fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+    for entry in std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))? {
+        let entry = entry.map_err(|e| format!("{}: {e}", from.display()))?;
+        let (src, dst) = (entry.path(), to.join(entry.file_name()));
+        if entry.file_type().map_err(|e| format!("{}: {e}", src.display()))?.is_dir() {
+            copy_dir(&src, &dst)?;
+        } else {
+            std::fs::copy(&src, &dst).map_err(|e| format!("{} -> {}: {e}", src.display(), dst.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// A profile name is a single folder name: no separators, no dot names.
@@ -215,6 +284,24 @@ fn migrate_legacy(dir: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moves_profiles() {
+        let base = std::env::temp_dir().join(format!("sf-move-{}", std::process::id()));
+        let (from, to) = (base.join("from"), base.join("to"));
+        std::fs::create_dir_all(from.join("one/files")).unwrap();
+        std::fs::write(from.join("one").join(PACK_FILE), "{}").unwrap();
+        std::fs::write(from.join("one/files/a.cfg"), "a").unwrap();
+        std::fs::create_dir_all(from.join("not-a-profile")).unwrap();
+        assert_eq!(move_profiles(&from, &to).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(to.join("one/files/a.cfg")).unwrap(), "a");
+        assert!(!from.join("one").exists());
+        assert!(from.join("not-a-profile").exists(), "only profiles move");
+        std::fs::create_dir_all(from.join("one")).unwrap();
+        std::fs::write(from.join("one").join(PACK_FILE), "{}").unwrap();
+        assert!(move_profiles(&from, &to).is_err(), "never overwrites a profile");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     #[test]
     fn names() {

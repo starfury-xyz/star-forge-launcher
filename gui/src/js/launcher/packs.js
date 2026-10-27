@@ -1,6 +1,6 @@
 import { invoke, listen } from './bridge.js';
 import { array, boolean, number, object, string } from './contracts.js';
-import { brand, control, el, required, notice, errorMessage, run } from './ui.js';
+import { brand, control, el, openPanel, required, notice, errorMessage, run } from './ui.js';
 
 const text = (/** @type {unknown} */ value) => (value === null ? null : string(value));
 
@@ -132,6 +132,8 @@ export async function bindPacks(profiles, locked) {
   /** @type {PackReview | null} */
   let review = null;
   let busy = false;
+  /** Where the open review came from, so a failed install can start over. */
+  let source = '';
 
   const checkUpdates = async () => {
     const found = array(await invoke('check_pack_updates'), (item) => {
@@ -142,20 +144,21 @@ export async function bindPacks(profiles, locked) {
   };
 
   /** @param {string} source a path, https link or starforge:// link */
-  const open = async (source) => {
-    if (busy || !source.trim()) return;
+  const open = async (next) => {
+    if (busy || !next.trim()) return;
     busy = true;
     importButtons.forEach((b) => (b.disabled = true));
-    const remote = /^(https?|starforge):/i.test(source.trim());
+    const remote = /^(https?|starforge):/i.test(next.trim());
     if (remote) notice('Downloading the server pack…');
     try {
-      const next = parseReview(await invoke('inspect_pack', { source }));
+      const opened = parseReview(await invoke('inspect_pack', { source: next }));
       if (review) await invoke('discard_pack', { token: review.token });
-      review = next;
+      review = opened;
+      source = next;
       profiles.closeDialog();
       renderReview(review);
       install.disabled = false;
-      if (!dialog.open) dialog.showModal();
+      openPanel(dialog);
     } catch (error) {
       notice(`Could not open the server pack: ${errorMessage(error)}`, 'error');
     } finally {
@@ -177,6 +180,7 @@ export async function bindPacks(profiles, locked) {
       return;
     }
     install.disabled = true;
+    const from = source;
     // Installing uses the review up; the download window takes over when the
     // pack has game files to fetch.
     const installing = invoke('install_pack', { token: target.token });
@@ -188,6 +192,14 @@ export async function bindPacks(profiles, locked) {
         await profiles.refresh(id);
         notice(target.update ? `Updated ${target.name} to ${target.version}.` : `Installed ${target.name}.`, 'success');
         run(checkUpdates);
+      } catch (error) {
+        // A refused install (say, the game is running) leaves the review staged; drop it.
+        // Reopening the pack starts a fresh one.
+        run(() => invoke('discard_pack', { token: target.token }));
+        notice(`Could not install ${target.name}: ${errorMessage(error)}`, 'error', {
+          label: 'Try again',
+          action: () => run(() => open(from)),
+        });
       } finally {
         install.disabled = false;
       }
@@ -225,5 +237,22 @@ export async function bindPacks(profiles, locked) {
   });
   const pending = await invoke('take_pending_link');
   if (typeof pending === 'string') run(() => open(pending));
-  run(checkUpdates);
+
+  // Pack updates: at startup, then when the launcher comes back into view
+  // after a while, and every few hours if it stays open.
+  const RECHECK_MS = 30 * 60 * 1000;
+  let lastCheck = 0;
+  const checkSoon = () => {
+    if (Date.now() - lastCheck < RECHECK_MS) return;
+    lastCheck = Date.now();
+    run(checkUpdates);
+  };
+  checkSoon();
+  window.addEventListener('focus', checkSoon);
+  setInterval(checkSoon, 3 * 60 * 60 * 1000);
+  // Found by a launch (including a version the server now requires).
+  await listen('pack-update-found', (input) => {
+    const value = object(input);
+    profiles.setUpdate(string(value.id), { version: string(value.version), url: string(value.url) });
+  });
 }

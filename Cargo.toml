@@ -31,3 +31,8 @@ windows-sys = { version = "0.59", features = [
 [profile.release]
 opt-level = 2
 debug = 1
+
+# Line numbers for our own crates (crash reports from the injector and agent);
+# none for dependencies, which only slow linking.
+[profile.release.package."*"]
+debug = 0

@@ -1,6 +1,7 @@
 //! Server profiles: list, add, edit and delete from the launcher, and install
 //! or update server packs.
 
+use crate::Locked;
 use sc_launch::{packs, profiles};
 use sc_profile::{Local, Pack, FILES_DIR};
 use serde::{Deserialize, Serialize};
@@ -214,6 +215,9 @@ fn write_own_pack(dir: &std::path::Path, pack: &Pack) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_profile(app: AppHandle, id: String) -> Result<(), String> {
+    if crate::game::busy(&app) {
+        return Err("Close the game before deleting a profile.".into());
+    }
     let dir = profile_dir(&id)?;
     let pack_id = profiles::read_pack(&dir).map(|p| p.id);
     std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -429,7 +433,7 @@ pub async fn inspect_pack(app: AppHandle, source: String) -> Result<PackReview, 
         .map_err(|e| e.to_string())??;
     let reviews = app.state::<PackReviews>();
     let token = {
-        let mut next = reviews.next.lock().unwrap();
+        let mut next = reviews.next.locked();
         *next += 1;
         *next
     };
@@ -440,17 +444,19 @@ pub async fn inspect_pack(app: AppHandle, source: String) -> Result<PackReview, 
             return Err(e);
         }
     };
-    reviews.staged.lock().unwrap().insert(token, staged);
+    reviews.staged.locked().insert(token, staged);
     Ok(review)
 }
 
 #[tauri::command]
 pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> {
+    if crate::game::busy(&app) {
+        return Err("Close the game before installing or updating a pack.".into());
+    }
     let staged = app
         .state::<PackReviews>()
         .staged
-        .lock()
-        .unwrap()
+        .locked()
         .remove(&token)
         .ok_or("This pack review has expired; open the pack again.")?;
     let root = profiles_dir()?;
@@ -458,12 +464,17 @@ pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> 
     let installed = tauri::async_runtime::spawn_blocking(move || {
         let mut download = crate::downloads::Session::new(&handle, "install", &staged.pack.name);
         let installed = packs::install(staged, &root, &mut |e| download.report(e));
+        let cancelled = download.cancelled();
         download.finish(installed.as_ref().map_or_else(|e| Some(e.as_str()), |i| i.warning.as_deref()));
-        installed
+        installed.map(|i| (i, cancelled))
     })
     .await
     .map_err(|e| e.to_string())??;
-    if let Some(w) = installed.warning {
+    let (installed, cancelled) = installed;
+    if cancelled {
+        let note = "Download cancelled. The pack is installed; its remaining game files download before you play.";
+        crate::notify(&app, note.into(), crate::NotificationLevel::Info);
+    } else if let Some(w) = installed.warning {
         crate::notify(&app, w, crate::NotificationLevel::Error);
     }
     let id = installed.name;
@@ -473,15 +484,23 @@ pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> 
 
 #[tauri::command]
 pub fn discard_pack(app: AppHandle, token: u64) {
-    if let Some(staged) = app.state::<PackReviews>().staged.lock().unwrap().remove(&token) {
+    if let Some(staged) = app.state::<PackReviews>().staged.locked().remove(&token) {
         packs::discard(staged);
     }
 }
 
 /// Community server packs that ship with the launcher (see samples/ in the repo).
-const SAMPLES: [(&str, &str); 2] = [
-    ("starfury", include_str!("../../../samples/starfury/pack.json")),
-    ("sc-classic-europe", include_str!("../../../samples/sc-classic-europe/pack.json")),
+/// Where a community-server button installs from.
+enum Sample {
+    /// The server's own published pack.
+    Link { name: &'static str, url: &'static str },
+    /// A pack.json kept with STAR FORGE (`samples/`).
+    Bundled(&'static str),
+}
+
+const SAMPLES: [(&str, Sample); 2] = [
+    ("starfury", Sample::Link { name: "STARFURY", url: "https://starfury.web.garage.cosmosim.dev/pack.json" }),
+    ("sc-classic-europe", Sample::Bundled(include_str!("../../../samples/sc-classic-europe/pack.json"))),
 ];
 
 #[derive(Serialize)]
@@ -494,18 +513,30 @@ pub struct SamplePack {
 pub fn list_sample_packs() -> Vec<SamplePack> {
     SAMPLES
         .iter()
-        .filter_map(|(key, json)| Some(SamplePack { key, name: Pack::from_json(json).ok()?.name }))
+        .filter_map(|(key, sample)| {
+            let name = match sample {
+                Sample::Link { name, .. } => name.to_string(),
+                Sample::Bundled(json) => Pack::from_json(json).ok()?.name,
+            };
+            Some(SamplePack { key, name })
+        })
         .collect()
 }
 
-/// Writes a sample pack to a folder the review can open, and returns it.
+/// What the review should open for a sample: the server's pack link, or a
+/// folder holding the bundled pack.
 #[tauri::command]
 pub fn sample_pack_source(key: String) -> Result<String, String> {
-    let (_, json) = SAMPLES.iter().find(|(k, _)| *k == key).ok_or("unknown sample pack")?;
-    let dir = packs::staging_root().ok_or("cannot work out the launcher data folder")?.join("samples").join(&key);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    profiles::write_atomic(&dir.join(sc_profile::PACK_FILE), json)?;
-    Ok(dir.to_string_lossy().into_owned())
+    let (_, sample) = SAMPLES.iter().find(|(k, _)| *k == key).ok_or("unknown sample pack")?;
+    match sample {
+        Sample::Link { url, .. } => Ok(url.to_string()),
+        Sample::Bundled(json) => {
+            let dir = packs::staging_root().ok_or("cannot work out the launcher data folder")?.join("samples").join(&key);
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            profiles::write_atomic(&dir.join(sc_profile::PACK_FILE), json)?;
+            Ok(dir.to_string_lossy().into_owned())
+        }
+    }
 }
 
 #[tauri::command]
@@ -520,7 +551,7 @@ pub async fn pick_pack_file(app: AppHandle) -> Option<String> {
     file.into_path().ok().map(|p| p.to_string_lossy().into_owned())
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAvailable {
     id: String,
@@ -553,10 +584,35 @@ pub async fn check_pack_updates() -> Result<Vec<UpdateAvailable>, String> {
     .map_err(|e| e.to_string())
 }
 
+/// Asks the selected profile's pack for a newer version. Unlike
+/// [`check_pack_updates`], a failure is an error the player sees.
+#[tauri::command]
+pub async fn check_pack_update(id: String) -> Result<Option<UpdateAvailable>, String> {
+    let dir = profile_dir(&id)?;
+    let pack = profiles::read_pack(&dir)?;
+    if pack.update.is_none() {
+        return Err(format!("{} doesn't publish updates.", pack.name));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        packs::check_update(&pack).map(|found| found.map(|a| UpdateAvailable { id, version: a.version, url: a.url }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Tells the interface a pack has a newer version (found at launch), so it
+/// can offer the update.
+pub fn announce_update(app: &AppHandle, id: &str, found: &packs::Available) {
+    let update = UpdateAvailable { id: id.to_string(), version: found.version.clone(), url: found.url.clone() };
+    if let Err(e) = app.emit_to("main", "pack-update-found", update) {
+        eprintln!("could not announce the pack update: {e}");
+    }
+}
+
 /// Hands a `starforge://` link to the interface, or keeps it until it listens.
 pub fn receive_link(app: &AppHandle, url: String) {
     let reviews = app.state::<PackReviews>();
-    let mut links = reviews.links.lock().unwrap();
+    let mut links = reviews.links.locked();
     if links.0 {
         crate::lifecycle::restore(app);
         if let Err(e) = app.emit_to("main", "pack-link", url) {
@@ -571,7 +627,7 @@ pub fn receive_link(app: &AppHandle, url: String) {
 #[tauri::command]
 pub fn take_pending_link(app: AppHandle) -> Option<String> {
     let reviews = app.state::<PackReviews>();
-    let mut links = reviews.links.lock().unwrap();
+    let mut links = reviews.links.locked();
     links.0 = true;
     links.1.take()
 }

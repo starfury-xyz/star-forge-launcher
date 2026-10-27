@@ -6,8 +6,12 @@ server teams have a working example to copy.
 
 | Pack | Server | Game files |
 |---|---|---|
-| [`starfury/`](starfury/pack.json) | STARFURY.XYZ:3801 | none yet |
 | [`sc-classic-europe/`](sc-classic-europe/pack.json) | Star Conflict Europe (unofficial) | from the server's SCMOD1 list |
+| [`starfury/`](starfury/pack.json) | STARFURY.XYZ:3801 | none; **retired** |
+
+The launcher's STARFURY button now installs the server's own signed pack
+(`https://starfury.web.garage.cosmosim.dev/pack.json`, id `xyz.starfury`).
+`starfury/` stays so profiles installed from it keep their update address.
 
 These are maintained by STAR FORGE, not by the server teams, and they are not
 signed. Each one is a single `pack.json`: the launcher can install a pack from

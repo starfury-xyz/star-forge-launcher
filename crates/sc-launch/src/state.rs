@@ -57,6 +57,18 @@ pub fn sync_shared(profile_dir: &Path, profile: &Profile, shared: Option<&Path>)
     Ok(())
 }
 
+/// [`sync_shared`] for every profile that keeps its own game data. Run once
+/// when the launcher starts, to catch settings changed in a session whose
+/// launcher had already quit (so no profile's changes are lost).
+pub fn sync_all_shared(profiles_dir: &Path, shared: Option<&Path>) -> Result<(), String> {
+    for entry in crate::profiles::list(profiles_dir) {
+        if let Ok(profile) = &entry.profile {
+            sync_shared(&entry.dir, profile, shared)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

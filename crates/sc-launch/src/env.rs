@@ -14,6 +14,8 @@ pub const TOOLS_DIR: &str = "STAR_FORGE_TOOLS_DIR";
 pub const PROTON: &str = "STAR_FORGE_PROTON";
 /// Launcher data folder (preferences, profiles, launch log).
 pub const DATA_DIR: &str = "STAR_FORGE_DATA_DIR";
+/// Profiles folder, if not the one chosen in the launcher's setup.
+pub const PROFILES_DIR: &str = "STAR_FORGE_PROFILES_DIR";
 
 /// A path variable, ignoring unset and empty values.
 pub fn path(name: &str) -> Option<PathBuf> {

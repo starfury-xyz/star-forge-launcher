@@ -1,5 +1,6 @@
 //! Game detection, launch state and the play button.
 
+use crate::Locked;
 use crate::prefs::{self, LaunchBehavior};
 use crate::{lifecycle, notify, NotificationLevel};
 use base64::Engine;
@@ -77,7 +78,7 @@ fn snapshot_of(inner: &Inner) -> Snapshot {
 fn update(app: &AppHandle, f: impl FnOnce(&mut Inner)) {
     let snapshot = {
         let state = app.state::<GameState>();
-        let mut inner = state.0.lock().unwrap();
+        let mut inner = state.0.locked();
         f(&mut inner);
         inner.revision += 1;
         snapshot_of(&inner)
@@ -88,7 +89,7 @@ fn update(app: &AppHandle, f: impl FnOnce(&mut Inner)) {
 }
 
 fn phase(app: &AppHandle) -> Phase {
-    app.state::<GameState>().0.lock().unwrap().phase.unwrap_or(Phase::Checking)
+    app.state::<GameState>().0.locked().phase.unwrap_or(Phase::Checking)
 }
 
 /// The game is starting or running.
@@ -149,6 +150,7 @@ pub fn refresh(app: &AppHandle) {
         let result = launch::resolve(&options(&app));
         update(&app, |s| match result {
             Ok(setup) => {
+                catch_up_settings(&setup);
                 s.setup = Some(setup);
                 s.phase = Some(Phase::Ready);
             }
@@ -170,8 +172,7 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     let setup = app
         .state::<GameState>()
         .0
-        .lock()
-        .unwrap()
+        .locked()
         .setup
         .clone()
         .ok_or("the game setup has not been detected yet")?;
@@ -180,27 +181,23 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         return Err("Choose a server profile first.".into());
     }
     let dir = crate::profiles::profiles_dir()?.join(&selected);
-    let profile = profiles::load(&dir)?;
-    if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let trust = sc_launch::packs::verify_installed(&dir)?;
-    let pack = profiles::read_pack(&dir)?;
-    if let Some(warning) = sc_launch::packs::launch_check(&pack)? {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let mut download = crate::downloads::Session::new(app, "update", &pack.name);
-    let synced = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref(), &mut |e| download.report(e));
-    download.finish(synced.as_ref().err().map(String::as_str));
-    if let Some(note) = synced? {
-        notify(app, note, NotificationLevel::Info);
-    }
-    for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
-        notify(app, warning, NotificationLevel::Info);
-    }
-    let shared = sc_launch::state::shared_local_appdata(&setup);
-    sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
-    let mut cmd = launch::command(&setup, &dir, &[])?;
+    let pack_name = profiles::read_pack(&dir).map(|p| p.name).unwrap_or_else(|_| selected.clone());
+    let mut download = Some(crate::downloads::Session::new(app, "update", &pack_name));
+    let prepared = sc_launch::prepare::prepare(&setup, &dir, &[], &mut |event| {
+        use sc_launch::prepare::Event;
+        match event {
+            Event::Note(note) => notify(app, note, NotificationLevel::Info),
+            Event::Update(found) => crate::profiles::announce_update(app, &selected, found),
+            Event::Sync(e) => return download.as_mut().map_or(Ok(()), |d| d.report(e)),
+            Event::SyncDone(error) => {
+                if let Some(d) = download.take() {
+                    d.finish(error);
+                }
+            }
+        }
+        Ok(())
+    })?;
+    let sc_launch::prepare::Prepared { command: mut cmd, profile, shared, .. } = prepared;
 
     // Proton and the injector are chatty; keep their output for troubleshooting.
     let (out, err) = match launch_log().and_then(|p| {
@@ -262,13 +259,26 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
 }
 
 /// The detected game.exe, once the setup has been found.
+/// Once per launcher run: saves settings from a game session the launcher
+/// didn't wait for (the "Exit" launch behaviour quits before the game does).
+fn catch_up_settings(setup: &launch::Setup) {
+    static DONE: std::sync::Once = std::sync::Once::new();
+    DONE.call_once(|| {
+        let shared = sc_launch::state::shared_local_appdata(setup);
+        let result = crate::profiles::profiles_dir().and_then(|d| sc_launch::state::sync_all_shared(&d, shared.as_deref()));
+        if let Err(e) = result {
+            eprintln!("could not sync game settings between profiles: {e}");
+        }
+    });
+}
+
 pub fn game_exe(app: &AppHandle) -> Option<std::path::PathBuf> {
-    app.state::<GameState>().0.lock().unwrap().setup.as_ref().map(|s| s.game_exe())
+    app.state::<GameState>().0.locked().setup.as_ref().map(|s| s.game_exe())
 }
 
 #[tauri::command]
 pub fn get_launcher_snapshot(app: AppHandle) -> Snapshot {
-    snapshot_of(&app.state::<GameState>().0.lock().unwrap())
+    snapshot_of(&app.state::<GameState>().0.locked())
 }
 
 #[tauri::command]
@@ -280,7 +290,7 @@ pub fn initialize_launcher(app: AppHandle) {
 pub fn perform_launcher_action(app: AppHandle, action: String) -> Result<(), String> {
     match (action.as_str(), phase(&app)) {
         ("fix", Phase::Failed) => {
-            let fix = app.state::<GameState>().0.lock().unwrap().fix.ok_or("Nothing to fix in Steam.")?;
+            let fix = app.state::<GameState>().0.locked().fix.ok_or("Nothing to fix in Steam.")?;
             crate::open_path(&app, std::ffi::OsStr::new(&fix.url()))?;
             update(&app, |s| s.fix_opened = true);
             Ok(())
@@ -442,8 +452,7 @@ pub fn view_game_install(app: AppHandle) -> Result<(), String> {
     let dir = app
         .state::<GameState>()
         .0
-        .lock()
-        .unwrap()
+        .locked()
         .setup
         .as_ref()
         .map(|s| s.game_dir.clone())

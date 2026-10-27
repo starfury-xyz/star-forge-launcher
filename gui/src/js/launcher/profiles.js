@@ -1,6 +1,6 @@
 import { invoke } from './bridge.js';
 import { array, boolean, number, object, string } from './contracts.js';
-import { brand, control, required, notice, errorMessage, run } from './ui.js';
+import { brand, control, openPanel, required, notice, errorMessage, run } from './ui.js';
 
 /** @param {unknown} item */
 function parseProfile(item) {
@@ -31,7 +31,9 @@ const isLocalAddress = (/** @type {string} */ server) =>
 /** @param {import('./preferences.js').PreferenceStore} preferences @param {() => void} onChange */
 export function bindProfiles(preferences, onChange) {
   const select = control('profile-select', HTMLSelectElement);
-  const edit = control('edit-profile', HTMLButtonElement);
+  const edit = control('summary-edit', HTMLButtonElement);
+  const checkUpdate = control('summary-check-update', HTMLButtonElement);
+  let checking = false;
   const dialog = control('profile-dialog', HTMLDialogElement);
   const form = control('profile-form', HTMLFormElement);
   const nameInput = control('profile-name', HTMLInputElement);
@@ -53,6 +55,22 @@ export function bindProfiles(preferences, onChange) {
   let onReviewUpdate = () => {};
 
   const current = () => profiles.find((p) => p.id === select.value) || null;
+
+  /** @param {ProfileInfo} profile */
+  const optionLabel = (profile) =>
+    brand(
+      profile.error
+        ? `${profile.name} (invalid)`
+        : updates.has(profile.id)
+          ? `${profile.name} (update available)`
+          : profile.name,
+    );
+  const relabel = () => {
+    for (const option of Array.from(select.options)) {
+      const profile = profiles.find((p) => p.id === option.value);
+      if (profile) option.textContent = optionLabel(profile);
+    }
+  };
 
   const summarize = () => {
     const profile = current();
@@ -92,9 +110,11 @@ export function bindProfiles(preferences, onChange) {
     required('summary-update-text').textContent = update
       ? `Version ${update.version} of this pack is available.`
       : '';
-    control('summary-edit', HTMLButtonElement).disabled = !profile;
     control('summary-folder', HTMLButtonElement).disabled = !profile;
     edit.disabled = !profile;
+    checkUpdate.hidden = !profile?.managed;
+    checkUpdate.disabled = checking || Boolean(profile?.error);
+    checkUpdate.textContent = checking ? 'Checking…' : 'Check for updates';
   };
 
   /** @param {string} [prefer] profile to select afterwards */
@@ -106,22 +126,17 @@ export function bindProfiles(preferences, onChange) {
       profiles = array(await invoke('list_profiles'), parseProfile);
       select.replaceChildren();
       if (!profiles.length) select.add(new Option('No profiles yet – add one', ''));
-      for (const profile of profiles) {
-        const option = new Option(
-          brand(profile.error ? `${profile.name} (invalid)` : profile.name),
-          profile.id,
-        );
-        option.disabled = Boolean(profile.error);
-        select.add(option);
-      }
+      for (const profile of profiles) select.add(new Option(optionLabel(profile), profile.id));
       const saved = prefer ?? preferences.get().selectedProfile;
       const usable = profiles.filter((p) => !p.error);
-      const choice = usable.find((p) => p.id === saved) || usable[0];
+      // Invalid profiles stay selectable so they can be edited or deleted; Play stays off.
+      const choice = profiles.find((p) => p.id === saved) || usable[0];
       select.value = choice ? choice.id : '';
       if ((choice?.id || '') !== preferences.get().selectedProfile)
         await preferences.update('selectedProfile', choice?.id || '');
       loaded = true;
       select.disabled = !profiles.length;
+      required('home-add-server').classList.toggle('primary', !profiles.length);
     } catch (error) {
       notice(`Could not load server profiles: ${errorMessage(error)}`, 'error');
     } finally {
@@ -145,7 +160,7 @@ export function bindProfiles(preferences, onChange) {
     control('pack-link', HTMLInputElement).value = '';
     required('delete-profile').hidden = !profile;
     required('profile-folder').hidden = !profile;
-    dialog.showModal();
+    openPanel(dialog);
     nameInput.focus();
   };
 
@@ -163,12 +178,43 @@ export function bindProfiles(preferences, onChange) {
     });
   });
   required('add-profile').addEventListener('click', () => open(null));
+  required('home-add-server').addEventListener('click', () => {
+    open(null);
+    control('pack-link', HTMLInputElement).focus();
+  });
   required('summary-update').addEventListener('click', () => {
     const update = updates.get(current()?.id || '');
     if (update) onReviewUpdate(update.url);
   });
   edit.addEventListener('click', () => open(current()));
-  required('summary-edit').addEventListener('click', () => open(current()));
+  checkUpdate.addEventListener('click', () => {
+    const profile = current();
+    if (!profile || checking) return;
+    checking = true;
+    summarize();
+    onChange();
+    run(async () => {
+      try {
+        const found = await invoke('check_pack_update', { id: profile.id });
+        const value = found === null ? null : object(found);
+        if (value) {
+          updates.set(profile.id, { version: string(value.version), url: string(value.url) });
+          relabel();
+          notice(`Version ${string(value.version)} of ${profile.name} is available.`);
+        } else {
+          updates.delete(profile.id);
+          relabel();
+          notice(`${profile.name} ${profile.version ?? ''} is up to date.`, 'success');
+        }
+      } catch (error) {
+        notice(`Could not check ${profile.name} for updates: ${errorMessage(error)}`, 'error');
+      } finally {
+        checking = false;
+        summarize();
+        onChange();
+      }
+    });
+  });
   required('summary-folder').addEventListener('click', () => {
     const profile = current();
     if (profile) run(() => invoke('open_profile_folder', { id: profile.id }));
@@ -235,6 +281,13 @@ export function bindProfiles(preferences, onChange) {
     /** @param {Map<string, { version: string, url: string }>} found */
     setUpdates: (found) => {
       updates = found;
+      relabel();
+      summarize();
+    },
+    /** One pack's newer version, found at launch. @param {string} id @param {{ version: string, url: string }} update */
+    setUpdate: (id, update) => {
+      updates.set(id, update);
+      relabel();
       summarize();
     },
     /** @param {(url: string) => void} handler */

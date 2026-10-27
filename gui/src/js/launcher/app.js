@@ -10,10 +10,12 @@ import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
 import { bindUpdater } from './updater.js';
 import { bindDownloads } from './downloads.js';
+import { bindSetup } from './setup.js';
 import { startupStep, showStartupFailure } from './startup.js';
-import { control, required, notice, run } from './ui.js';
+import { bindNoticeHistory, control, required, notice, run } from './ui.js';
 
 mountLayout();
+bindNoticeHistory();
 
 async function start() {
   const preferences = await startupStep(loadPreferences(), 'Loading launcher settings');
@@ -52,14 +54,18 @@ async function start() {
       (state.primaryAction === 'launch' && !profiles.ready());
     const status = required('launch-status');
     status.textContent =
-      state.phase === 'ready' && !profiles.ready()
-        ? 'Choose or add a server profile'
-        : state.phase === 'failed' && state.fixLabel
-          ? state.primaryAction === 'fix'
-            ? state.fixLabel
-            : 'Press Retry when Steam is done'
-          : statuses[state.phase];
+      state.phase === 'ready' && profiles.current()?.error
+        ? 'This profile is broken – edit or delete it'
+        : state.phase === 'ready' && !profiles.ready()
+          ? 'Choose or add a server profile'
+          : state.phase === 'failed' && state.fixLabel
+            ? state.primaryAction === 'fix'
+              ? state.fixLabel
+              : 'Press Retry when Steam is done'
+            : statuses[state.phase];
     status.dataset.ready = String(state.phase === 'ready' && profiles.ready());
+    // The play button already says the phase; only show what it can't.
+    status.hidden = status.textContent === statuses[state.phase];
     if (state.blockingReason && state.blockingReason !== lastReason)
       notice(state.blockingReason, 'error');
     lastReason = state.blockingReason || '';
@@ -68,7 +74,7 @@ async function start() {
     const select = control('profile-select', HTMLSelectElement);
     select.disabled = locked || !select.options.length || select.options[0].value === '';
     control('add-profile', HTMLButtonElement).disabled = locked;
-    control('edit-profile', HTMLButtonElement).disabled = locked || !profiles.current();
+    control('summary-edit', HTMLButtonElement).disabled = locked || !profiles.current();
   };
   bindShell(() => render());
   store.subscribe(render);
@@ -90,6 +96,7 @@ async function start() {
     await startupStep(store.start(), 'Loading launcher state');
     await startupStep(profiles.refresh(), 'Loading server profiles');
     await startupStep(invoke('main_ready'), 'Showing launcher');
+    run(() => bindSetup(preferences, profiles));
     run(() => bindSettings(preferences, store));
     run(() =>
       bindPacks(profiles, () => {

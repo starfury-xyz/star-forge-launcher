@@ -1,5 +1,5 @@
 import { windowAction } from './bridge.js';
-import { control, required, run } from './ui.js';
+import { closePanels, control, openPanel, required, run } from './ui.js';
 
 /** @param {(page: string) => void} onPage */
 export function bindShell(onPage) {
@@ -24,12 +24,15 @@ export function bindShell(onPage) {
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest('button');
     if (!button) return;
-    if (button.dataset.page) navigate(button.dataset.page);
+    if (button.dataset.page) {
+      closePanels();
+      navigate(button.dataset.page);
+    }
     const action = button.dataset.window;
     if (action === 'close' || action === 'minimize' || action === 'toggleMaximize')
       run(() => windowAction(action));
     if (button.hasAttribute('data-close-dialog')) button.closest('dialog')?.close();
-    if (button.id === 'open-settings') control('settings-dialog', HTMLDialogElement).showModal();
+    if (button.id === 'open-settings') openPanel(control('settings-dialog', HTMLDialogElement));
   });
   navigate('home');
   return { navigate };

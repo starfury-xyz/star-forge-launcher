@@ -1,5 +1,6 @@
 //! Splash, main window reveal, tray and exit.
 
+use crate::Locked;
 use crate::prefs::{self, CloseBehavior};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -98,7 +99,7 @@ pub fn restore(app: &AppHandle) {
         return;
     };
     let can_show = {
-        let mut gate = lifecycle.startup.lock().unwrap();
+        let mut gate = lifecycle.startup.locked();
         if gate.revealed { true } else { gate.finish_sting() }
     };
     if can_show {
@@ -133,14 +134,14 @@ pub fn close_main_window(app: &AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn main_ready(app: AppHandle) {
-    if app.state::<Lifecycle>().startup.lock().unwrap().ready() {
+    if app.state::<Lifecycle>().startup.locked().ready() {
         show(&app);
     }
 }
 
 #[tauri::command]
 pub fn splash_finished(app: AppHandle) {
-    if app.state::<Lifecycle>().startup.lock().unwrap().finish_sting() {
+    if app.state::<Lifecycle>().startup.locked().finish_sting() {
         show(&app);
     }
 }
@@ -211,13 +212,13 @@ pub fn setup(app: &AppHandle) {
     if let Some(splash) = app.get_webview_window("splash") {
         let _ = splash.set_ignore_cursor_events(true);
     }
-    if app.state::<Lifecycle>().startup.lock().unwrap().native_ready() {
+    if app.state::<Lifecycle>().startup.locked().native_ready() {
         show(app);
     }
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(5));
-        let reveal = app.state::<Lifecycle>().startup.lock().unwrap().watchdog();
+        let reveal = app.state::<Lifecycle>().startup.locked().watchdog();
         if reveal {
             eprintln!("startup watchdog revealed the launcher before the interface reported ready");
             show(&app);

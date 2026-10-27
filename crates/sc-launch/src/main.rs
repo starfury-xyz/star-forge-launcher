@@ -141,25 +141,14 @@ fn run() -> Result<u8, String> {
                 return Err(format!("{name:?} is not a valid profile name"));
             }
             let dir = profiles_dir.join(name);
-            let profile = profiles::load(&dir)?;
-            let trust = packs::verify_installed(&dir)?;
-            let pack = profiles::read_pack(&dir)?;
-            if let Some(warning) = packs::launch_check(&pack)? {
-                eprintln!("note: {warning}");
-            }
-            if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref(), &mut sc_launch::remote::quiet)? {
-                eprintln!("note: {note}");
-            }
             let setup = launch::resolve(&cli.opts)?;
-            if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| packs::game_build_warning(&p, &setup.game_exe())) {
-                eprintln!("warning: {warning}");
-            }
-            for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
-                eprintln!("warning: {warning}");
-            }
-            let shared = sc_launch::state::shared_local_appdata(&setup);
-            sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
-            let mut cmd = launch::command(&setup, &dir, &cli.game_args)?;
+            let prepared = sc_launch::prepare::prepare(&setup, &dir, &cli.game_args, &mut |event| {
+                if let sc_launch::prepare::Event::Note(note) = event {
+                    eprintln!("note: {note}");
+                }
+                Ok(())
+            })?;
+            let sc_launch::prepare::Prepared { command: mut cmd, profile, trust, shared } = prepared;
             println!(
                 "starting {} with profile {name}{} ({})",
                 setup.game_exe().display(),

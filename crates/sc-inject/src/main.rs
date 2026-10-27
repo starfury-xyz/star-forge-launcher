@@ -3,6 +3,12 @@
 //! Normally started by sc-launch. Usage (Windows, or inside Proton/Wine):
 //!   sc-inject.exe --game <path\to\win64\game.exe> --profile <profile dir> [--dll <sc_agent.dll>] [-- game args]
 
+// A windowed program, not a console one: started from the launcher, a
+// console program gets its own terminal window (Proton opens one, and the
+// game's taskbar entry groups under it). Everything it says goes to the
+// profile's inject.log; a parent that passes its own stdout still gets it.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 #[cfg(not(windows))]
 fn main() {
     eprintln!("sc-inject is a Windows program; start it with sc-launch");
