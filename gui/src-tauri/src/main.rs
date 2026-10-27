@@ -194,6 +194,7 @@ fn main() {
                 profiles::list_sample_packs,
                 profiles::sample_pack_source,
                 profiles::check_pack_updates,
+                profiles::check_pack_update,
                 profiles::take_pending_link,
                 profiles::get_profile_branding,
                 updater::check_launcher_update,

@@ -63,6 +63,8 @@ async function start() {
               : 'Press Retry when Steam is done'
             : statuses[state.phase];
     status.dataset.ready = String(state.phase === 'ready' && profiles.ready());
+    // The play button already says the phase; only show what it can't.
+    status.hidden = status.textContent === statuses[state.phase];
     if (state.blockingReason && state.blockingReason !== lastReason)
       notice(state.blockingReason, 'error');
     lastReason = state.blockingReason || '';
@@ -71,7 +73,7 @@ async function start() {
     const select = control('profile-select', HTMLSelectElement);
     select.disabled = locked || !select.options.length || select.options[0].value === '';
     control('add-profile', HTMLButtonElement).disabled = locked;
-    control('edit-profile', HTMLButtonElement).disabled = locked || !profiles.current();
+    control('summary-edit', HTMLButtonElement).disabled = locked || !profiles.current();
   };
   bindShell(() => render());
   store.subscribe(render);

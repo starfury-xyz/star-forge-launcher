@@ -410,8 +410,10 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 7px;
   color: var(--muted);
+}
+.launch-details > span:not([hidden]) + .server-row {
+  margin-top: 7px;
 }
 .server-row select {
   border: 0;
@@ -951,8 +953,18 @@ dialog footer {
   max-width: 520px;
   padding-bottom: 40px;
 }
-.profile-summary h1 {
+.summary-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 12px 0 22px;
+}
+.summary-title .icon-button {
+  flex: none;
+  color: var(--muted);
+}
+.profile-summary h1 {
+  margin: 0;
   font-size: 36px;
   line-height: 1.16;
   overflow-wrap: anywhere;

@@ -9,7 +9,7 @@ export function mountLayout() {
       <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starforge-emblem.svg" alt="" /><span>Star Conflict</span></button>
       <span class="rail-spacer"></span>
       <button id="open-downloads" class="rail-button download-rail" aria-label="Show download progress" hidden><span class="download-ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle id="download-ring" class="ring-value" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span data-icon="download"></span></span><span id="download-rail-label">0%</span></button>
-      <button id="open-notices" class="rail-button notice-bell" aria-label="Notifications" title="Notifications" hidden><span data-icon="bell"></span><span id="notice-badge" class="notice-badge" hidden></span><span>Notices</span></button>
+      <button id="open-notices" class="rail-button notice-bell" aria-label="Notifications" title="Notifications"><span data-icon="bell"></span><span id="notice-badge" class="notice-badge" hidden></span><span>Notices</span></button>
       <button id="open-settings" class="rail-button"><span data-icon="settings"></span><span>Settings</span></button>
     </nav>
     <main class="main-surface">
@@ -30,12 +30,12 @@ export function mountLayout() {
           <div class="home-join"><p>Got a pack link from a server, maybe on Discord? Add it here to join.</p><button class="button" id="home-add-server"><span data-icon="plus"></span>Add a server or paste a pack link</button></div>
         </section>
         <section id="overview-page" class="overview-page" hidden>
-          <div class="profile-summary"><span class="eyebrow">Server profile</span><h1 id="summary-name">No profile selected</h1>
+          <div class="profile-summary"><span class="eyebrow">Server profile</span><div class="summary-title"><h1 id="summary-name">No profile selected</h1><button class="icon-button" id="summary-folder" aria-label="Open profile folder" title="Open profile folder"><span data-icon="folder"></span></button></div>
             <p id="summary-description" class="summary-description" hidden></p>
             <dl class="profile-facts"><dt>Server</dt><dd id="summary-server">–</dd><dt>Starts</dt><dd id="summary-mode">–</dd><dt>Game patches</dt><dd id="summary-patches">–</dd><dt>Pack version</dt><dd id="summary-version">–</dd></dl>
             <div id="summary-update-row" class="update-row" hidden><span id="summary-update-text"></span><button class="button primary" id="summary-update">Review update</button></div>
             <div id="summary-links" class="setting-buttons summary-links" hidden></div>
-            <div class="setting-buttons"><button class="button" id="summary-edit">Edit profile</button><button class="button" id="summary-folder">Open profile folder</button></div>
+            <div class="setting-buttons"><button class="button" id="summary-check-update">Check for updates</button><button class="button" id="summary-edit">Edit profile</button></div>
           </div>
         </section>
         <div id="launcher-update" class="update-row" hidden><span id="launcher-update-text"></span><span class="spacer"></span><button class="button" id="launcher-update-notes" hidden>Release notes</button><button class="button primary" id="launcher-update-install">Update and restart</button></div>
@@ -44,7 +44,7 @@ export function mountLayout() {
       <div id="notices" class="notices" aria-live="polite" aria-relevant="additions"></div>
       <footer class="launch-dock" hidden>
         <button id="play-button" class="primary-button" disabled><span id="play-icon" data-icon="play"></span><span id="play-label">Checking</span></button>
-        <div class="launch-details"><span id="launch-status" role="status">Checking launcher…</span><div class="server-row"><span data-icon="globe"></span><select id="profile-select" aria-label="Server profile" disabled><option value="">Loading profiles…</option></select><button id="add-profile" class="icon-button" aria-label="Add server profile" title="Add server profile"><span data-icon="plus"></span></button><button id="edit-profile" class="icon-button" aria-label="Edit server profile" title="Edit server profile" disabled><span data-icon="edit"></span></button></div></div>
+        <div class="launch-details"><span id="launch-status" role="status">Checking launcher…</span><div class="server-row"><select id="profile-select" aria-label="Server profile" disabled><option value="">Loading profiles…</option></select><button id="add-profile" class="icon-button" aria-label="Add server profile" title="Add server profile"><span data-icon="plus"></span></button></div></div>
       </footer>
     </main>`;
   const dialogs = document.createElement('div');
@@ -79,7 +79,7 @@ export function mountLayout() {
       </div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" id="download-hide" data-close-dialog>Hide</button><button class="button danger" id="download-cancel">Cancel download</button></div></dialog>
     <dialog id="notice-history" class="notice-history framed" aria-labelledby="notice-history-title"><header><h1 id="notice-history-title">Notifications</h1><button class="icon-button" data-close-dialog aria-label="Close notifications"><span data-icon="close"></span></button></header>
-      <div class="dialog-body"><p id="notice-history-empty" class="muted">Nothing yet.</p><ol id="notice-history-list"></ol></div>
+      <div class="dialog-body"><p id="notice-history-empty" class="muted">No new notices.</p><ol id="notice-history-list"></ol></div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" id="notice-history-clear">Clear all</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
   // Inside the main surface: panels cover it, not the rail or window controls.

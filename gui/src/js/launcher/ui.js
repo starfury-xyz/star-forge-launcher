@@ -26,8 +26,6 @@ const paths = {
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   arrow: '<path d="M6 18 18 6M6 6h12v12"/>',
   play: '<path d="m7 4 13 8-13 8Z"/>',
-  globe:
-    '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/>',
   settings:
@@ -135,8 +133,6 @@ function renderHistory() {
   const empty = document.getElementById('notice-history-empty');
   if (!bell || !badge || !list || !empty) return;
   empty.hidden = history.length > 0;
-  const panel = document.getElementById('notice-history');
-  bell.hidden = history.length === 0 && !(panel instanceof HTMLDialogElement && panel.open);
   badge.hidden = unread === 0;
   badge.textContent = unread > 9 ? '9+' : String(unread);
   list.replaceChildren(

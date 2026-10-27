@@ -564,6 +564,22 @@ pub async fn check_pack_updates() -> Result<Vec<UpdateAvailable>, String> {
     .map_err(|e| e.to_string())
 }
 
+/// Asks the selected profile's pack for a newer version. Unlike
+/// [`check_pack_updates`], a failure is an error the player sees.
+#[tauri::command]
+pub async fn check_pack_update(id: String) -> Result<Option<UpdateAvailable>, String> {
+    let dir = profile_dir(&id)?;
+    let pack = profiles::read_pack(&dir)?;
+    if pack.update.is_none() {
+        return Err(format!("{} doesn't publish updates.", pack.name));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        packs::check_update(&pack).map(|found| found.map(|a| UpdateAvailable { id, version: a.version, url: a.url }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Hands a `starforge://` link to the interface, or keeps it until it listens.
 pub fn receive_link(app: &AppHandle, url: String) {
     let reviews = app.state::<PackReviews>();

@@ -31,7 +31,9 @@ const isLocalAddress = (/** @type {string} */ server) =>
 /** @param {import('./preferences.js').PreferenceStore} preferences @param {() => void} onChange */
 export function bindProfiles(preferences, onChange) {
   const select = control('profile-select', HTMLSelectElement);
-  const edit = control('edit-profile', HTMLButtonElement);
+  const edit = control('summary-edit', HTMLButtonElement);
+  const checkUpdate = control('summary-check-update', HTMLButtonElement);
+  let checking = false;
   const dialog = control('profile-dialog', HTMLDialogElement);
   const form = control('profile-form', HTMLFormElement);
   const nameInput = control('profile-name', HTMLInputElement);
@@ -92,9 +94,11 @@ export function bindProfiles(preferences, onChange) {
     required('summary-update-text').textContent = update
       ? `Version ${update.version} of this pack is available.`
       : '';
-    control('summary-edit', HTMLButtonElement).disabled = !profile;
     control('summary-folder', HTMLButtonElement).disabled = !profile;
     edit.disabled = !profile;
+    checkUpdate.hidden = !profile?.managed;
+    checkUpdate.disabled = checking || Boolean(profile?.error);
+    checkUpdate.textContent = checking ? 'Checking…' : 'Check for updates';
   };
 
   /** @param {string} [prefer] profile to select afterwards */
@@ -173,7 +177,32 @@ export function bindProfiles(preferences, onChange) {
     if (update) onReviewUpdate(update.url);
   });
   edit.addEventListener('click', () => open(current()));
-  required('summary-edit').addEventListener('click', () => open(current()));
+  checkUpdate.addEventListener('click', () => {
+    const profile = current();
+    if (!profile || checking) return;
+    checking = true;
+    summarize();
+    onChange();
+    run(async () => {
+      try {
+        const found = await invoke('check_pack_update', { id: profile.id });
+        const value = found === null ? null : object(found);
+        if (value) {
+          updates.set(profile.id, { version: string(value.version), url: string(value.url) });
+          notice(`Version ${string(value.version)} of ${profile.name} is available.`);
+        } else {
+          updates.delete(profile.id);
+          notice(`${profile.name} ${profile.version ?? ''} is up to date.`, 'success');
+        }
+      } catch (error) {
+        notice(`Could not check ${profile.name} for updates: ${errorMessage(error)}`, 'error');
+      } finally {
+        checking = false;
+        summarize();
+        onChange();
+      }
+    });
+  });
   required('summary-folder').addEventListener('click', () => {
     const profile = current();
     if (profile) run(() => invoke('open_profile_folder', { id: profile.id }));

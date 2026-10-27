@@ -6,6 +6,12 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Star Conflict page: **Check for updates** for the selected pack (says when
+  it's up to date, or why the check failed); a folder icon by the profile name
+  opens its folder; one **Edit profile** button instead of two
+- Tidier launch bar: no globe icon, and the status line only shows when it
+  says more than the play button
+- The notices bell is always in the rail; an empty history says so
 - Menus (settings, profiles, pack review, downloads) slide out from the left
   rail and blur only the main area, so the rail and window controls stay
   usable and another menu opens in one click; Esc closes them
