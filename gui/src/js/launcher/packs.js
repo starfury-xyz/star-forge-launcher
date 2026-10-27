@@ -1,6 +1,6 @@
 import { invoke, listen } from './bridge.js';
 import { array, boolean, number, object, string } from './contracts.js';
-import { brand, control, el, required, notice, errorMessage, run } from './ui.js';
+import { brand, control, el, openPanel, required, notice, errorMessage, run } from './ui.js';
 
 const text = (/** @type {unknown} */ value) => (value === null ? null : string(value));
 
@@ -158,7 +158,7 @@ export async function bindPacks(profiles, locked) {
       profiles.closeDialog();
       renderReview(review);
       install.disabled = false;
-      if (!dialog.open) dialog.showModal();
+      openPanel(dialog);
     } catch (error) {
       notice(`Could not open the server pack: ${errorMessage(error)}`, 'error');
     } finally {

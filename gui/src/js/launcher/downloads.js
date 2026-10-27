@@ -1,6 +1,6 @@
 import { invoke, listen } from './bridge.js';
 import { boolean, choice, number, object, string } from './contracts.js';
-import { brand, control, el, errorMessage, notice, required } from './ui.js';
+import { brand, control, el, errorMessage, notice, openPanel, required } from './ui.js';
 
 /** Console lines kept; older ones scroll away. */
 const MAX_LINES = 400;
@@ -226,7 +226,7 @@ export async function bindDownloads() {
       paint();
       rail.hidden = false;
       ticker = setInterval(tick, TICK_MS);
-      if (!dialog.open) dialog.showModal();
+      openPanel(dialog);
     },
     /** A file starts downloading. @param {string} path @param {number | null} total */
     file(path, total) {
@@ -309,7 +309,7 @@ export async function bindDownloads() {
   });
   rail.addEventListener('click', () => {
     clearTimeout(railTimer);
-    if (active && !dialog.open) dialog.showModal();
+    if (active) openPanel(dialog);
   });
   cancel.addEventListener('click', () => {
     const stop = active?.info.cancel;

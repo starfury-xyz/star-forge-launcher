@@ -9,6 +9,7 @@ export function mountLayout() {
       <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starforge-emblem.svg" alt="" /><span>Star Conflict</span></button>
       <span class="rail-spacer"></span>
       <button id="open-downloads" class="rail-button download-rail" aria-label="Show download progress" hidden><span class="download-ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle id="download-ring" class="ring-value" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span data-icon="download"></span></span><span id="download-rail-label">0%</span></button>
+      <button id="open-notices" class="rail-button notice-bell" aria-label="Notifications" title="Notifications" hidden><span data-icon="bell"></span><span id="notice-badge" class="notice-badge" hidden></span><span>Notices</span></button>
       <button id="open-settings" class="rail-button"><span data-icon="settings"></span><span>Settings</span></button>
     </nav>
     <main class="main-surface">
@@ -39,6 +40,7 @@ export function mountLayout() {
         </section>
         <div id="launcher-update" class="update-row" hidden><span id="launcher-update-text"></span><span class="spacer"></span><button class="button" id="launcher-update-notes" hidden>Release notes</button><button class="button primary" id="launcher-update-install">Update and restart</button></div>
       </div>
+      <div class="panel-scrim" aria-hidden="true"></div>
       <div id="notices" class="notices" aria-live="polite" aria-relevant="additions"></div>
       <footer class="launch-dock" hidden>
         <button id="play-button" class="primary-button" disabled><span id="play-icon" data-icon="play"></span><span id="play-label">Checking</span></button>
@@ -76,7 +78,11 @@ export function mountLayout() {
         <div id="download-console" class="download-console" role="log" aria-label="Download log"></div>
       </div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" id="download-hide" data-close-dialog>Hide</button><button class="button danger" id="download-cancel">Cancel download</button></div></dialog>
+    <dialog id="notice-history" class="notice-history framed" aria-labelledby="notice-history-title"><header><h1 id="notice-history-title">Notifications</h1><button class="icon-button" data-close-dialog aria-label="Close notifications"><span data-icon="close"></span></button></header>
+      <div class="dialog-body"><p id="notice-history-empty" class="muted">Nothing yet.</p><ol id="notice-history-list"></ol></div>
+      <div class="dialog-actions"><span class="spacer"></span><button class="button" id="notice-history-clear">Clear all</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
-  document.body.append(dialogs);
+  // Inside the main surface: panels cover it, not the rail or window controls.
+  required('launcher').querySelector('.main-surface')?.append(dialogs);
   renderIcons();
 }

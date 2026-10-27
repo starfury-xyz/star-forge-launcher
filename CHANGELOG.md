@@ -6,6 +6,12 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Menus (settings, profiles, pack review, downloads) slide out from the left
+  rail and blur only the main area, so the rail and window controls stay
+  usable and another menu opens in one click; Esc closes them
+- Notifications stack in the bottom right, above any menu, at most three at a
+  time; they clear after 5 s (errors 10 s, hovering holds them) and repeats
+  count up. A bell in the rail opens the history
 - The injector no longer opens a terminal window when the game starts, which
   on Linux also gave the game the wrong taskbar icon
 - Home has an **Add a server or paste a pack link** button, so a pack link

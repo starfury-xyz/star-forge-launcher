@@ -11,9 +11,10 @@ import { bindBranding } from './branding.js';
 import { bindUpdater } from './updater.js';
 import { bindDownloads } from './downloads.js';
 import { startupStep, showStartupFailure } from './startup.js';
-import { control, required, notice, run } from './ui.js';
+import { bindNoticeHistory, control, required, notice, run } from './ui.js';
 
 mountLayout();
+bindNoticeHistory();
 
 async function start() {
   const preferences = await startupStep(loadPreferences(), 'Loading launcher settings');

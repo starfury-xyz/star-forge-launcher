@@ -451,20 +451,46 @@ progress::-webkit-progress-value {
   height: 39px;
   border-radius: 11px;
 }
-/* Toasts stacked in the top right, below the window controls. */
+/* Toasts stacked in the bottom right. The list is a popover, so it sits in
+   the top layer above open dialogs (ui.js re-raises it when one opens). */
 .notices {
-  position: absolute;
-  top: 48px;
-  right: 24px;
-  width: min(380px, calc(100% - 48px));
-  z-index: 10;
+  position: fixed;
+  inset: auto 24px 24px auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+  width: min(380px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  justify-content: flex-end;
   gap: 8px;
   pointer-events: none;
-  max-height: calc(100% - 180px);
-  overflow: auto;
+}
+/* A drawer leaves the right side free; in a narrow window, where it doesn't,
+   notices become a slim strip along the top edge. */
+@media (max-width: 1180px) {
+  body:has(.main-surface dialog[open]:not(:modal)) .notices {
+    inset: 36px 16px auto auto;
+    width: min(420px, calc(100vw - 32px));
+    justify-content: flex-start;
+  }
+  body:has(.main-surface dialog[open]:not(:modal)) .notice {
+    padding: 7px 12px;
+    align-items: center;
+  }
+  body:has(.main-surface dialog[open]:not(:modal)) .notice p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body:has(.main-surface dialog[open]:not(:modal)) .notice:not(:nth-last-child(-n + 2)) {
+    display: none;
+  }
 }
 .notice {
   display: flex;
@@ -499,6 +525,74 @@ progress::-webkit-progress-value {
 .notice .notice-action + button {
   margin-left: 0;
 }
+.notice-count {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.notice-count:empty {
+  display: none;
+}
+.notice p {
+  min-width: 0;
+  flex: 1;
+}
+.notice-bell {
+  color: var(--muted);
+}
+.notice-bell svg {
+  width: 20px;
+  height: 20px;
+}
+.notice-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #bf7968;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+.notice-history {
+  width: min(460px, 92vw);
+}
+.notice-history ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.notice-history li {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-left: 3px solid #5c544b;
+  background: #211e1a;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.notice-history li[data-level='error'] {
+  border-left-color: #bf7968;
+}
+.notice-history li[data-level='success'] {
+  border-left-color: var(--success);
+}
+.notice-history time {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.notice-history p {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.45;
+}
 dialog {
   color: #ece8e3;
   background: #1a1816;
@@ -508,6 +602,49 @@ dialog {
   max-height: 85vh;
   padding: 24px;
   width: min(720px, 90vw);
+}
+/* Panels (non-modal dialogs) are drawers sliding out from the rail over the
+   main area, under its scrim's blur. The rail and window controls stay
+   usable, and the right side stays free for notices. */
+.main-surface dialog:not(:modal) {
+  position: absolute;
+  inset: 0 auto 0 0;
+  margin: 0;
+  height: 100%;
+  max-height: none;
+  max-width: 100%;
+  border-width: 0 1px 0 0;
+  border-radius: 0 16px 16px 0;
+  box-shadow: 24px 0 70px #0009;
+  z-index: 14;
+  animation: drawer-in 180ms ease-out;
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+.panel-scrim {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: #080706ad;
+  backdrop-filter: blur(7px);
+}
+.main-surface:has(dialog[open]:not(:modal)) > .panel-scrim {
+  display: block;
+}
+.main-surface:has(dialog[open]:not(:modal)) > .drag-area {
+  z-index: 13;
+}
+/* The rail button whose drawer is open looks selected. */
+body:has(#settings-dialog[open]) #open-settings,
+body:has(#notice-history[open]) #open-notices,
+body:has(#download-dialog[open]) #open-downloads {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
 dialog::backdrop {
   background: #080706ad;
@@ -910,7 +1047,7 @@ dialog footer {
   background: #2a1f12;
   font-size: 13px;
 }
-/* Bottom of the content, clear of the notices along the top. */
+/* Bottom of the content. */
 .content-area > .update-row {
   position: sticky;
   bottom: 0;

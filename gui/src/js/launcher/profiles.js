@@ -1,6 +1,6 @@
 import { invoke } from './bridge.js';
 import { array, boolean, number, object, string } from './contracts.js';
-import { brand, control, required, notice, errorMessage, run } from './ui.js';
+import { brand, control, openPanel, required, notice, errorMessage, run } from './ui.js';
 
 /** @param {unknown} item */
 function parseProfile(item) {
@@ -146,7 +146,7 @@ export function bindProfiles(preferences, onChange) {
     control('pack-link', HTMLInputElement).value = '';
     required('delete-profile').hidden = !profile;
     required('profile-folder').hidden = !profile;
-    dialog.showModal();
+    openPanel(dialog);
     nameInput.focus();
   };
 
