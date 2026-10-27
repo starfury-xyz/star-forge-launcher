@@ -6,6 +6,17 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- First-run setup: **Express** (recommended folders, one click) or
+  **Custom** (pick the Star Conflict folder, checked as you go, and the
+  profiles folder, with an offer to move existing profiles). Settings →
+  Star Conflict → **Run setup…** opens it again. As an AppImage it also
+  offers to move itself into `~/Applications` with a menu entry, so
+  `starforge://` links and self-updates keep working. Existing installs
+  keep their folders and skip it
+- The profiles folder can live anywhere; `sc-launch` uses the same one
+  (`STAR_FORGE_PROFILES_DIR` overrides it)
+- Closing the launcher exits by default (it used to go to the tray)
+- The STARFURY community-server button installs STARFURY's own signed pack
 - Star Conflict page: **Check for updates** for the selected pack (says when
   it's up to date, or why the check failed); a folder icon by the profile name
   opens its folder; one **Edit profile** button instead of two

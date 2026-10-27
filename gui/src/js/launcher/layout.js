@@ -81,6 +81,26 @@ export function mountLayout() {
     <dialog id="notice-history" class="notice-history framed" aria-labelledby="notice-history-title"><header><h1 id="notice-history-title">Notifications</h1><button class="icon-button" data-close-dialog aria-label="Close notifications"><span data-icon="close"></span></button></header>
       <div class="dialog-body"><p id="notice-history-empty" class="muted">No new notices.</p><ol id="notice-history-list"></ol></div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" id="notice-history-clear">Clear all</button></div></dialog>
+    <dialog id="setup-dialog" class="setup-dialog framed" aria-labelledby="setup-title"><header><h1 id="setup-title">Welcome to STAR FORGE</h1></header>
+      <div class="dialog-body">
+        <section id="setup-choose" class="setup-step">
+          <p>Choose how to set up the launcher. You can change any of this later in Settings.</p>
+          <button type="button" class="setup-choice" id="setup-express"><strong>Express</strong><span>Use the recommended folders and start playing.</span><small id="setup-express-game"></small><small id="setup-express-profiles"></small></button>
+          <button type="button" class="setup-choice" id="setup-custom-choice"><strong>Custom</strong><span>Pick where Star Conflict is and where server profiles are kept.</span></button>
+        </section>
+        <section id="setup-custom" class="setup-step" hidden>
+          <label class="field">Star Conflict folder<span class="folder-field"><input id="setup-game" type="text" spellcheck="false" autocomplete="off" /><button type="button" class="button" id="setup-game-browse">Browse…</button></span><small id="setup-game-note" class="setup-note"></small></label>
+          <label class="field">Profiles folder<span class="folder-field"><input id="setup-profiles" type="text" spellcheck="false" autocomplete="off" /><button type="button" class="button" id="setup-profiles-browse">Browse…</button><button type="button" class="button" id="setup-profiles-reset">Default</button></span><small>Server packs and their game files, which can take several GB.</small></label>
+          <label class="check-field" id="setup-move-row" hidden><input id="setup-move" type="checkbox" checked /><span id="setup-move-label">Move my profiles there</span></label>
+          <p class="field">Launcher data<small>Settings, pack keys and logs (small, stays here): <span id="setup-data"></span></small></p>
+        </section>
+        <section id="setup-appimage" class="setup-step" hidden>
+          <p><strong>Add STAR FORGE to your applications menu?</strong></p>
+          <p class="muted">An AppImage runs from wherever it is saved. Moving it to a fixed folder gives it a menu entry and icon, lets <code>starforge://</code> links open it, and keeps self-updates working. The launcher restarts from there.</p>
+          <label class="field">Keep the AppImage in<span class="folder-field"><input id="setup-appimage-dir" type="text" spellcheck="false" autocomplete="off" /><button type="button" class="button" id="setup-appimage-browse">Browse…</button></span></label>
+        </section>
+      </div>
+      <div class="dialog-actions"><button type="button" class="button" id="setup-back" hidden>Back</button><span class="spacer"></span><button type="button" class="button" id="setup-cancel">Cancel</button><button type="button" class="button primary" id="setup-next" hidden>Finish setup</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
   // Inside the main surface: panels cover it, not the rail or window controls.
   required('launcher').querySelector('.main-surface')?.append(dialogs);

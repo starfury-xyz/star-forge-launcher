@@ -20,7 +20,7 @@ export async function bindSettings(preferences, store) {
       tab === 'launcher'
         ? `
       <section class="setting-group"><h2>Window behavior</h2>${row('After starting the game', 'Choose where the launcher stays while you play.', 'launch-behavior', '<select id="launch-behavior" data-preference="launchBehavior"><option value="tray">Minimize to tray</option><option value="keepOpen">Keep launcher open</option><option value="exit">Exit launcher</option></select>')}
-      ${row('When closing the launcher', 'Choose what happens when you click X.', 'close-behavior', '<select id="close-behavior" data-preference="closeBehavior"><option value="tray">Minimize to tray</option><option value="exit">Exit launcher</option></select>')}</section>
+      ${row('When closing the launcher', 'Choose what happens when you click X.', 'close-behavior', '<select id="close-behavior" data-preference="closeBehavior"><option value="exit">Exit launcher</option><option value="tray">Minimize to tray</option></select>')}</section>
       <section class="setting-group"><h2>Appearance</h2>${row('Color theme', 'Hover a theme to preview it.', 'theme-button', `<div class="theme-picker"><button type="button" class="theme-button" id="theme-button" aria-haspopup="listbox" aria-expanded="false" aria-controls="theme-list"><span class="swatch"></span><span class="theme-name"></span><span class="caret" aria-hidden="true">▾</span></button><ul class="theme-list" id="theme-list" role="listbox" aria-label="Color theme" hidden>${factions.map((name) => `<li class="theme-option" role="option" id="theme-${name}" data-theme="${name}"><span class="swatch" data-faction="${name}"></span>${themeName(name)}</li>`).join('')}</ul></div>`)}
       ${row('Server pack look', 'Show the selected server pack’s logo, icon, background and color. Its color replaces the faction color.', 'pack-branding', '<input id="pack-branding" data-preference="packBranding" type="checkbox">')}
       ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', '<span class="folder-field"><input id="background-folder" data-preference="backgroundFolder" type="text" spellcheck="false" placeholder="Steam banner"><button class="button" id="pick-background-folder">Browse…</button></span>')}</section>
@@ -33,6 +33,8 @@ export async function bindSettings(preferences, store) {
       <section class="setting-group" ${compat.supported ? '' : 'hidden'}><h2>Compatibility</h2>
       ${row('Proton version', 'Automatic uses the Proton that last ran the game from Steam, with the same prefix and saved settings.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}
       <p class="settings-path" id="detected-proton"></p></section>
+      <section class="setting-group"><h2>Setup</h2>
+      ${row('Run setup again', 'Pick the Star Conflict and profiles folders again, as on first start.', 'run-setup', '<span class="confirm-inline"><button class="button" id="run-setup">Run setup…</button><span id="run-setup-confirm" hidden>Open the setup now? <button class="button primary" id="run-setup-yes">Run setup</button><button class="button" id="run-setup-no">Cancel</button></span></span>')}</section>
       <section class="setting-group"><h2>Folders and logs</h2><div class="setting-buttons"><button class="button" data-command="view_game_install">Open game folder</button><button class="button" data-command="open_profile_folder">Open profiles folder</button><button class="button" data-command="view_launch_log">Open last launch log</button></div></section>`;
     if (tab === 'game') {
       const select = area.querySelector('#proton-path');
@@ -175,6 +177,15 @@ export async function bindSettings(preferences, store) {
       render();
     }
     if (button.id === 'open-settings') run(() => preferences.reload());
+    if (button.id === 'run-setup' || button.id === 'run-setup-no') {
+      const asking = button.id === 'run-setup';
+      required('run-setup').hidden = asking;
+      required('run-setup-confirm').hidden = !asking;
+    }
+    if (button.id === 'run-setup-yes') {
+      button.closest('dialog')?.close();
+      document.dispatchEvent(new Event('run-setup'));
+    }
     if (button.id === 'pick-background-folder')
       run(async () => {
         const dir = await invoke('pick_background_folder');

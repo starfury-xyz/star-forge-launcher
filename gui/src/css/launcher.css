@@ -355,10 +355,9 @@ select:focus-visible {
 .game-card-info > span:last-child {
   margin-left: auto;
 }
+/* Top-aligned, so every profile's name starts in the same place. */
 .overview-page {
-  height: 100%;
-  display: flex;
-  align-items: center;
+  padding-top: 10px;
 }
 .eyebrow {
   font-size: 10px;
@@ -1497,4 +1496,68 @@ dialog footer {
   50% {
     transform: translateY(2px);
   }
+}
+
+/* First-run setup. */
+.setup-dialog {
+  width: min(620px, 92vw);
+}
+.setup-step {
+  display: grid;
+  gap: 14px;
+}
+.setup-step p {
+  margin: 0;
+}
+.setup-choice {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 16px 18px;
+  border: 1px solid #534c44;
+  border-radius: 12px;
+  background: #211e1a;
+}
+.setup-choice:hover,
+.setup-choice:focus-visible {
+  border-color: var(--accent);
+}
+.setup-choice strong {
+  font-size: 15px;
+  color: #ece8e3;
+}
+.setup-choice span {
+  font-size: 13px;
+}
+.setup-choice small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.setup-note[data-state='ok'] {
+  color: var(--success);
+}
+.setup-note[data-state='error'] {
+  color: #ffb4a3;
+}
+#setup-data {
+  overflow-wrap: anywhere;
+}
+.confirm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.confirm-inline > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.confirm-inline [hidden] {
+  display: none;
+}
+.setup-step .folder-field input {
+  flex: 1;
+  min-width: 0;
 }

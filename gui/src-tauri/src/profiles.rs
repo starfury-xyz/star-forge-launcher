@@ -490,9 +490,17 @@ pub fn discard_pack(app: AppHandle, token: u64) {
 }
 
 /// Community server packs that ship with the launcher (see samples/ in the repo).
-const SAMPLES: [(&str, &str); 2] = [
-    ("starfury", include_str!("../../../samples/starfury/pack.json")),
-    ("sc-classic-europe", include_str!("../../../samples/sc-classic-europe/pack.json")),
+/// Where a community-server button installs from.
+enum Sample {
+    /// The server's own published pack.
+    Link { name: &'static str, url: &'static str },
+    /// A pack.json kept with STAR FORGE (`samples/`).
+    Bundled(&'static str),
+}
+
+const SAMPLES: [(&str, Sample); 2] = [
+    ("starfury", Sample::Link { name: "STARFURY", url: "https://starfury.web.garage.cosmosim.dev/pack.json" }),
+    ("sc-classic-europe", Sample::Bundled(include_str!("../../../samples/sc-classic-europe/pack.json"))),
 ];
 
 #[derive(Serialize)]
@@ -505,18 +513,30 @@ pub struct SamplePack {
 pub fn list_sample_packs() -> Vec<SamplePack> {
     SAMPLES
         .iter()
-        .filter_map(|(key, json)| Some(SamplePack { key, name: Pack::from_json(json).ok()?.name }))
+        .filter_map(|(key, sample)| {
+            let name = match sample {
+                Sample::Link { name, .. } => name.to_string(),
+                Sample::Bundled(json) => Pack::from_json(json).ok()?.name,
+            };
+            Some(SamplePack { key, name })
+        })
         .collect()
 }
 
-/// Writes a sample pack to a folder the review can open, and returns it.
+/// What the review should open for a sample: the server's pack link, or a
+/// folder holding the bundled pack.
 #[tauri::command]
 pub fn sample_pack_source(key: String) -> Result<String, String> {
-    let (_, json) = SAMPLES.iter().find(|(k, _)| *k == key).ok_or("unknown sample pack")?;
-    let dir = packs::staging_root().ok_or("cannot work out the launcher data folder")?.join("samples").join(&key);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    profiles::write_atomic(&dir.join(sc_profile::PACK_FILE), json)?;
-    Ok(dir.to_string_lossy().into_owned())
+    let (_, sample) = SAMPLES.iter().find(|(k, _)| *k == key).ok_or("unknown sample pack")?;
+    match sample {
+        Sample::Link { url, .. } => Ok(url.to_string()),
+        Sample::Bundled(json) => {
+            let dir = packs::staging_root().ok_or("cannot work out the launcher data folder")?.join("samples").join(&key);
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            profiles::write_atomic(&dir.join(sc_profile::PACK_FILE), json)?;
+            Ok(dir.to_string_lossy().into_owned())
+        }
+    }
 }
 
 #[tauri::command]

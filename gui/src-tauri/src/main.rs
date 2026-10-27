@@ -6,6 +6,7 @@ mod game;
 mod lifecycle;
 mod prefs;
 mod profiles;
+mod setup;
 mod updater;
 
 use std::ffi::OsStr;
@@ -54,8 +55,6 @@ fn app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
-/// `starforge://install?url=...` links, from the command line, the desktop, or
-/// a second launcher instance (which hands its link over and exits).
 /// `Mutex::lock` that keeps going after a panic in another command, instead
 /// of making every later command panic too.
 pub trait Locked<T> {
@@ -68,6 +67,8 @@ impl<T> Locked<T> for std::sync::Mutex<T> {
     }
 }
 
+/// `starforge://install?url=...` links, from the command line, the desktop, or
+/// a second launcher instance (which hands its link over and exits).
 fn setup_pack_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
     sc_launch::packs::clear_staging();
@@ -195,6 +196,11 @@ fn main() {
                 profiles::sample_pack_source,
                 profiles::check_pack_updates,
                 profiles::check_pack_update,
+                setup::get_setup_info,
+                setup::check_game_folder,
+                setup::pick_folder,
+                setup::finish_setup,
+                setup::install_appimage,
                 profiles::take_pending_link,
                 profiles::get_profile_branding,
                 updater::check_launcher_update,

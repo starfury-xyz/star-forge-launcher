@@ -10,6 +10,7 @@ import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
 import { bindUpdater } from './updater.js';
 import { bindDownloads } from './downloads.js';
+import { bindSetup } from './setup.js';
 import { startupStep, showStartupFailure } from './startup.js';
 import { bindNoticeHistory, control, required, notice, run } from './ui.js';
 
@@ -95,6 +96,7 @@ async function start() {
     await startupStep(store.start(), 'Loading launcher state');
     await startupStep(profiles.refresh(), 'Loading server profiles');
     await startupStep(invoke('main_ready'), 'Showing launcher');
+    run(() => bindSetup(preferences, profiles));
     run(() => bindSettings(preferences, store));
     run(() =>
       bindPacks(profiles, () => {

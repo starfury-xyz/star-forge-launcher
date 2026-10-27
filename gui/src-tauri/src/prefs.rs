@@ -18,8 +18,8 @@ pub enum LaunchBehavior {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CloseBehavior {
-    #[default]
     Tray,
+    #[default]
     Exit,
 }
 
@@ -52,6 +52,8 @@ pub struct Preferences {
     pub proton_path: String,
     /// Look for a new launcher version at startup.
     pub check_updates: bool,
+    /// The first-run setup (game and profiles folders) was finished.
+    pub setup_done: bool,
 }
 
 impl Default for Preferences {
@@ -66,6 +68,7 @@ impl Default for Preferences {
             game_directory: String::new(),
             proton_path: String::new(),
             check_updates: true,
+            setup_done: false,
         }
     }
 }
@@ -78,10 +81,12 @@ fn file() -> Option<PathBuf> {
 }
 
 pub fn load(app: &AppHandle) {
-    let prefs = file()
-        .and_then(|f| std::fs::read_to_string(f).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
+    let saved: Option<serde_json::Value> =
+        file().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|t| serde_json::from_str(&t).ok());
+    // Launchers from before the first-run setup already have their folders.
+    let upgraded = saved.as_ref().is_some_and(|v| v.get("setupDone").is_none());
+    let mut prefs: Preferences = saved.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+    prefs.setup_done |= upgraded;
     *app.state::<PrefsState>().0.locked() = prefs;
 }
 
