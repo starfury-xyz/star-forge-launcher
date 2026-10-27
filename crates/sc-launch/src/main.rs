@@ -147,7 +147,7 @@ fn run() -> Result<u8, String> {
             if let Some(warning) = packs::launch_check(&pack)? {
                 eprintln!("note: {warning}");
             }
-            if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref())? {
+            if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref(), &mut sc_launch::remote::quiet)? {
                 eprintln!("note: {note}");
             }
             let setup = launch::resolve(&cli.opts)?;
@@ -319,7 +319,7 @@ fn install_reviewed(staged: packs::Staged, profiles_dir: &std::path::Path, yes: 
             return Ok(1);
         }
     }
-    let installed = packs::install(staged, profiles_dir)?;
+    let installed = packs::install(staged, profiles_dir, &mut sc_launch::remote::quiet)?;
     println!("installed as profile {}", installed.name);
     if let Some(w) = installed.warning {
         eprintln!("warning: {w}");

@@ -19,7 +19,7 @@
 //!
 //! Both formats are kept working while the community settles on one.
 
-use crate::packs::{check_url, fetch, hex};
+use crate::packs::{check_url, fetch, fetch_with, hex};
 use crate::signing::{verify_bytes, PublicKey};
 use sc_profile::{FilesFrom, FILES_DIR, GENERATED_FILES, REMOTE_RECORD};
 use serde::{Deserialize, Serialize};
@@ -306,14 +306,44 @@ fn target(profile_dir: &Path, rel: &str) -> std::path::PathBuf {
     profile_dir.join(FILES_DIR).join(rel)
 }
 
+/// What a [`sync`] is doing, for a progress display.
+#[derive(Debug, Clone, Copy)]
+pub enum SyncEvent<'a> {
+    /// Before anything downloads: `files` of the list's files are new or
+    /// changed (`bytes` in all, when the list gives every size), `kept` are
+    /// already up to date, and `remove` were dropped from the list.
+    Plan { list: &'a FileList, files: usize, bytes: Option<u64>, kept: usize, remove: usize },
+    /// `path` starts downloading; `size` is from the list, if it says.
+    File { path: &'a str, size: Option<u64> },
+    /// `done` bytes of that file have arrived, of `total` (the list's size,
+    /// else the one the server announced).
+    Bytes { done: u64, total: Option<u64> },
+    /// It arrived whole and matches its SHA-256.
+    Verified { path: &'a str, sha256: &'a str, size: u64 },
+    /// `path` was dropped from the list, and deleted.
+    Removed { path: &'a str },
+}
+
+/// A [`sync`] progress callback that ignores everything.
+pub fn quiet(_: SyncEvent<'_>) -> Result<(), String> {
+    Ok(())
+}
+
 /// Brings a profile's `files/` in line with the list: downloads what's new or
 /// changed, deletes what the list dropped. Files the list never named (say,
-/// the launcher's own `address.cfg`) are left alone.
-pub fn sync(profile_dir: &Path, list: &FileList) -> Result<Synced, String> {
+/// the launcher's own `address.cfg`) are left alone. `progress` hears what
+/// happens; an error from it stops the sync with that error, keeping the
+/// files that finished downloading.
+pub fn sync(
+    profile_dir: &Path,
+    list: &FileList,
+    progress: &mut dyn FnMut(SyncEvent<'_>) -> Result<(), String>,
+) -> Result<Synced, String> {
     let mut record = load_record(profile_dir).unwrap_or_default();
     record.source = list.source.clone();
     let mut done = Synced::default();
     let result = (|| {
+        let mut wanted = Vec::new();
         for e in &list.entries {
             let path = target(profile_dir, &e.path);
             let size_now = std::fs::metadata(&path).map(|m| m.len()).ok();
@@ -325,11 +355,27 @@ pub fn sync(profile_dir: &Path, list: &FileList) -> Result<Synced, String> {
                 record.files.insert(e.path.clone(), Recorded { sha256: e.sha256.clone(), size });
                 continue;
             }
+            wanted.push(e);
+        }
+        let listed: std::collections::HashSet<&str> = list.entries.iter().map(|e| e.path.as_str()).collect();
+        let dropped: Vec<String> = record.files.keys().filter(|p| !listed.contains(p.as_str())).cloned().collect();
+        progress(SyncEvent::Plan {
+            list,
+            files: wanted.len(),
+            bytes: wanted.iter().map(|e| e.size).sum(),
+            kept: list.entries.len() - wanted.len(),
+            remove: dropped.len(),
+        })?;
+        for e in wanted {
+            progress(SyncEvent::File { path: &e.path, size: e.size })?;
+            let path = target(profile_dir, &e.path);
             let dir = path.parent().unwrap();
             std::fs::create_dir_all(dir).map_err(|err| format!("{}: {err}", dir.display()))?;
             let tmp = path.with_file_name(format!(".{}.download", path.file_name().unwrap().to_string_lossy()));
             let mut hasher = Sha256::new();
-            let fetched = fetch(&e.url, &tmp, e.size.unwrap_or(MAX_FILE_BYTES), Some(&mut hasher));
+            let fetched = fetch_with(&e.url, &tmp, e.size.unwrap_or(MAX_FILE_BYTES), Some(&mut hasher), &mut |got, announced| {
+                progress(SyncEvent::Bytes { done: got, total: e.size.or(announced) })
+            });
             let size = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0);
             let ok = fetched.and_then(|()| {
                 if hex(&hasher.finalize()) != e.sha256 || e.size.is_some_and(|s| s != size) {
@@ -345,16 +391,19 @@ pub fn sync(profile_dir: &Path, list: &FileList) -> Result<Synced, String> {
             std::fs::rename(&tmp, &path).map_err(|err| format!("{}: {err}", path.display()))?;
             record.files.insert(e.path.clone(), Recorded { sha256: e.sha256.clone(), size });
             done.downloaded += 1;
+            progress(SyncEvent::Verified { path: &e.path, sha256: &e.sha256, size })?;
         }
-        let listed: std::collections::HashSet<&str> = list.entries.iter().map(|e| e.path.as_str()).collect();
-        let dropped: Vec<String> = record.files.keys().filter(|p| !listed.contains(p.as_str())).cloned().collect();
         for rel in dropped {
-            match std::fs::remove_file(target(profile_dir, &rel)) {
-                Ok(()) => done.removed += 1,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            let removed = match std::fs::remove_file(target(profile_dir, &rel)) {
+                Ok(()) => true,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
                 Err(e) => return Err(format!("{rel}: {e}")),
-            }
+            };
             record.files.remove(&rel);
+            if removed {
+                done.removed += 1;
+                progress(SyncEvent::Removed { path: &rel })?;
+            }
         }
         Ok(())
     })();
@@ -376,11 +425,17 @@ fn intact(profile_dir: &Path) -> bool {
 /// Before a launch: refreshes a `files_from` pack's files. If the list can't
 /// be reached but the last download is intact, the game starts with those
 /// (and the returned note says so); a list that fails its checks stops it.
-pub fn launch_sync(profile_dir: &Path, pack: &sc_profile::Pack, key: Option<&PublicKey>) -> Result<Option<String>, String> {
+/// `progress` is as for [`sync`].
+pub fn launch_sync(
+    profile_dir: &Path,
+    pack: &sc_profile::Pack,
+    key: Option<&PublicKey>,
+    progress: &mut dyn FnMut(SyncEvent<'_>) -> Result<(), String>,
+) -> Result<Option<String>, String> {
     let Some(from) = &pack.files_from else { return Ok(None) };
     match fetch_list(from, key) {
         Ok(list) => {
-            let done = sync(profile_dir, &list)?;
+            let done = sync(profile_dir, &list, progress)?;
             Ok((done.downloaded + done.removed > 0).then(|| {
                 format!("{}: updated {} game file(s) from {}", pack.name, done.downloaded + done.removed, list.host())
             }))
@@ -498,20 +553,66 @@ mod tests {
         assert!(matches!(fetch_list(&from("v1.txt"), Some(&other.public())), Err(ListError::Invalid(_))));
         assert!(matches!(fetch_list(&from("missing.txt"), None), Err(ListError::Network(_))));
 
+        // Syncs, and what it told the progress callback.
+        let synced = |list: &FileList| {
+            let mut seen: Vec<String> = Vec::new();
+            let result = sync(&profile, list, &mut |e| {
+                let line = match e {
+                    SyncEvent::Plan { files, bytes, kept, remove, .. } => format!("plan {files} {bytes:?} {kept} {remove}"),
+                    SyncEvent::File { path, size } => format!("get {path} {size:?}"),
+                    SyncEvent::Bytes { done, total } => format!("bytes {done} {total:?}"),
+                    SyncEvent::Verified { path, size, .. } => format!("ok {path} {size}"),
+                    SyncEvent::Removed { path } => format!("del {path}"),
+                };
+                // A file may arrive in several chunks; keep the last count.
+                if line.starts_with("bytes") && seen.last().is_some_and(|l| l.starts_with("bytes")) {
+                    seen.pop();
+                }
+                seen.push(line);
+                Ok(())
+            });
+            (result, seen)
+        };
+
         let list = fetch_list(&from("v1.txt"), Some(&key.public())).unwrap();
         assert!(list.signed);
-        assert_eq!(sync(&profile, &list).unwrap(), Synced { downloaded: 2, removed: 0 });
+        // SCMOD1 gives no sizes, so the total comes from the server.
+        assert_eq!(
+            synced(&list),
+            (
+                Ok(Synced { downloaded: 2, removed: 0 }),
+                ["plan 2 None 0 0", "get data/a.lua None", "bytes 3 Some(3)", "ok data/a.lua 3", "get data/b.lua None", "bytes 3 Some(3)", "ok data/b.lua 3"]
+                    .map(String::from)
+                    .to_vec()
+            )
+        );
         assert_eq!(std::fs::read(profile.join("files/data/a.lua")).unwrap(), b"one");
-        assert_eq!(sync(&profile, &list).unwrap(), Synced::default(), "nothing changed, nothing fetched");
+        assert_eq!(synced(&list), (Ok(Synced::default()), vec!["plan 0 Some(0) 2 0".into()]), "nothing changed, nothing fetched");
         assert!(intact(&profile));
 
         let list = fetch_list(&from("v2.txt"), None).unwrap();
-        assert_eq!(sync(&profile, &list).unwrap(), Synced { downloaded: 1, removed: 1 });
+        assert_eq!(
+            synced(&list),
+            (
+                Ok(Synced { downloaded: 1, removed: 1 }),
+                ["plan 1 None 0 1", "get data/a.lua None", "bytes 3 Some(3)", "ok data/a.lua 3", "del data/b.lua"].map(String::from).to_vec()
+            )
+        );
         assert_eq!(std::fs::read(profile.join("files/data/a.lua")).unwrap(), b"two");
         assert!(!profile.join("files/data/b.lua").exists());
 
+        // The progress callback can stop a sync mid-file (the window's Cancel).
+        let list = fetch_list(&from("v1.txt"), Some(&key.public())).unwrap();
+        let stopped = sync(&profile, &list, &mut |e| match e {
+            SyncEvent::Bytes { .. } => Err("stopped".into()),
+            _ => Ok(()),
+        });
+        assert_eq!(stopped, Err("stopped".into()));
+        assert_eq!(std::fs::read(profile.join("files/data/a.lua")).unwrap(), b"two", "the old file stays");
+        assert!(!profile.join("files/data/.a.lua.download").exists());
+
         let list = fetch_list(&from("bad.txt"), Some(&key.public())).unwrap();
-        assert!(sync(&profile, &list).is_err(), "a file that doesn't match its hash is refused");
+        assert!(sync(&profile, &list, &mut quiet).is_err(), "a file that doesn't match its hash is refused");
         assert_eq!(std::fs::read(profile.join("files/data/a.lua")).unwrap(), b"two", "and the old one is kept");
         std::fs::remove_dir_all(&profile).unwrap();
     }

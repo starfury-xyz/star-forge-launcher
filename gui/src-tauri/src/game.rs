@@ -189,7 +189,10 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     if let Some(warning) = sc_launch::packs::launch_check(&pack)? {
         notify(app, warning, NotificationLevel::Info);
     }
-    if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref())? {
+    let mut download = crate::downloads::Session::new(app, "update", &pack.name);
+    let synced = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref(), &mut |e| download.report(e));
+    download.finish(synced.as_ref().err().map(String::as_str));
+    if let Some(note) = synced? {
         notify(app, note, NotificationLevel::Info);
     }
     for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
@@ -292,7 +295,11 @@ pub fn perform_launcher_action(app: AppHandle, action: String) -> Result<(), Str
             std::thread::spawn(move || {
                 if let Err(e) = start_game(&app) {
                     update(&app, |s| s.phase = Some(Phase::Ready));
-                    notify(&app, e, NotificationLevel::Error);
+                    if e == crate::downloads::CANCELLED {
+                        notify(&app, "Download cancelled; the game was not started.".into(), NotificationLevel::Info);
+                    } else {
+                        notify(&app, e, NotificationLevel::Error);
+                    }
                 }
             });
             Ok(())

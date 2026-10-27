@@ -1,6 +1,7 @@
 // No console window behind the launcher on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod downloads;
 mod game;
 mod lifecycle;
 mod prefs;
@@ -99,6 +100,7 @@ fn main() {
         .manage(lifecycle::Lifecycle::default())
         .manage(prefs::PrefsState::default())
         .manage(game::GameState::default())
+        .manage(downloads::Downloads::default())
         .manage(profiles::PackReviews::default())
         .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -167,6 +169,7 @@ fn main() {
                 game::pick_background_folder,
                 game::view_game_install,
                 game::view_launch_log,
+                downloads::cancel_download,
                 profiles::list_profiles,
                 profiles::save_profile,
                 profiles::delete_profile,

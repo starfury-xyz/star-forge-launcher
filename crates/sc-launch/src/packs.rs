@@ -381,15 +381,20 @@ pub struct Installed {
 }
 
 /// Installs a reviewed pack: updates the profile that already has this pack id,
-/// or creates a new one, then downloads any listed game files.
-pub fn install(staged: Staged, profiles_dir: &Path) -> Result<Installed, String> {
+/// or creates a new one, then downloads any listed game files, telling
+/// `progress` how that goes (see [`crate::remote::sync`]).
+pub fn install(
+    staged: Staged,
+    profiles_dir: &Path,
+    progress: &mut dyn FnMut(crate::remote::SyncEvent<'_>) -> Result<(), String>,
+) -> Result<Installed, String> {
     let result = install_inner(&staged, profiles_dir);
     let remote = staged.remote.clone();
     let pack_name = staged.pack.name.clone();
     discard(staged);
     let name = result?;
     let warning = remote.and_then(|list| {
-        crate::remote::sync(&profiles_dir.join(&name), &list)
+        crate::remote::sync(&profiles_dir.join(&name), &list, progress)
             .err()
             .map(|e| format!("{pack_name} is installed, but its game files didn't all download ({e}). They'll be fetched again before you play."))
     });
@@ -540,7 +545,20 @@ fn looks_like_json(path: &Path) -> bool {
 }
 
 /// Downloads `url` to `dest`, at most `limit` bytes, optionally hashing it.
-pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut Sha256>) -> Result<(), String> {
+pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, hasher: Option<&mut Sha256>) -> Result<(), String> {
+    fetch_with(url, dest, limit, hasher, &mut |_, _| Ok(()))
+}
+
+/// [`fetch`], calling `on_bytes` after each chunk with the bytes received so
+/// far and the size the server announced, if it did. An error from
+/// `on_bytes` stops the download with that error.
+pub(crate) fn fetch_with(
+    url: &str,
+    dest: &Path,
+    limit: u64,
+    mut hasher: Option<&mut Sha256>,
+    on_bytes: &mut dyn FnMut(u64, Option<u64>) -> Result<(), String>,
+) -> Result<(), String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(15))
         .timeout_read(Duration::from_secs(60))
@@ -548,6 +566,7 @@ pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut 
         .https_only(!url.starts_with("http://"))
         .build();
     let response = agent.get(url).call().map_err(|e| format!("{url}: {e}"))?;
+    let announced = response.header("Content-Length").and_then(|v| v.trim().parse().ok());
     let mut reader = response.into_reader().take(limit + 1);
     let mut file = std::fs::File::create(dest).map_err(|e| format!("{}: {e}", dest.display()))?;
     let mut buf = vec![0u8; 64 * 1024];
@@ -565,6 +584,7 @@ pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut 
             h.update(&buf[..n]);
         }
         file.write_all(&buf[..n]).map_err(|e| format!("{}: {e}", dest.display()))?;
+        on_bytes(total, announced)?;
     }
     Ok(())
 }
@@ -699,6 +719,7 @@ fn find_root(content: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::remote::quiet;
 
     #[test]
     fn parses_sources() {
@@ -767,7 +788,7 @@ mod tests {
         let staged = stage(&Source::Path(v1)).unwrap();
         assert_eq!(staged.files, vec!["data/a.cfg", "data/old.cfg"]);
         assert!(!staged.verified);
-        let name = install(staged, &profiles_dir).unwrap().name;
+        let name = install(staged, &profiles_dir, &mut quiet).unwrap().name;
         assert_eq!(name, "test-server");
         let dir = profiles_dir.join(&name);
         assert!(!dir.join("local.json").exists(), "packs can't ship player settings");
@@ -776,7 +797,7 @@ mod tests {
         profiles::write_local(&dir, &sc_profile::Local { name: Some("Mine".into()), ..Default::default() }).unwrap();
         let v2 = base.join("v2.zip");
         write_zip(&v2, &[("pack.json", &manifest("1.1.0")), ("files/data/a.cfg", "two")]);
-        let name2 = install(stage(&Source::Path(v2)).unwrap(), &profiles_dir).unwrap().name;
+        let name2 = install(stage(&Source::Path(v2)).unwrap(), &profiles_dir, &mut quiet).unwrap().name;
         assert_eq!(name2, name, "same pack id updates in place");
         assert_eq!(std::fs::read_to_string(dir.join("files/data/a.cfg")).unwrap(), "two");
         assert!(!dir.join("files/data/old.cfg").exists());
@@ -816,7 +837,7 @@ mod tests {
         let staged = stage(&make("v1", "1.0.0", Some(&key))).unwrap();
         assert_eq!(staged.trust, Trust::NewKey(key.public()));
         assert!(staged.reach.runs_code());
-        let name = install(staged, &profiles_dir).unwrap().name;
+        let name = install(staged, &profiles_dir, &mut quiet).unwrap().name;
         let dir = profiles_dir.join(&name);
         assert_eq!(verify_installed(&dir).unwrap(), Trust::Pinned(key.public()));
 
@@ -824,7 +845,7 @@ mod tests {
         assert!(stage(&make("v2-unsigned", "1.1.0", None)).is_err(), "nor an unsigned copy");
         let v2 = stage(&make("v2", "1.1.0", Some(&key))).unwrap();
         assert_eq!(v2.trust, Trust::Pinned(key.public()));
-        install(v2, &profiles_dir).unwrap();
+        install(v2, &profiles_dir, &mut quiet).unwrap();
 
         std::fs::write(dir.join("patches/game.exe.patchset.toml"), "tampered").unwrap();
         assert!(verify_installed(&dir).is_err());

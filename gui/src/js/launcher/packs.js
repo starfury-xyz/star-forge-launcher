@@ -1,6 +1,6 @@
 import { invoke, listen } from './bridge.js';
 import { array, boolean, number, object, string } from './contracts.js';
-import { brand, control, required, notice, errorMessage, run } from './ui.js';
+import { brand, control, el, required, notice, errorMessage, run } from './ui.js';
 
 const text = (/** @type {unknown} */ value) => (value === null ? null : string(value));
 
@@ -44,14 +44,6 @@ function parseReview(item) {
   };
 }
 /** @typedef {ReturnType<typeof parseReview>} PackReview */
-
-/** Builds an element with text content only; pack contents are never parsed as HTML. */
-function el(/** @type {string} */ tag, /** @type {string} */ className, /** @type {string} */ content = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  node.textContent = content;
-  return node;
-}
 
 /** @param {PackReview} review */
 function renderReview(review) {
@@ -185,11 +177,14 @@ export async function bindPacks(profiles, locked) {
       return;
     }
     install.disabled = true;
+    // Installing uses the review up; the download window takes over when the
+    // pack has game files to fetch.
+    const installing = invoke('install_pack', { token: target.token });
+    review = null;
+    dialog.close();
     run(async () => {
       try {
-        const id = string(await invoke('install_pack', { token: target.token }));
-        review = null;
-        dialog.close();
+        const id = string(await installing);
         await profiles.refresh(id);
         notice(target.update ? `Updated ${target.name} to ${target.version}.` : `Installed ${target.name}.`, 'success');
         run(checkUpdates);

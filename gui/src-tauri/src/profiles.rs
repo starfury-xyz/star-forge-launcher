@@ -454,9 +454,15 @@ pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> 
         .remove(&token)
         .ok_or("This pack review has expired; open the pack again.")?;
     let root = profiles_dir()?;
-    let installed = tauri::async_runtime::spawn_blocking(move || packs::install(staged, &root))
-        .await
-        .map_err(|e| e.to_string())??;
+    let handle = app.clone();
+    let installed = tauri::async_runtime::spawn_blocking(move || {
+        let mut download = crate::downloads::Session::new(&handle, "install", &staged.pack.name);
+        let installed = packs::install(staged, &root, &mut |e| download.report(e));
+        download.finish(installed.as_ref().map_or_else(|e| Some(e.as_str()), |i| i.warning.as_deref()));
+        installed
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     if let Some(w) = installed.warning {
         crate::notify(&app, w, crate::NotificationLevel::Error);
     }

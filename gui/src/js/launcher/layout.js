@@ -8,6 +8,7 @@ export function mountLayout() {
       <button class="rail-button" data-page="home" aria-current="page"><span data-icon="home"></span><span>Home</span></button>
       <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starforge-emblem.svg" alt="" /><span>Star Conflict</span></button>
       <span class="rail-spacer"></span>
+      <button id="open-downloads" class="rail-button download-rail" aria-label="Show download progress" hidden><span class="download-ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle id="download-ring" class="ring-value" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span data-icon="download"></span></span><span id="download-rail-label">0%</span></button>
       <button id="open-settings" class="rail-button"><span data-icon="settings"></span><span>Settings</span></button>
     </nav>
     <main class="main-surface">
@@ -65,6 +66,15 @@ export function mountLayout() {
     <dialog id="pack-dialog" class="pack-dialog framed" aria-labelledby="pack-title"><header><h1 id="pack-title">Install server pack</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
       <div id="pack-body" class="pack-body dialog-body"></div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button primary" id="pack-install">Install</button></div></dialog>
+    <dialog id="download-dialog" class="download-dialog framed" aria-labelledby="download-title" data-state="running"><header><div><span id="download-eyebrow" class="eyebrow">Downloading</span><h1 id="download-title">–</h1></div><button class="icon-button" data-close-dialog aria-label="Hide download window" title="Hide (keeps downloading)"><span data-icon="close"></span></button></header>
+      <div class="dialog-body download-body">
+        <div class="download-readout"><span id="download-percent" class="download-percent">0%</span><span id="download-state" class="download-state">Live</span><span class="spacer"></span><span id="download-amount" class="download-amount"></span></div>
+        <div id="download-bar" class="download-bar" role="progressbar" aria-labelledby="download-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="download-bar-fill"></span></div>
+        <div class="download-current"><span id="download-file" class="download-file"></span><span id="download-count" class="download-count"></span></div>
+        <dl class="download-stats"><div><dt>Speed</dt><dd id="download-speed">–</dd></div><div><dt>ETA</dt><dd id="download-eta">–</dd></div><div><dt>Elapsed</dt><dd id="download-elapsed">0:00</dd></div><div class="download-graph" title="Throughput, last 30 seconds"><svg viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden="true"><polygon id="download-graph-fill"/><polyline id="download-graph-line"/></svg></div></dl>
+        <div id="download-console" class="download-console" role="log" aria-label="Download log"></div>
+      </div>
+      <div class="dialog-actions"><span class="spacer"></span><button class="button" id="download-hide" data-close-dialog>Hide</button><button class="button danger" id="download-cancel">Cancel download</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
   document.body.append(dialogs);
   renderIcons();

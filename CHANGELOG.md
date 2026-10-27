@@ -6,6 +6,13 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Download window: when a pack's game files download (on install, or before
+  a launch when the list changed), a window shows the percentage, a progress
+  bar, speed, time left, a throughput graph and a log of each file as it
+  arrives and is checked. It can be hidden (a ring in the left rail shows the
+  progress and brings it back) or cancelled; files that finished are kept.
+  Launcher updates download in the same window
+
 ## 0.2.3
 
 - Linux: Proton now always runs inside the Steam Linux Runtime its build asks

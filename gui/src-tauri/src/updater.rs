@@ -53,7 +53,8 @@ pub async fn check_launcher_update(app: AppHandle) -> Result<Option<LauncherUpda
 
 /// Downloads and installs the update found by the last check, then restarts.
 /// Progress goes to the interface as `launcher-update-progress` events
-/// `(downloaded, total)`.
+/// `(downloaded, total)`, then `launcher-update-downloaded` before the
+/// package's signature is checked and it installs.
 #[tauri::command]
 pub async fn install_launcher_update(app: AppHandle) -> Result<(), String> {
     if crate::game::busy(&app) {
@@ -74,7 +75,9 @@ pub async fn install_launcher_update(app: AppHandle) -> Result<(), String> {
                 downloaded += chunk as u64;
                 let _ = progress.emit_to("main", "launcher-update-progress", (downloaded, total));
             },
-            || {},
+            || {
+                let _ = progress.emit_to("main", "launcher-update-downloaded", ());
+            },
         )
         .await;
     if let Err(e) = result {

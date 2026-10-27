@@ -1,4 +1,4 @@
-/** @template {HTMLElement} T @param {string} id @param {new (...args: never[]) => T} kind @returns {T} */
+/** @template {Element} T @param {string} id @param {new (...args: never[]) => T} kind @returns {T} */
 export function control(id, kind) {
   const element = document.getElementById(id);
   if (!(element instanceof kind)) throw new Error(`Missing ${id} control`);
@@ -10,6 +10,14 @@ export const brand = (text) => text
     .replace(/star\s?fury(\.xyz)?/gi, (name) => name.replace(/\s/, '').toUpperCase());
 /** @param {string} id */
 export const required = (id) => control(id, HTMLElement);
+
+/** Builds an element with text content only; pack contents are never parsed as HTML. */
+export function el(/** @type {string} */ tag, /** @type {string} */ className, /** @type {string} */ content = '') {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  node.textContent = content;
+  return node;
+}
 
 const paths = {
   home: '<path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/>',
@@ -25,6 +33,7 @@ const paths = {
   settings:
     '<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
   folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
+  download: '<path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/>',
 };
 /** @param {string} name */
 export function icon(name) {

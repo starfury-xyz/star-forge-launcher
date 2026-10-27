@@ -1005,3 +1005,321 @@ dialog footer {
   font-size: 11px;
   margin: 0;
 }
+/* Download window: readout, segmented bar, stats, and a console of every file. */
+.download-dialog {
+  width: min(660px, 92vw);
+}
+.download-dialog header .eyebrow {
+  display: block;
+  margin-bottom: 6px;
+}
+.download-dialog h1 {
+  overflow-wrap: anywhere;
+}
+.download-body {
+  display: grid;
+  gap: 14px;
+  padding-top: 10px;
+}
+.download-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.download-readout .spacer {
+  flex: 1;
+}
+.download-percent {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.download-state {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.download-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.download-dialog[data-state='running'] .download-state::before {
+  animation: download-pulse 1.2s ease-in-out infinite;
+}
+.download-dialog[data-state='done'] .download-state {
+  color: var(--success);
+}
+.download-dialog[data-state='failed'] :is(.download-state, .download-percent) {
+  color: #ffb4a3;
+  text-shadow: none;
+}
+.download-dialog[data-state='cancelled'] :is(.download-state, .download-percent) {
+  color: var(--muted);
+  text-shadow: none;
+}
+.download-amount,
+.download-current,
+.download-stats dd,
+.download-console {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.download-amount {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* 40 segments over a glowing fill; a sheen runs along it while downloading. */
+.download-bar {
+  --progress: 0;
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: #ffffff0d;
+  border: 1px solid #ffffff14;
+  overflow: hidden;
+}
+.download-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(2.5% - 2px), #1a1816 calc(2.5% - 2px) 2.5%);
+}
+.download-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--progress) * 100%);
+  overflow: hidden;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, black), var(--accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: width 0.3s linear;
+}
+.download-dialog[data-state='running'] .download-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #ffffff59, transparent);
+  transform: translateX(-100%);
+  animation: download-sheen 1.6s ease-in-out infinite;
+}
+.download-dialog[data-state='failed'] .download-bar-fill {
+  background: #bf7968;
+  box-shadow: none;
+}
+.download-dialog[data-state='cancelled'] .download-bar-fill {
+  background: #6a625a;
+  box-shadow: none;
+}
+.download-current {
+  display: flex;
+  gap: 12px;
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.download-file {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ece8e3;
+}
+.download-count {
+  flex: none;
+}
+.download-stats {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(64px, auto) minmax(64px, auto) 1fr;
+  gap: 0 26px;
+  align-items: end;
+  margin: 0;
+  padding: 12px 14px;
+  background: #ffffff06;
+  border: 1px solid #ffffff10;
+  border-radius: 10px;
+}
+.download-stats dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.download-stats dd {
+  margin: 5px 0 0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.download-graph {
+  height: 34px;
+  min-width: 80px;
+}
+.download-graph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+#download-graph-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+#download-graph-fill {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* A small terminal, with faint scanlines and a cursor while it runs. */
+.download-console {
+  height: clamp(100px, 28vh, 210px);
+  overflow: auto;
+  padding: 10px 12px;
+  background-color: #0e0d0c;
+  background-image: repeating-linear-gradient(0deg, #ffffff05 0 1px, transparent 1px 3px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: inset 0 0 30px #0008;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #cfc9c2;
+}
+.download-dialog[data-state='running'] .download-console::after {
+  content: '▍';
+  color: var(--accent);
+  animation: download-blink 1s steps(1) infinite;
+}
+.console-line {
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+.console-time {
+  flex: none;
+  white-space: pre;
+  color: #6a625a;
+}
+.console-tag {
+  flex: none;
+  width: 4ch;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--silver);
+}
+.console-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.console-meta {
+  flex: none;
+  color: var(--muted);
+}
+.console-line[data-tag='get'] .console-tag {
+  color: var(--accent);
+}
+.console-line[data-tag='ok'] .console-tag,
+.console-line[data-tag='done'] .console-tag {
+  color: var(--success);
+}
+.console-line[data-tag='del'] .console-tag,
+.console-line[data-tag='^c'] .console-tag {
+  color: #f0c890;
+}
+.console-line[data-tag='err'] {
+  color: #ffb4a3;
+}
+.console-line[data-tag='err'] .console-tag {
+  color: #ff8f78;
+}
+.console-line[data-tag='err'] .console-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Rail ring while a download runs, so a hidden window can be found again. */
+.download-rail {
+  color: var(--accent);
+}
+.download-rail[data-state='done'] {
+  color: var(--success);
+}
+.download-rail[data-state='failed'] {
+  color: #ffb4a3;
+}
+.download-rail[data-state='cancelled'] {
+  color: var(--muted);
+}
+.download-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+}
+.download-ring > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.download-ring > span svg {
+  width: 15px;
+  height: 15px;
+}
+.download-rail[data-state='running'] .download-ring > span {
+  animation: download-bob 1.4s ease-in-out infinite;
+}
+.ring-track,
+.ring-value {
+  fill: none;
+  stroke-width: 3;
+}
+.ring-track {
+  stroke: #ffffff17;
+}
+.ring-value {
+  stroke: currentColor;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.3s linear;
+}
+#download-rail-label {
+  font-variant-numeric: tabular-nums;
+}
+@keyframes download-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes download-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes download-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes download-bob {
+  50% {
+    transform: translateY(2px);
+  }
+}

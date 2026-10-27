@@ -9,6 +9,7 @@ import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
 import { bindUpdater } from './updater.js';
+import { bindDownloads } from './downloads.js';
 import { startupStep, showStartupFailure } from './startup.js';
 import { control, required, notice, run } from './ui.js';
 
@@ -83,6 +84,7 @@ async function start() {
     }),
     'Registering launcher notifications',
   );
+  const downloads = await startupStep(bindDownloads(), 'Preparing the download window');
   window.addEventListener('beforeunload', () => store.dispose());
   try {
     await startupStep(store.start(), 'Loading launcher state');
@@ -97,10 +99,14 @@ async function start() {
     );
     run(() => bindArtwork(preferences));
     run(() =>
-      bindUpdater(preferences, () => {
-        const phase = store.getSnapshot()?.phase;
-        return phase === 'launching' || phase === 'running';
-      }),
+      bindUpdater(
+        preferences,
+        () => {
+          const phase = store.getSnapshot()?.phase;
+          return phase === 'launching' || phase === 'running';
+        },
+        downloads,
+      ),
     );
     run(() => invoke('initialize_launcher'));
   } catch (error) {
