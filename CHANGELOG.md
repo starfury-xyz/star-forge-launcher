@@ -6,6 +6,13 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.2.5
+
+- Installing or updating a pack works when the profiles folder is on a
+  different drive from the launcher's data folder (Windows "cannot move the
+  file to a different disk drive", os error 17): packs are now unpacked for
+  review inside the profiles folder
+
 ## 0.2.4
 
 - Game-file downloads finish all at once: files wait in a staging folder

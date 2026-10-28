@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "sc-agent"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "minhook",
  "sc-patch",
@@ -3303,7 +3303,7 @@ dependencies = [
 
 [[package]]
 name = "sc-inject"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "sc-patch",
  "sc-profile",
@@ -3312,7 +3312,7 @@ dependencies = [
 
 [[package]]
 name = "sc-launch"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -3330,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "sc-patch"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "serde",
  "sha1",
@@ -3339,7 +3339,7 @@ dependencies = [
 
 [[package]]
 name = "sc-profile"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -3785,7 +3785,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "star-forge"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "base64 0.22.1",
  "libc",
