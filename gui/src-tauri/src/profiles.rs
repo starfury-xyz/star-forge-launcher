@@ -428,7 +428,8 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
 pub async fn inspect_pack(app: AppHandle, source: String) -> Result<PackReview, String> {
     let source = packs::Source::parse(&source)?;
     let game_exe = crate::game::game_exe(&app);
-    let staged = tauri::async_runtime::spawn_blocking(move || packs::stage(&source))
+    let root = profiles_dir()?;
+    let staged = tauri::async_runtime::spawn_blocking(move || packs::stage(&source, &root))
         .await
         .map_err(|e| e.to_string())??;
     let reviews = app.state::<PackReviews>();

@@ -158,30 +158,43 @@ impl Reach {
     }
 }
 
-/// Folder for packs being reviewed, under the launcher data folder.
+/// Folder for scratch downloads, under the launcher data folder.
 pub fn staging_root() -> Option<PathBuf> {
     profiles::data_dir().map(|d| d.join("staging"))
 }
 
+/// Folder for packs being reviewed. It sits inside the profiles folder so
+/// installing is a rename on the same drive (a rename can't cross drives).
+fn pack_staging_root(profiles_dir: &Path) -> PathBuf {
+    profiles_dir.join(".staging")
+}
+
 /// Removes leftovers from reviews that never finished.
-pub fn clear_staging() {
+pub fn clear_staging(profiles_dir: Option<&Path>) {
     if let Some(dir) = staging_root() {
         let _ = std::fs::remove_dir_all(dir);
+    }
+    if let Some(dir) = profiles_dir {
+        let _ = std::fs::remove_dir_all(pack_staging_root(dir));
     }
 }
 
 pub(crate) fn new_staging_dir() -> Result<PathBuf, String> {
+    new_staging_dir_in(&staging_root().ok_or("cannot work out the launcher data folder")?)
+}
+
+fn new_staging_dir_in(root: &Path) -> Result<PathBuf, String> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
-    let root = staging_root().ok_or("cannot work out the launcher data folder")?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let dir = root.join(format!("{}-{stamp}-{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
 }
 
-/// Unpacks a pack for review. On error nothing is left behind.
-pub fn stage(source: &Source) -> Result<Staged, String> {
-    let dir = new_staging_dir()?;
+/// Unpacks a pack for review, next to the profiles it will be installed
+/// into. On error nothing is left behind.
+pub fn stage(source: &Source, profiles_dir: &Path) -> Result<Staged, String> {
+    let dir = new_staging_dir_in(&pack_staging_root(profiles_dir))?;
     stage_into(source, &dir).inspect_err(|_| {
         let _ = std::fs::remove_dir_all(&dir);
     })
@@ -730,7 +743,7 @@ mod tests {
             ("test/local.json", r#"{"name":"sneaky"}"#),
             ("test/../escape.txt", "x"),
         ]);
-        let staged = stage(&Source::Path(v1)).unwrap();
+        let staged = stage(&Source::Path(v1), &profiles_dir).unwrap();
         assert_eq!(staged.files, vec!["data/a.cfg", "data/old.cfg"]);
         assert!(!staged.verified);
         let name = install(staged, &profiles_dir, &mut quiet).unwrap().name;
@@ -742,7 +755,7 @@ mod tests {
         profiles::write_local(&dir, &sc_profile::Local { name: Some("Mine".into()), ..Default::default() }).unwrap();
         let v2 = base.join("v2.zip");
         write_zip(&v2, &[("pack.json", &manifest("1.1.0")), ("files/data/a.cfg", "two")]);
-        let name2 = install(stage(&Source::Path(v2)).unwrap(), &profiles_dir, &mut quiet).unwrap().name;
+        let name2 = install(stage(&Source::Path(v2), &profiles_dir).unwrap(), &profiles_dir, &mut quiet).unwrap().name;
         assert_eq!(name2, name, "same pack id updates in place");
         assert_eq!(std::fs::read_to_string(dir.join("files/data/a.cfg")).unwrap(), "two");
         assert!(!dir.join("files/data/old.cfg").exists());
@@ -752,7 +765,7 @@ mod tests {
 
         let bad = base.join("bad.zip");
         write_zip(&bad, &[("readme.txt", "no manifest")]);
-        assert!(stage(&Source::Path(bad)).is_err());
+        assert!(stage(&Source::Path(bad), &profiles_dir).is_err());
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -779,16 +792,16 @@ mod tests {
         let key = signing::SecretKey::generate().unwrap();
         let other = signing::SecretKey::generate().unwrap();
 
-        let staged = stage(&make("v1", "1.0.0", Some(&key))).unwrap();
+        let staged = stage(&make("v1", "1.0.0", Some(&key)), &profiles_dir).unwrap();
         assert_eq!(staged.trust, Trust::NewKey(key.public()));
         assert!(staged.reach.runs_code());
         let name = install(staged, &profiles_dir, &mut quiet).unwrap().name;
         let dir = profiles_dir.join(&name);
         assert_eq!(verify_installed(&dir).unwrap(), Trust::Pinned(key.public()));
 
-        assert!(stage(&make("v2-other", "1.1.0", Some(&other))).is_err(), "another key can't update it");
-        assert!(stage(&make("v2-unsigned", "1.1.0", None)).is_err(), "nor an unsigned copy");
-        let v2 = stage(&make("v2", "1.1.0", Some(&key))).unwrap();
+        assert!(stage(&make("v2-other", "1.1.0", Some(&other)), &profiles_dir).is_err(), "another key can't update it");
+        assert!(stage(&make("v2-unsigned", "1.1.0", None), &profiles_dir).is_err(), "nor an unsigned copy");
+        let v2 = stage(&make("v2", "1.1.0", Some(&key)), &profiles_dir).unwrap();
         assert_eq!(v2.trust, Trust::Pinned(key.public()));
         install(v2, &profiles_dir, &mut quiet).unwrap();
 

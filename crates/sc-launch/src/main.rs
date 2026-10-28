@@ -166,7 +166,7 @@ fn run() -> Result<u8, String> {
             Ok(status.code().unwrap_or(1).clamp(0, 255) as u8)
         }
         ["install", source] => {
-            let staged = packs::stage(&packs::Source::parse(source)?)?;
+            let staged = packs::stage(&packs::Source::parse(source)?, &profiles_dir)?;
             install_reviewed(staged, &profiles_dir, cli.yes)
         }
         ["updates"] => {
@@ -198,11 +198,11 @@ fn run() -> Result<u8, String> {
                     println!("{name} is up to date ({})", pack.version);
                     Ok(0)
                 }
-                Some(a) => install_reviewed(packs::stage(&packs::Source::Url(a.url))?, &profiles_dir, cli.yes),
+                Some(a) => install_reviewed(packs::stage(&packs::Source::Url(a.url), &profiles_dir)?, &profiles_dir, cli.yes),
             }
         }
         ["pack", "check", source] => {
-            let staged = packs::stage(&packs::Source::parse(source)?)?;
+            let staged = packs::stage(&packs::Source::parse(source)?, &profiles_dir)?;
             let existing = profiles::find_pack(&profiles_dir, &staged.pack.id).and_then(|d| profiles::read_pack(&d).ok());
             print_review(&staged, existing.as_ref());
             let mut problems: Vec<String> = sc_launch::patching::load_sets(&staged.root).into_iter().filter_map(Result::err).collect();

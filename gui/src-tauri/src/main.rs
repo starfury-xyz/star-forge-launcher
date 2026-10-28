@@ -71,7 +71,7 @@ impl<T> Locked<T> for std::sync::Mutex<T> {
 /// a second launcher instance (which hands its link over and exits).
 fn setup_pack_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
-    sc_launch::packs::clear_staging();
+    sc_launch::packs::clear_staging(profiles::profiles_dir().ok().as_deref());
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| {
         for url in event.urls() {
