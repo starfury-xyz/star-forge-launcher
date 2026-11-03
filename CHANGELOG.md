@@ -6,6 +6,16 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.2.6
+
+- Star Forge dev is away so I'm releasing 0.2.6 myself;
+- The application supports the random update to Star Conflict that went out 
+  recently. 
+- I'm definitely not versed in rust, so If you're reading this, just know 
+  that i've been staring at this github actions script for an hour now and
+  I really thought that the rust part would be the hard part. i'm starting to
+  see spots. Love all of you. Goondnight. -starfury dev
+
 ## 0.2.5
 
 - Installing or updating a pack works when the profiles folder is on a
