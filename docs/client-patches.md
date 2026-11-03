@@ -40,7 +40,7 @@ and its id in the schema.
 ```toml
 format = 1
 exe = "game.exe"
-sha1 = "…sha1sum of the pristine win64/game.exe…"
+sha1 = "…sha1sum of the pristine win64/game.exe…"  # or a list, if the patches hold for several builds
 build = "1.99.0.167293"      # informational
 image_base = 0x140000000     # addresses below assume this base
 

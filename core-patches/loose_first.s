@@ -1,4 +1,4 @@
-# Replaces the file table sort call in FUN_14001aee0 (game.exe 1.99.0.167293).
+# Replaces the file table sort call in FUN_14001aee0 (game.exe 1.99.0.167293 and 1.99.0.167301).
 # rcx = begin, rdx = end of the {char *name; int32 id; pad} table, r8 = count, r9 = sort state.
 # Packed entries have negative ids, loose ones >= 0, and the sort orders equal
 # names by signed id, so packed files win. Flipping bit 31 around the sort makes

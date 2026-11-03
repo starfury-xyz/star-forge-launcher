@@ -24,8 +24,9 @@ pub const SUFFIX: &str = ".patchset.toml";
 pub struct Patchset {
     /// Module the patchset targets, e.g. `game.exe`.
     pub exe: String,
-    /// SHA-1 (hex) of the pristine file the addresses were taken from.
-    pub sha1: String,
+    /// SHA-1s (lowercase hex) of the pristine builds the addresses hold for.
+    /// `sha1` in the file is one string or a list of them.
+    pub sha1: Vec<String>,
     pub build: String,
     /// Image base the virtual addresses assume. Images that load elsewhere
     /// are patched at the same offset from their actual base.
@@ -81,13 +82,21 @@ fn err<T>(msg: impl Into<String>) -> Result<T, Error> {
 struct RawSet {
     format: i64,
     exe: String,
-    sha1: String,
+    sha1: RawSha1,
     #[serde(default)]
     build: String,
     #[serde(default)]
     image_base: i64,
     #[serde(default)]
     patch: Vec<RawPatch>,
+}
+
+/// `sha1 = "..."` or `sha1 = ["...", "..."]`.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawSha1 {
+    One(String),
+    Many(Vec<String>),
 }
 
 #[derive(Deserialize)]
@@ -152,9 +161,17 @@ impl Patchset {
         if !valid_module(&raw.exe) {
             return err(format!("{name}: exe must be a file name, got {:?}", raw.exe));
         }
-        if raw.sha1.len() != 40 || !raw.sha1.bytes().all(|b| b.is_ascii_hexdigit()) {
+        let sha1: Vec<String> = match raw.sha1 {
+            RawSha1::One(s) => vec![s],
+            RawSha1::Many(v) => v,
+        };
+        if sha1.is_empty() {
+            return err(format!("{name}: sha1 needs at least one hash"));
+        }
+        if sha1.iter().any(|s| s.len() != 40 || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
             return err(format!("{name}: sha1 must be 40 hex digits"));
         }
+        let sha1 = sha1.iter().map(|s| s.to_ascii_lowercase()).collect();
         let mut patches = Vec::new();
         for p in raw.patch {
             let at = format!("{name}: patch {:?}", p.id);
@@ -199,11 +216,21 @@ impl Patchset {
         }
         Ok(Patchset {
             exe: raw.exe,
-            sha1: raw.sha1.to_ascii_lowercase(),
+            sha1,
             build: raw.build,
             image_base: raw.image_base as u64,
             patches,
         })
+    }
+
+    /// Whether `sha` (lowercase hex, as [`sha1_hex`] gives it) is a build this set was made for.
+    pub fn accepts(&self, sha: &str) -> bool {
+        self.sha1.iter().any(|s| s == sha)
+    }
+
+    /// The accepted hashes, for messages.
+    pub fn expected_sha1(&self) -> String {
+        self.sha1.join(" or ")
     }
 
     /// Whether this set targets the module `name` (case-insensitive, like Windows).
@@ -416,10 +443,11 @@ pub struct Report {
 pub fn verify_file(set: &Patchset, data: Vec<u8>, overrides: Option<&HashMap<String, bool>>) -> Report {
     let mut r = Report::default();
     let sha = sha1_hex(&data);
-    if sha != set.sha1 {
+    if !set.accepts(&sha) {
         r.errors.push(format!(
             "{} is a different build than the patches were made for (sha1 {sha}, expected {})",
-            set.exe, set.sha1
+            set.exe,
+            set.expected_sha1()
         ));
         return r;
     }
@@ -521,7 +549,7 @@ bytes = "0000"
     fn checks_and_applies_a_file() {
         let data = pe();
         let mut set = Patchset::parse(SET, "t").unwrap();
-        set.sha1 = sha1_hex(&data);
+        set.sha1 = vec![sha1_hex(&data)];
         let r = verify_file(&set, data.clone(), None);
         assert_eq!(r.ok, ["one"]);
         assert!(r.errors.is_empty());
@@ -537,9 +565,30 @@ bytes = "0000"
         // Optional patch that doesn't match is skipped; a wrong build is an error.
         let mut tweaked = data.clone();
         tweaked[0x204] = 0x11;
-        set.sha1 = sha1_hex(&tweaked);
+        set.sha1 = vec![sha1_hex(&tweaked)];
         let r = verify_file(&set, tweaked, Some(&HashMap::from([("two".into(), true)])));
         assert_eq!(r.skipped.len(), 1);
-        assert!(verify_file(&set, data, None).errors[0].contains("different build"));
+        assert!(verify_file(&set, data.clone(), None).errors[0].contains("different build"));
+
+        // A set can list several builds; any of them is accepted.
+        set.sha1 = vec!["0".repeat(40), sha1_hex(&data)];
+        assert!(verify_file(&set, data, None).errors.is_empty());
+    }
+
+    #[test]
+    fn sha1_is_one_or_a_list() {
+        let one = Patchset::parse(SET, "t").unwrap();
+        assert_eq!(one.sha1, ["0".repeat(40)]);
+        let list = SET.replace(
+            "sha1 = \"0000000000000000000000000000000000000000\"",
+            "sha1 = [\"0000000000000000000000000000000000000000\", \"ABCDEF0123456789abcdef0123456789abcdef01\"]",
+        );
+        let many = Patchset::parse(&list, "t").unwrap();
+        assert!(many.accepts("abcdef0123456789abcdef0123456789abcdef01"));
+        assert!(many.accepts(&"0".repeat(40)));
+        assert!(!many.accepts(&"1".repeat(40)));
+        let bad = |to: &str| Patchset::parse(&SET.replace("sha1 = \"0000000000000000000000000000000000000000\"", to), "t").is_err();
+        assert!(bad("sha1 = []"));
+        assert!(bad("sha1 = [\"0000\"]"));
     }
 }

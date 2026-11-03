@@ -1,11 +1,16 @@
 # STAR FORGE core patches for game.exe. Packs turn them on by id
 # (pack.json: "patches": {"core": ["loose-before-packed"]}); see docs/client-patches.md.
-# Each write lists the bytes it replaces, and the whole set is tied to one
-# game.exe build by its sha1, so nothing is applied to a build it wasn't made for.
+# Each write lists the bytes it replaces, and the whole set is tied to the
+# game.exe builds it was checked against by sha1, so nothing is applied to a build
+# it wasn't made for. 1.99.0.167301 has the same bytes at every write and the
+# same data table globals the cave reads, so both builds are listed.
 format = 1
 exe = "game.exe"
-sha1 = "b30106fa113523a323573c0d79c300f29b503296"
-build = "1.99.0.167293"
+sha1 = [
+    "b30106fa113523a323573c0d79c300f29b503296", # 1.99.0.167293
+    "165397c745536e6c610e3d831e17ca128f5cbc2b", # 1.99.0.167301
+]
+build = "1.99.0.167293, 1.99.0.167301"
 image_base = 0x140000000
 
 [[patch]]
