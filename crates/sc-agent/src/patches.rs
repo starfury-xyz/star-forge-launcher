@@ -84,8 +84,8 @@ fn apply_set(set: &Patchset, module: HMODULE, profile: &Profile) -> Result<(), S
     let path = module_path(module).ok_or("cannot find the module file")?;
     let file = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
     let sha = sc_patch::sha1_hex(&file);
-    if sha != set.sha1 {
-        return Err(format!("{} is a different build (sha1 {sha}, the patches need {})", set.exe, set.sha1));
+    if !set.accepts(&sha) {
+        return Err(format!("{} is a different build (sha1 {sha}, the patches need {})", set.exe, set.expected_sha1()));
     }
     let base = module as *mut u8;
     let mut mem = Memory { base, image_base: set.image_base, size: unsafe { image_size(base) } };
