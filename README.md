@@ -10,6 +10,8 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 | `sf_patch` (portable lib: patchset format, check/apply, core patches) | `crates/sc-patch` | done |
 | `sf_launch` (portable lib: the launcher) | `crates/sc-launch` | done: env overrides, Steam/game/Proton detection, sc-inject command, process spawning, pack model (`src/pack`), profiles + settings sync, downloads (libcurl / WinHTTP), pack signatures (ed25519 via vendored Monocypher; verifies Rust-signed packs), trust pins, pack install/update (zip via vendored miniz), remote file lists + sync, launch prep |
 | `sc-launch` (CLI) | `crates/sc-launch/src/main.rs` | done; same output as the Rust tool, `pack sign`/`pack files` byte-identical. Ran the real game end to end with C++ sc-launch + sc-inject + agent |
+| `sf_gui` (portable lib: the launcher window's backend) | `gui/src-tauri/src` | done: every command the interface invokes (prefs, play button, downloads, profiles, packs, setup), headless-tested |
+| `star-forge` (the launcher window) | `gui/src-tauri/src/main.rs`, `lifecycle.rs` | the unchanged HTML/JS interface (`gui/ui`) on webview/webview: WebKitGTK on Linux (runs; verified), WebView2 on Windows (builds; not yet run on real Windows). To do: tray, single instance + `starforge://` links, window size memory, self-update |
 | `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | done (also double-checks a 0 LoadLibraryW result, which the Rust trusts) |
 
 Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
@@ -34,12 +36,14 @@ downloads. Tests run under wine.
 
 1. Tools:
    ```sh
-   sudo pacman -S clang lld cmake ninja wine curl                       # Arch / CachyOS
-   sudo apt install clang lld cmake ninja-build wine libcurl4-openssl-dev  # Debian / Ubuntu
+   sudo pacman -S clang lld cmake ninja wine curl webkit2gtk-4.1          # Arch / CachyOS
+   sudo apt install clang lld cmake ninja-build wine libcurl4-openssl-dev libwebkit2gtk-4.1-dev  # Debian / Ubuntu
    ```
    `clang-cl`, `lld-link` and `llvm-rc` must be on `PATH` under those names (some distros
    only install versioned names like `clang-cl-18`; symlink them if so). libcurl (with headers) is
    only for the native `linux` preset's downloads; the Windows build uses WinHTTP, built into Windows.
+   WebKitGTK 4.1 (with GTK 3) is only for the native launcher window; without it the `linux` preset
+   skips `star-forge`. On Windows the window uses the WebView2 runtime that ships with Windows 10/11.
 2. Microsoft CRT + SDK (one-time). If you've built the Rust launcher you already have them in
    `~/.cache/cargo-xwin/xwin`. Otherwise:
    ```sh

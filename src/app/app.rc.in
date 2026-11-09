@@ -1,0 +1,2 @@
+// The launcher's Windows resources (configured by CMake): its icon, as resource 1.
+1 ICON "@CMAKE_SOURCE_DIR@/gui/icons/icon.ico"

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 
+#include "app/lifecycle.hpp"
 #include "crypto/sha256.hpp"
 #include "gui/backend.hpp"
 #include "launch/env.hpp"
@@ -535,6 +536,18 @@ void exit_after_play(const fs::path& game) {
     check(host.exited == 1 && phase() == "running", "launch behaviour exit: the launcher exits");
 }
 
+// Rust (lifecycle.rs): waits_for_ready_and_sting_in_either_order, watchdog_reveals_without_ui_ready.
+void startup_gate() {
+    sf::app::StartupGate g;
+    check(!g.native_ready() && !g.ready() && g.finish_sting() && !g.finish_sting(), "gate: ready, then sting; once");
+    sf::app::StartupGate h;
+    h.native_ready();
+    check(!h.finish_sting() && h.ready(), "gate: sting, then ready");
+    sf::app::StartupGate w;
+    w.native_ready();
+    check(w.watchdog(), "gate: the watchdog reveals without the interface");
+}
+
 }  // namespace
 
 int run(int argc, char** argv) {
@@ -567,6 +580,7 @@ int run(int argc, char** argv) {
         profiles_and_packs(base, srv);
         game(base);
         setup(base);
+        startup_gate();
         exit_after_play(base / "home/.local/share/Steam/steamapps/common/star conflict");
     } catch (const std::exception& e) {
         check(false, std::string("unexpected error: ") + e.what());

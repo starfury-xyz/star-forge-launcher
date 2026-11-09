@@ -49,7 +49,7 @@ set(CMAKE_MT llvm-mt)
 set(CMAKE_C_COMPILER_TARGET ${_triple})
 set(CMAKE_CXX_COMPILER_TARGET ${_triple})
 
-set(_inc "/imsvc \"${XWIN}/crt/include\" /imsvc \"${XWIN}/sdk/include/ucrt\" /imsvc \"${XWIN}/sdk/include/um\" /imsvc \"${XWIN}/sdk/include/shared\"")
+set(_inc "/imsvc \"${XWIN}/crt/include\" /imsvc \"${XWIN}/sdk/include/ucrt\" /imsvc \"${XWIN}/sdk/include/um\" /imsvc \"${XWIN}/sdk/include/shared\" /imsvc \"${XWIN}/sdk/include/winrt\"")
 set(CMAKE_C_FLAGS_INIT "${_inc}")
 set(CMAKE_CXX_FLAGS_INIT "${_inc}")
 

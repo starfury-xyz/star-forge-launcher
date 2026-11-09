@@ -125,6 +125,43 @@ add_library(sf_gui STATIC
 target_include_directories(sf_gui PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(sf_gui PUBLIC sf_launch)
 
+# The launcher itself (port of gui/src-tauri's main.rs and lifecycle.rs): the unchanged HTML/JS
+# interface in gui/ui on webview/webview (WebKitGTK on Linux, WebView2 on Windows), built into the
+# program with its icons.
+set(SF_ASSETS_CPP ${CMAKE_BINARY_DIR}/generated/app/assets.cpp)
+file(GLOB_RECURSE SF_UI_FILES CONFIGURE_DEPENDS gui/ui/* gui/icons/*)
+add_custom_command(OUTPUT ${SF_ASSETS_CPP}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${SF_ASSETS_CPP} -DUI_DIR=${CMAKE_SOURCE_DIR}/gui/ui
+            -DICONS_DIR=${CMAKE_SOURCE_DIR}/gui/icons -P ${CMAKE_SOURCE_DIR}/cmake/embed_assets.cmake
+    DEPENDS ${SF_UI_FILES} cmake/embed_assets.cmake
+    COMMENT "Building the interface into the launcher"
+    VERBATIM)
+if(WIN32)
+    configure_file(src/app/app.rc.in ${CMAKE_BINARY_DIR}/generated/app/app.rc @ONLY)
+    add_executable(star_forge WIN32 src/app/app.cpp src/app/native_win.cpp ${SF_ASSETS_CPP}
+                   ${CMAKE_BINARY_DIR}/generated/app/app.rc)
+    target_include_directories(star_forge SYSTEM PRIVATE third_party/webview third_party/webview2)
+    target_link_libraries(star_forge PRIVATE sf_gui advapi32 dwmapi ole32 shell32 shlwapi user32 version)
+    set(SF_HAVE_GUI ON)
+else()
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(WEBKIT IMPORTED_TARGET gtk+-3.0 webkit2gtk-4.1)
+    endif()
+    if(WEBKIT_FOUND)
+        add_executable(star_forge src/app/app.cpp src/app/native_gtk.cpp ${SF_ASSETS_CPP})
+        target_include_directories(star_forge SYSTEM PRIVATE third_party/webview)
+        target_link_libraries(star_forge PRIVATE sf_gui PkgConfig::WEBKIT)
+        set(SF_HAVE_GUI ON)
+    else()
+        message(STATUS "GTK 3 / WebKitGTK 4.1 not found: building without the launcher window (star-forge)")
+    endif()
+endif()
+if(SF_HAVE_GUI)
+    target_include_directories(star_forge PRIVATE src)
+    set_target_properties(star_forge PROPERTIES OUTPUT_NAME star-forge)
+endif()
+
 if(WIN32)
 # Windows code shared by the agent, the injector and their tests: profile files as the agent
 # reads them (port of crates/sc-profile) and Win32 string/file helpers.
