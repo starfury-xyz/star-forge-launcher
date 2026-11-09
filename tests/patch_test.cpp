@@ -147,7 +147,11 @@ int main(int argc, char** argv) {
         tweaked[0x204] = 0x11;
         set.sha1 = {sha(tweaked)};
         Choices two{{"two", true}};
-        check(verify_file(set, tweaked, &two).skipped.size() == 1, "mismatching optional patch: skipped");
+        Report skip = verify_file(set, tweaked, &two);
+        check(skip.skipped.size() == 1, "mismatching optional patch: skipped");
+        // ... and the reason says exactly which bytes differ (what agent.log shows a pack author).
+        check(skip.skipped.size() == 1 && skip.skipped[0] == "two: bytes at 0x140001003 are 0511, expected 05aa",
+              "the skip reason names the address and both byte strings");
         Report wrong = verify_file(set, data, nullptr);
         check(!wrong.errors.empty() && contains(wrong.errors[0], "different build"), "wrong build: error");
 
