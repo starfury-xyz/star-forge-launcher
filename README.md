@@ -33,11 +33,12 @@ downloads. Tests run under wine.
 
 1. Tools:
    ```sh
-   sudo pacman -S clang lld cmake ninja wine           # Arch / CachyOS
-   sudo apt install clang lld cmake ninja-build wine   # Debian / Ubuntu
+   sudo pacman -S clang lld cmake ninja wine curl                       # Arch / CachyOS
+   sudo apt install clang lld cmake ninja-build wine libcurl4-openssl-dev  # Debian / Ubuntu
    ```
    `clang-cl`, `lld-link` and `llvm-rc` must be on `PATH` under those names (some distros
-   only install versioned names like `clang-cl-18`; symlink them if so).
+   only install versioned names like `clang-cl-18`; symlink them if so). libcurl (with headers) is
+   only for the native `linux` preset's downloads; the Windows build uses WinHTTP, built into Windows.
 2. Microsoft CRT + SDK (one-time). If you've built the Rust launcher you already have them in
    `~/.cache/cargo-xwin/xwin`. Otherwise:
    ```sh
