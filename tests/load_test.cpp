@@ -12,7 +12,9 @@
 
 #include <shlobj.h>
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 #include <filesystem>
 
 using sf::utf8;
@@ -173,6 +175,72 @@ std::string redirect() {
     return text;
 }
 
+// Every entry a listing returns, as "name:size" sorted by name, via FindFirstFileA (or ...ExA)
+// + FindNextFileA + FindClose, the way the engine scans data\. "(none)" if the search fails.
+std::string list(const std::wstring& pattern, bool ex = false) {
+    WIN32_FIND_DATAA d = {};
+    const std::string p = utf8(pattern);
+    HANDLE h = ex ? FindFirstFileExA(p.c_str(), FindExInfoBasic, &d, FindExSearchNameMatch, nullptr, 0)
+                  : FindFirstFileA(p.c_str(), &d);
+    if (h == INVALID_HANDLE_VALUE) return "(none)";
+    std::vector<std::string> names;
+    do {
+        const std::string n = d.cFileName;
+        // "." and ".." are listed without a size: theirs is whatever the system says.
+        names.push_back(n == "." || n == ".." ? n : n + ":" + std::to_string(d.nFileSizeLow));
+    } while (FindNextFileA(h, &d));
+    const bool done_ok = GetLastError() == ERROR_NO_MORE_FILES;
+    const bool closed = FindClose(h);
+    std::sort(names.begin(), names.end());
+    std::string out;
+    for (const auto& n : names) out += (out.empty() ? "" : " ") + n;
+    if (!done_ok) out += " (FindNextFileA ended without ERROR_NO_MORE_FILES)";
+    if (!closed) out += " (FindClose failed)";
+    return out;
+}
+
+// Folder listings: a folder that also exists in the profile lists the game's entries plus the
+// profile's, the profile's copy replacing a same-named game file.
+std::string listing() {
+    test::write_file(g_profile + L"\\pack.json", kPack);
+    const std::wstring game_dir = g_game_root + L"\\data\\listing_test";
+    const std::wstring prof_dir = g_profile + L"\\files\\data\\listing_test";
+    const std::wstring plain_dir = g_game_root + L"\\data\\listing_plain";  // no profile folder
+    test::fresh_dir(game_dir);
+    test::fresh_dir(plain_dir);
+    std::filesystem::create_directories(prof_dir);
+    std::filesystem::create_directories(g_profile + L"\\files\\data\\listing_new");
+    test::write_file(game_dir + L"\\a.txt", "a");
+    test::write_file(game_dir + L"\\Shared.txt", "game");      // 4 bytes; the profile's copy is 7
+    test::write_file(game_dir + L"\\readme.md", "md");
+    test::write_file(prof_dir + L"\\shared.txt", "profile");    // same name, other case
+    test::write_file(prof_dir + L"\\extra.txt", "extra");
+    test::write_file(plain_dir + L"\\p.txt", "p");
+    test::write_file(g_profile + L"\\files\\data\\listing_new\\n.txt", "n");
+    const std::wstring elsewhere = test::fresh_dir(test::dir_of(g_game_root) + L"\\elsewhere\\data\\listing_test");
+    test::write_file(elsewhere + L"\\e.txt", "e");
+
+    std::string text = load_agent();
+    check(contains(text, "file hooks installed\n"), "agent.log: file hooks installed");
+
+    const std::string merged = ". .. a.txt:1 extra.txt:5 readme.md:2 shared.txt:7";
+    const std::string got = list(game_dir + L"\\*");
+    std::printf("  data\\listing_test\\*: %s\n", got.c_str());
+    check(got == merged, "FindFirstFileA: game + profile entries, profile's shared.txt replaces the game's");
+    check(list(game_dir + L"\\*", true) == merged, "FindFirstFileExA: the same");
+    check(list(game_dir + L"\\*.txt") == "a.txt:1 extra.txt:5 shared.txt:7", "a *.txt pattern applies to both");
+    check(list(game_dir + L"\\*.none") == "(none)", "a pattern matching nothing: no listing");
+    // The game has no such folder, so no "." / "..": only the profile's file.
+    check(list(g_game_root + L"\\data\\listing_new\\*") == "n.txt:1", "a profile-only folder lists its files");
+    check(list(plain_dir + L"\\*") == ". .. p.txt:1", "a folder with no profile copy: game's entries only");
+    check(list(elsewhere + L"\\*") == ". .. e.txt:1", "same path outside the game root: untouched");
+
+    text = test::read_file(g_log);
+    check(contains(text, "list data\\listing_test: adding extra.txt\n"), "agent.log names the added entries");
+    check(!contains(text, "list data\\listing_plain"), "agent.log: nothing added to a folder without a profile copy");
+    return text;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -191,6 +259,7 @@ int main(int argc, char** argv) {
     else if (scenario == "shared_data") text = shared_data();
     else if (scenario == "own_data") text = own_data();
     else if (scenario == "redirect") text = redirect();
+    else if (scenario == "listing") text = listing();
     else {
         std::printf("unknown scenario '%s'\n", scenario.c_str());
         return 2;

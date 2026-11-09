@@ -84,7 +84,7 @@ if(BUILD_TESTING)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
     # One process per scenario (see load_test.cpp).
-    set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect)
+    set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect listing)
     foreach(scenario IN LISTS AGENT_SCENARIOS)
         add_test(NAME agent_${scenario} COMMAND load_test ${scenario})
         list(APPEND AGENT_TESTS agent_${scenario})
