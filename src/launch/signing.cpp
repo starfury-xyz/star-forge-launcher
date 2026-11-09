@@ -198,13 +198,16 @@ std::vector<std::string> pack_files(const fs::path& root, const pack::Pack& pack
     return out;
 }
 
-std::string sha256_file(const fs::path& path, uint64_t* size) {
+std::optional<std::string> sha256_file(const fs::path& path, uint64_t* size, std::error_code& ec) {
 #ifdef _WIN32
     FILE* f = _wfopen(path.wstring().c_str(), L"rb");
 #else
     FILE* f = std::fopen(path.c_str(), "rb");
 #endif
-    if (!f) throw std::runtime_error(io_error(path, std::error_code(errno, std::generic_category())));
+    if (!f) {
+        ec = std::error_code(errno, std::generic_category());
+        return std::nullopt;
+    }
     crypto::Sha256 h;
     uint64_t total = 0;
     static thread_local char buf[64 * 1024];
@@ -216,9 +219,20 @@ std::string sha256_file(const fs::path& path, uint64_t* size) {
     const bool failed = std::ferror(f);
     const int err = errno;
     std::fclose(f);
-    if (failed) throw std::runtime_error(io_error(path, std::error_code(err, std::generic_category())));
+    if (failed) {
+        ec = std::error_code(err, std::generic_category());
+        return std::nullopt;
+    }
+    ec.clear();
     if (size) *size = total;
     return h.hex();
+}
+
+std::string sha256_file(const fs::path& path, uint64_t* size) {
+    std::error_code ec;
+    auto hex = sha256_file(path, size, ec);
+    if (!hex) throw std::runtime_error(io_error(path, ec));
+    return *hex;
 }
 
 // --- signatures ---

@@ -101,6 +101,8 @@ std::vector<std::string> pack_files(const fs::path& root, const pack::Pack& pack
 // SHA-256 of a file, lower-case hex; its size into `size` if given. Throws std::runtime_error
 // ("path: message (os error N)").
 std::string sha256_file(const fs::path& path, uint64_t* size = nullptr);
+// The same, without throwing: nullopt and `ec` set if the file can't be read.
+std::optional<std::string> sha256_file(const fs::path& path, uint64_t* size, std::error_code& ec);
 
 // A detached signature over `bytes`, as written to a .sig file.
 std::string sign_bytes(const SecretKey& key, const std::string& bytes);

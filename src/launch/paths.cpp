@@ -62,9 +62,9 @@ std::optional<std::string> read_text(const fs::path& path, std::error_code* ec) 
     return out;
 }
 
-std::string io_error(const fs::path& path, const std::error_code& ec) {
-    return ustr(path) + ": " + ec.message() + " (os error " + std::to_string(ec.value()) + ")";
-}
+std::string io_msg(const std::error_code& ec) { return ec.message() + " (os error " + std::to_string(ec.value()) + ")"; }
+
+std::string io_error(const fs::path& path, const std::error_code& ec) { return ustr(path) + ": " + io_msg(ec); }
 
 std::string read_or_throw(const fs::path& path) {
     std::error_code ec;

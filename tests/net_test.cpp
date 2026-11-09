@@ -3,34 +3,14 @@
 // server trouble (once or for good), too big, cut short, redirected, cancelled. Groups marked
 // "Rust:" port net.rs's tests.
 
-#include <atomic>
-#include <cstring>
-#include <map>
-#include <mutex>
-#include <thread>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-using socket_t = SOCKET;
-#define close_socket closesocket
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-using socket_t = int;
-#define close_socket close
-#define INVALID_SOCKET (-1)
-#endif
-#ifndef MSG_NOSIGNAL
-#define MSG_NOSIGNAL 0  // Windows: no SIGPIPE to begin with
-#endif
+#include <chrono>
+#include <vector>
 
 #include "crypto/sha256.hpp"
 #include "launch/net.hpp"
 
 #include "check.hpp"
+#include "http_server.hpp"
 
 namespace fs = std::filesystem;
 namespace net = sf::launch::net;
@@ -43,140 +23,44 @@ using test::contains;
 
 namespace {
 
-void send_all(socket_t s, const std::string& data) {
-    size_t sent = 0;
-    while (sent < data.size()) {
-        int n = send(s, data.data() + sent, static_cast<int>(data.size() - sent), MSG_NOSIGNAL);  // a client that hung up is no crash
-        if (n <= 0) return;
-        sent += static_cast<size_t>(n);
-    }
-}
-
-std::string response(const std::string& status, const std::string& body, const std::string& headers = "",
-                     bool length = true) {
-    std::string r = "HTTP/1.1 " + status + "\r\nConnection: close\r\n" + headers;
-    if (length) r += "Content-Length: " + std::to_string(body.size()) + "\r\n";
-    return r + "\r\n" + body;
-}
-
 std::string pattern(size_t n) {
     std::string s(n, '\0');
     for (size_t i = 0; i < n; ++i) s[i] = static_cast<char>(i * 7 + i / 251);
     return s;
 }
 
-// One request per connection, then close. Counts the requests per path.
-class Server {
-public:
-    Server() {
-#ifdef _WIN32
-        WSADATA wsa;
-        WSAStartup(MAKEWORD(2, 2), &wsa);
-#endif
-        listener_ = socket(AF_INET, SOCK_STREAM, 0);
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        bind(listener_, reinterpret_cast<sockaddr*>(&addr), sizeof addr);
-        listen(listener_, 16);
-        socklen_t len = sizeof addr;
-        getsockname(listener_, reinterpret_cast<sockaddr*>(&addr), &len);
-        port_ = ntohs(addr.sin_port);
-        thread_ = std::thread([this] { serve(); });
-    }
-    ~Server() {
-        stopping_ = true;
-        // Wake accept() with one last connection.
-        socket_t s = socket(AF_INET, SOCK_STREAM, 0);
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        addr.sin_port = htons(port_);
-        connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof addr);
-        close_socket(s);
-        thread_.join();
-        close_socket(listener_);
-    }
+const std::string& ok_body() {
+    static const std::string body = "hello, star forge\n";
+    return body;
+}
+const std::string& stream_body() {
+    static const std::string body = pattern(300000);
+    return body;
+}
 
-    std::string url(const std::string& path) const { return "http://127.0.0.1:" + std::to_string(port_) + path; }
-    int hits(const std::string& path) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return hits_[path];
-    }
-    std::string user_agent() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return user_agent_;
-    }
+using test::response;
 
-    static const std::string& ok_body() {
-        static const std::string body = "hello, star forge\n";
-        return body;
+// The test server's routes: each acts out one way a download can go.
+std::string route(const std::string& path, int hit) {
+    if (path == "/ok.txt") return response("200 OK", ok_body());
+    if (path == "/stream.bin") {
+        // No Content-Length: the body ends when the connection does.
+        return response("200 OK", "", "", false) + stream_body();
     }
-    static const std::string& stream_body() {
-        static const std::string body = pattern(300000);
-        return body;
-    }
-
-private:
-    void serve() {
-        for (;;) {
-            socket_t c = accept(listener_, nullptr, nullptr);
-            if (c == INVALID_SOCKET || stopping_) {
-                if (c != INVALID_SOCKET) close_socket(c);
-                return;
-            }
-            handle(c);
-            close_socket(c);
-        }
-    }
-
-    void handle(socket_t c) {
-        std::string req;
-        char buf[4096];
-        while (req.find("\r\n\r\n") == std::string::npos) {
-            int n = recv(c, buf, sizeof buf, 0);
-            if (n <= 0) break;
-            req.append(buf, static_cast<size_t>(n));
-            if (req.size() >= 4 && req.rfind("GET ", 0) != 0) break;  // not HTTP: answer at once, as servers do
-        }
-        std::string path = "?";  // not HTTP (say, a TLS hello)
-        if (req.rfind("GET ", 0) == 0) path = req.substr(4, req.find(' ', 4) - 4);
-        int hit;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            hit = ++hits_[path];
-            size_t ua = req.find("User-Agent: ");
-            if (ua != std::string::npos) user_agent_ = req.substr(ua + 12, req.find("\r\n", ua) - ua - 12);
-        }
-        if (path == "/ok.txt") send_all(c, response("200 OK", ok_body()));
-        else if (path == "/stream.bin") {
-            // No Content-Length: the body ends when the connection does. Sent in pieces.
-            send_all(c, response("200 OK", "", "", false));
-            const std::string& body = stream_body();
-            for (size_t at = 0; at < body.size(); at += 50000) send_all(c, body.substr(at, 50000));
-        } else if (path == "/empty") send_all(c, response("200 OK", ""));
-        else if (path == "/missing.lua") send_all(c, response("404 Not Found", "nope"));
-        else if (path == "/gone") send_all(c, response("410 Gone", ""));
-        else if (path == "/forbidden") send_all(c, response("403 Forbidden", ""));
-        else if (path == "/broken") send_all(c, response("500 Internal Server Error", ""));
-        else if (path == "/busy") send_all(c, response("429 Too Many Requests", ""));
-        else if (path == "/flaky") send_all(c, hit == 1 ? response("503 Service Unavailable", "") : response("200 OK", ok_body()));
-        else if (path == "/big") send_all(c, response("200 OK", std::string(100, 'x')));
-        else if (path == "/big-stream") send_all(c, response("200 OK", std::string(100, 'x'), "", false));
-        else if (path == "/short") send_all(c, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 100\r\n\r\nhello");
-        else if (path == "/redirect") send_all(c, response("302 Found", "", "Location: /ok.txt\r\n"));
-        else if (path == "?") send_all(c, response("400 Bad Request", "plain HTTP here"));
-        else send_all(c, response("404 Not Found", ""));
-    }
-
-    socket_t listener_;
-    uint16_t port_ = 0;
-    std::thread thread_;
-    std::atomic<bool> stopping_{false};
-    std::mutex mutex_;
-    std::map<std::string, int> hits_;
-    std::string user_agent_;
-};
+    if (path == "/empty") return response("200 OK", "");
+    if (path == "/missing.lua") return response("404 Not Found", "nope");
+    if (path == "/gone") return response("410 Gone", "");
+    if (path == "/forbidden") return response("403 Forbidden", "");
+    if (path == "/broken") return response("500 Internal Server Error", "");
+    if (path == "/busy") return response("429 Too Many Requests", "");
+    if (path == "/flaky") return hit == 1 ? response("503 Service Unavailable", "") : response("200 OK", ok_body());
+    if (path == "/big") return response("200 OK", std::string(100, 'x'));
+    if (path == "/big-stream") return response("200 OK", std::string(100, 'x'), "", false);
+    if (path == "/short") return "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 100\r\n\r\nhello";
+    if (path == "/redirect") return response("302 Found", "", "Location: /ok.txt\r\n");
+    if (path == "?") return response("400 Bad Request", "plain HTTP here");  // say, a TLS hello
+    return response("404 Not Found", "");
+}
 
 // The error fetch() threw, or nullopt if it worked.
 std::optional<FetchError> fetch_error(const std::string& url, const fs::path& dest, uint64_t limit = 1 << 20,
@@ -238,7 +122,7 @@ void names() {
     check(std::string(FetchError(Kind::Disk, u, "disk full").what()) == "Couldn't save x.zip: disk full", "disk message");
 }
 
-void downloads(Server& srv, const fs::path& dir) {
+void downloads(test::Server& srv, const fs::path& dir) {
     const fs::path dest = dir / "out";
 
     // Fine: the file, its hash, the progress callback, the user agent.
@@ -251,10 +135,10 @@ void downloads(Server& srv, const fs::path& dir) {
         return std::optional<std::string>();
     });
     check(!e, "ok.txt downloads" + (e ? std::string(": ") + e->what() : ""));
-    check(test::read_file(dest) == Server::ok_body(), "ok.txt replaces what was there");
-    check(hasher.hex() == sha256_hex(Server::ok_body().data(), Server::ok_body().size()), "ok.txt hashed as it arrived");
-    check(!progress.empty() && progress.back().first == Server::ok_body().size() &&
-              progress.back().second == std::optional<uint64_t>(Server::ok_body().size()),
+    check(test::read_file(dest) == ok_body(), "ok.txt replaces what was there");
+    check(hasher.hex() == sha256_hex(ok_body().data(), ok_body().size()), "ok.txt hashed as it arrived");
+    check(!progress.empty() && progress.back().first == ok_body().size() &&
+              progress.back().second == std::optional<uint64_t>(ok_body().size()),
           "progress ends at the full, announced size");
     check(srv.user_agent() == std::string("star-forge-launcher/") + SF_VERSION, "user agent is star-forge-launcher/" SF_VERSION);
 
@@ -265,18 +149,18 @@ void downloads(Server& srv, const fs::path& dir) {
         return std::optional<std::string>();
     });
     check(!e, "a stream with no length downloads");
-    check(test::read_file(dest) == Server::stream_body(), "the stream arrives whole");
-    check(hasher.hex() == sha256_hex(Server::stream_body().data(), Server::stream_body().size()), "the stream's hash");
+    check(test::read_file(dest) == stream_body(), "the stream arrives whole");
+    check(hasher.hex() == sha256_hex(stream_body().data(), stream_body().size()), "the stream's hash");
     check(progress.size() > 1 && !progress.back().second, "progress in several steps, with no announced size");
 
     e = fetch_error(srv.url("/empty"), dest);
     check(!e && fs::exists(dest) && fs::file_size(dest) == 0, "an empty file downloads as an empty file");
 
     e = fetch_error(srv.url("/redirect"), dest);
-    check(!e && test::read_file(dest) == Server::ok_body(), "a redirect is followed");
+    check(!e && test::read_file(dest) == ok_body(), "a redirect is followed");
 
     e = fetch_error(srv.url("/flaky"), dest);
-    check(!e && test::read_file(dest) == Server::ok_body() && srv.hits("/flaky") == 2, "a 503 once is retried, then works");
+    check(!e && test::read_file(dest) == ok_body() && srv.hits("/flaky") == 2, "a 503 once is retried, then works");
 
     // Failures that aren't retried.
     fs::remove(dest);
@@ -323,14 +207,14 @@ void downloads(Server& srv, const fs::path& dir) {
 
 // Nothing listening: offline, after three tries.
 void offline() {
-    socket_t s = socket(AF_INET, SOCK_STREAM, 0);
+    test::socket_t s = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof addr);
     socklen_t len = sizeof addr;
     getsockname(s, reinterpret_cast<sockaddr*>(&addr), &len);
-    close_socket(s);  // the port is free again, and nothing listens on it
+    test::close_socket(s);  // the port is free again, and nothing listens on it
     const std::string url = "http://127.0.0.1:" + std::to_string(ntohs(addr.sin_port)) + "/x";
     auto start = std::chrono::steady_clock::now();
     auto e = fetch_error(url, fs::temp_directory_path() / "sf-net-offline");
@@ -347,7 +231,7 @@ int main() {
     names();
     const fs::path dir = test::fresh_dir(fs::temp_directory_path() / "sf-net-test");
     {
-        Server srv;
+        test::Server srv(route);
         downloads(srv, dir);
     }
     offline();
