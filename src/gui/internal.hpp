@@ -36,6 +36,12 @@ struct Backend::DownloadState {
     std::unordered_map<uint64_t, std::shared_ptr<std::atomic<bool>>> running;
 };
 
+// The launcher update found by the last check, kept for install_launcher_update.
+struct Backend::Updates {
+    std::mutex mu;
+    std::optional<updater::Release> found;
+};
+
 // Tauri's argument checks: a missing or mistyped argument fails the command.
 std::string arg_str(const char* command, const json& args, const char* key);
 std::optional<std::string> arg_opt_str(const char* command, const json& args, const char* key);

@@ -27,6 +27,7 @@
 #include "launch/packs.hpp"
 #include "launch/paths.hpp"
 #include "launch/remote.hpp"
+#include "gui/updater.hpp"
 
 namespace sf::gui {
 
@@ -51,6 +52,11 @@ public:
     virtual void restore() = 0;
     // Ends the launcher; a running game keeps going.
     virtual void exit() = 0;
+    // Puts a downloaded, verified launcher update in place (or starts its installer). Throws
+    // std::runtime_error.
+    virtual void install_update(const fs::path& package) = 0;
+    // Starts the updated launcher and ends this one (an installer restarts it itself).
+    virtual void restart() = 0;
 };
 
 // Sent to the interface as a number.
@@ -113,6 +119,8 @@ public:
     std::vector<fs::path> tool_folders;
     // The launcher's own files (icons/ for the AppImage menu entry).
     fs::path resources;
+    // Where the launcher looks for a newer version of itself (set before any command).
+    updater::Config updater;
 
     // For tests: waits until no background work (detection, a launch) is running, except a
     // started game's wait.
@@ -125,6 +133,7 @@ private:
     struct Game;
     struct Reviews;
     struct DownloadState;
+    struct Updates;
 
     // Starts `f` on its own thread, counted for wait_idle unless `idle`.
     void background(std::function<void()> f, bool idle = false);
@@ -163,6 +172,9 @@ private:
     json get_setup_info();
     void finish_setup(const std::string& game_dir, const std::string& profiles_dir, bool move_profiles);
     void install_appimage(const std::string& dir);
+    json check_launcher_update();
+    void install_launcher_update();
+    void open_launcher_release();
 
     Host& host_;
     mutable std::mutex prefs_mu_;
@@ -170,6 +182,7 @@ private:
     std::unique_ptr<Game> game_;
     std::unique_ptr<Reviews> reviews_;
     std::unique_ptr<DownloadState> downloads_;
+    std::unique_ptr<Updates> updates_;
     std::once_flag caught_up_;
 
     std::mutex idle_mu_;

@@ -3,8 +3,11 @@
 // window actions; see gui/ui/js/launcher/bridge.js), which kShim below provides on top of
 // webview bindings. Commands run in sf::gui::Backend on worker threads; window commands here.
 
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <map>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -24,6 +27,10 @@
 #include <windows.h>
 
 #include <shellapi.h>
+#else
+#include <unistd.h>
+
+extern char** environ;
 #endif
 
 namespace sf::app {
@@ -82,6 +89,7 @@ public:
             restore();
             for (const auto& a : args) backend_.receive_link(a);
         });
+        configure_updates();
         backend_.load_prefs();
         launch::packs::clear_staging(launch::profiles::default_profiles_dir());
         create_windows();
@@ -146,6 +154,54 @@ public:
         });
     }
     void exit() override { post([] { app::quit(); }); }
+
+    void install_update(const std::filesystem::path& package) override {
+#ifdef _WIN32
+        // The NSIS installer, as tauri-plugin-updater runs it in passive mode: progress only,
+        // then it starts the launcher again (/R).
+        const std::wstring file = package.wstring();
+        const auto r = reinterpret_cast<INT_PTR>(
+            ShellExecuteW(nullptr, L"open", file.c_str(), L"/P /R /UPDATE /ARGS", nullptr, SW_SHOW));
+        if (r <= 32) throw std::runtime_error("could not start the installer (error " + std::to_string(r) + ")");
+#else
+        const auto appimage = launch::get_env("APPIMAGE");
+        if (!appimage) throw std::runtime_error("only the AppImage updates itself");
+        gui::updater::replace_file(*appimage, package);
+#endif
+    }
+
+    void restart() override {
+#ifdef _WIN32
+        exit();  // the installer starts the new launcher
+#else
+        on_ui<int>([&] {
+            save_window_state();
+            return 0;
+        });
+        // The new AppImage in this process's place, with the desktop's environment (not this
+        // AppImage's), as a fresh start from the menu would have it.
+        const std::string appimage = launch::get_env("APPIMAGE").value_or("");
+        std::map<std::string, std::string> vars;
+        for (char** e = environ; *e; ++e) {
+            const std::string kv = *e;
+            const size_t eq = kv.find('=');
+            if (eq != std::string::npos) vars[kv.substr(0, eq)] = kv.substr(eq + 1);
+        }
+        for (const auto& [k, v] : launch::env::host_env()) {
+            if (v) vars[k] = *v;
+            else vars.erase(k);
+        }
+        std::vector<std::string> strings;
+        for (const auto& [k, v] : vars) strings.push_back(k + "=" + v);
+        std::vector<char*> envp, argv{const_cast<char*>(appimage.c_str()), nullptr};
+        for (auto& kv : strings) envp.push_back(kv.data());
+        envp.push_back(nullptr);
+        std::fflush(nullptr);
+        execve(appimage.c_str(), argv.data(), envp.data());
+        std::fprintf(stderr, "could not restart %s: %s\n", appimage.c_str(), std::strerror(errno));
+        exit();
+#endif
+    }
 
 private:
     // Runs `f` on the UI thread and waits for it (from a worker thread).
@@ -218,6 +274,22 @@ private:
                 std::this_thread::sleep_for(std::chrono::seconds(4));
                 post([this, p] { main_->snapshot(p); });
             }).detach();
+    }
+
+    // Where updates come from: set when building (SF_UPDATE_ENDPOINT; none by default), with
+    // tauri.conf.json's key and platform names.
+    void configure_updates() {
+        auto& u = backend_.updater;
+        u.endpoint = SF_UPDATE_ENDPOINT;
+        u.pubkey = SF_UPDATE_PUBKEY;
+        u.current = SF_VERSION;
+#ifdef _WIN32
+        u.targets = {"windows-x86_64-nsis", "windows-x86_64"};
+#else
+        u.targets = {"linux-x86_64-appimage", "linux-x86_64"};
+        if (!u.endpoint.empty() && !launch::get_env("APPIMAGE"))
+            u.unsupported = "Only the AppImage updates itself: update STAR FORGE Launcher the way you installed it.";
+#endif
     }
 
     // The main window's size, position and maximized state, kept between runs like
@@ -313,8 +385,6 @@ private:
             return app::quit();
         }
         if (command == "app_version") return main_->resolve(id, true, dump(SF_VERSION));
-        if (command == "check_launcher_update" || command == "install_launcher_update" || command == "open_launcher_release")
-            return main_->resolve(id, false, dump("Development builds do not update themselves."));
         std::thread([this, id, command, params] {
             try {
                 const json result = backend_.invoke(command, params);

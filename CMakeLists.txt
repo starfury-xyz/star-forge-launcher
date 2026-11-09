@@ -121,9 +121,10 @@ add_library(sf_gui STATIC
     src/gui/prefs.cpp
     src/gui/profiles.cpp
     src/gui/setup.cpp
+    src/gui/updater.cpp
 )
 target_include_directories(sf_gui PRIVATE ${CMAKE_BINARY_DIR}/generated)
-target_link_libraries(sf_gui PUBLIC sf_launch)
+target_link_libraries(sf_gui PUBLIC sf_launch PRIVATE monocypher)
 
 # The launcher itself (port of gui/src-tauri's main.rs and lifecycle.rs): the unchanged HTML/JS
 # interface in gui/ui on webview/webview (WebKitGTK on Linux, WebView2 on Windows), built into the
@@ -157,8 +158,14 @@ else()
         message(STATUS "GTK 3 / WebKitGTK 4.1 not found: building without the launcher window (star-forge)")
     endif()
 endif()
+# The launcher's self-update: latest.json's URL (empty: this build doesn't update itself) and the
+# minisign key its packages are signed with (tauri.conf.json's).
+set(SF_UPDATE_ENDPOINT "" CACHE STRING "URL of the latest.json the launcher updates from")
+set(SF_UPDATE_PUBKEY "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5OEY4NUE4NjFFMTJGQUIKUldTckwrRmhxSVdQK2NKaTQ2Y0c5T2U0UGc2MTU4V3JIS2kyVlNlWnJCNXlnMkF2RWZteEhZVGYK"
+    CACHE STRING "base64 minisign public key for launcher updates")
 if(SF_HAVE_GUI)
     target_include_directories(star_forge PRIVATE src)
+    target_compile_definitions(star_forge PRIVATE SF_UPDATE_ENDPOINT="${SF_UPDATE_ENDPOINT}" SF_UPDATE_PUBKEY="${SF_UPDATE_PUBKEY}")
     set_target_properties(star_forge PROPERTIES OUTPUT_NAME star-forge)
 endif()
 
@@ -288,7 +295,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME prepare COMMAND prepare_test)
     add_executable(gui_test tests/gui_test.cpp)
-    target_link_libraries(gui_test PRIVATE sf_gui)
+    target_link_libraries(gui_test PRIVATE sf_gui monocypher)
     if(WIN32)
         target_link_libraries(gui_test PRIVATE ws2_32)
     endif()

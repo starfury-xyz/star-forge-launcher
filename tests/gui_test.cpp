@@ -4,9 +4,14 @@
 // from folders and a local HTTP server.
 
 #include <chrono>
+#include <cstring>
 #include <thread>
 
+#include <monocypher-ed25519.h>
+#include <monocypher.h>
+
 #include "app/lifecycle.hpp"
+#include "crypto/base64.hpp"
 #include "crypto/sha256.hpp"
 #include "gui/backend.hpp"
 #include "launch/env.hpp"
@@ -29,7 +34,9 @@ struct FakeHost : sf::gui::Host {
     std::vector<std::pair<std::string, json>> events;
     std::vector<std::string> opened, picks;
     std::optional<std::string> pick_answer;
-    int hidden = 0, restored = 0, exited = 0;
+    int hidden = 0, restored = 0, exited = 0, restarted = 0;
+    std::vector<std::string> installed;         // the packages' contents
+    std::optional<std::string> install_error;  // install_update fails with this
 
     void emit(const std::string& event, const json& payload) override {
         std::lock_guard<std::mutex> lock(mu);
@@ -61,6 +68,15 @@ struct FakeHost : sf::gui::Host {
     void exit() override {
         std::lock_guard<std::mutex> lock(mu);
         ++exited;
+    }
+    void install_update(const fs::path& package) override {
+        std::lock_guard<std::mutex> lock(mu);
+        if (install_error) throw std::runtime_error(*install_error);
+        installed.push_back(test::read_file(package));
+    }
+    void restart() override {
+        std::lock_guard<std::mutex> lock(mu);
+        ++restarted;
     }
 
     // Payloads of one event, in order.
@@ -534,6 +550,181 @@ void exit_after_play(const fs::path& game) {
     call("perform_launcher_action", {{"action", "launch"}});
     g_backend->wait_idle();
     check(host.exited == 1 && phase() == "running", "launch behaviour exit: the launcher exits");
+    check(error_of("install_launcher_update") == "Close the game before updating the launcher.", "update: not while the game runs");
+}
+
+// A minisign key, signing the way `tauri signer sign` does.
+struct Minisign {
+    uint8_t secret[64], pub[32];
+    std::string id;
+
+    explicit Minisign(uint8_t seed_byte) : id(8, static_cast<char>(seed_byte + 1)) {
+        uint8_t seed[32];
+        std::memset(seed, seed_byte, sizeof seed);
+        crypto_ed25519_key_pair(secret, pub, seed);
+    }
+    static std::string b64(const std::string& s) {
+        return sf::crypto::base64_encode(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+    }
+    std::string sig(const std::string& data) const {
+        uint8_t out[64];
+        crypto_ed25519_sign(out, secret, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+        return std::string(reinterpret_cast<const char*>(out), 64);
+    }
+    std::string pubkey() const {
+        return b64("untrusted comment: minisign public key: test\n" + b64("Ed" + id + std::string(reinterpret_cast<const char*>(pub), 32)) +
+                   "\n");
+    }
+    // `prehash`: of the data's BLAKE2b-512 (minisign's default), else of the data itself.
+    std::string sign(const std::string& data, bool prehash = true, const std::string& comment = "timestamp:1\tfile:x",
+                     const std::string& shown_comment = "") const {
+        std::string signed_data = data;
+        if (prehash) {
+            uint8_t hash[64];
+            crypto_blake2b(hash, 64, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+            signed_data.assign(reinterpret_cast<const char*>(hash), 64);
+        }
+        const std::string s = sig(signed_data);
+        return b64("untrusted comment: signature from tauri secret key\n" + b64(std::string(prehash ? "ED" : "Ed") + id + s) +
+                   "\ntrusted comment: " + (shown_comment.empty() ? comment : shown_comment) + "\n" + b64(sig(s + comment)) + "\n");
+    }
+};
+
+void launcher_update(const fs::path& base, test::FileServer& srv) {
+    namespace up = sf::gui::updater;
+    // latest.json
+    const std::vector<std::string> targets = {"linux-x86_64-appimage", "linux-x86_64"};
+    auto latest = [](const char* version, json platforms) {
+        return json{{"version", version}, {"page", "https://example.org/v"}, {"platforms", platforms}};
+    };
+    const json both = {{"linux-x86_64", {{"url", "u-plain"}, {"signature", "s1"}}},
+                       {"linux-x86_64-appimage", {{"url", "u-appimage"}, {"signature", "s2"}}}};
+    check(!up::newer(latest("1.2.3", both), "1.2.3", targets) && !up::newer(latest("1.2.2", both), "1.2.3", targets),
+          "update: not for the same or an older version");
+    auto r = up::newer(latest("v1.10.0", both), "1.9.9", targets);
+    check(r && r->version == "1.10.0" && r->url == "u-appimage" && r->signature == "s2" && r->page == std::string("https://example.org/v"),
+          "update: newer, the most specific platform, v prefix dropped");
+    r = up::newer(latest("2.0.0", {{"linux-x86_64", {{"url", "u"}, {"signature", "s"}}}}), "1.0.0", targets);
+    check(r && r->url == "u", "update: the plain platform when there's no specific one");
+    json http_page = latest("2.0.0", both);
+    http_page["page"] = "http://example.org/v";
+    check(!up::newer(http_page, "1.0.0", targets)->page, "update: only an https:// release page");
+    auto newer_error = [&](const json& j) {
+        try {
+            up::newer(j, "1.0.0", targets);
+            return std::string();
+        } catch (const std::exception& e) {
+            return std::string(e.what());
+        }
+    };
+    check(newer_error(latest("2.0.0", {{"windows-x86_64", {{"url", "u"}, {"signature", "s"}}}})) ==
+              "this platform (linux-x86_64) is not in latest.json",
+          "update: no package for this platform");
+    check(newer_error(latest("two", both)) == "latest.json's version `two` is not x.y.z", "update: a bad version");
+    check(newer_error(latest("2.0.0", {{"linux-x86_64", {{"url", "u"}}}})) == "latest.json's `linux-x86_64` needs a url and a signature",
+          "update: a platform without a signature");
+
+    // Signatures
+    const Minisign key(7), other(9);
+    const fs::path pkg = base / "update" / "pkg.AppImage";
+    test::write_file(pkg, "new launcher");
+    auto verify_error = [&](const std::string& pubkey, const std::string& signature) {
+        try {
+            up::verify(pubkey, signature, pkg);
+            return std::string();
+        } catch (const std::exception& e) {
+            return std::string(e.what());
+        }
+    };
+    check(verify_error(key.pubkey(), key.sign("new launcher")).empty(), "signature: good (prehashed)");
+    check(verify_error(key.pubkey(), key.sign("new launcher", false)).empty(), "signature: good (legacy)");
+    check(contains(verify_error(key.pubkey(), key.sign("old launcher")), "signature does not match"), "signature: another file's");
+    check(contains(verify_error(key.pubkey(), key.sign("old launcher", false)), "signature does not match"),
+          "signature: another file's (legacy)");
+    check(contains(verify_error(key.pubkey(), key.sign("new launcher", false, "a", "b")), "trusted comment does not match"),
+          "signature: an altered trusted comment");
+    check(verify_error(other.pubkey(), key.sign("new launcher")) == "the update was signed with a different key",
+          "signature: another key");
+    Minisign same_id(9);
+    same_id.id = key.id;
+    check(contains(verify_error(key.pubkey(), same_id.sign("new launcher")), "signature does not match"),
+          "signature: another key claiming the same id");
+    check(verify_error(key.pubkey(), "bm9wZQ==") == "the update signature is malformed", "signature: malformed");
+    check(verify_error("!", key.sign("new launcher")) == "the update public key is not valid base64", "signature: bad key");
+
+    // The real release key decodes (tauri.conf.json's).
+    const std::string real_key =
+        "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5OEY4NUE4NjFFMTJGQUIKUldTckwrRmhxSVdQK2NKaTQ2Y0c5T2U0UGc2MTU4V3JIS2kyVlNlWnJCNXlnMkF2RWZteEhZVGYK";
+    check(verify_error(real_key, key.sign("new launcher")) == "the update was signed with a different key",
+          "signature: the release key is read");
+
+    // Swapping the AppImage
+    const fs::path target = base / "update" / "STAR FORGE.AppImage";
+    test::write_file(target, "old launcher");
+    fs::permissions(target, fs::perms::owner_all | fs::perms::group_read, fs::perm_options::replace);
+    up::replace_file(target, pkg);
+    check(test::read_file(target) == "new launcher" && !fs::exists(base / "update" / "STAR FORGE.AppImage.update"),
+          "update: the AppImage replaced");
+#ifndef _WIN32
+    check(fs::status(target).permissions() == (fs::perms::owner_all | fs::perms::group_read), "update: its permissions kept");
+#endif
+    bool refused = false;
+    try {
+        up::replace_file(base / "update" / "missing", pkg);
+    } catch (const std::exception& e) {
+        refused = contains(e.what(), "it is not a file");
+    }
+    check(refused, "update: nothing to replace");
+
+    // The commands
+    auto& b = *g_backend;
+    b.updater = {};
+    check(error_of("check_launcher_update") == "Development builds do not update themselves.", "update: off without an endpoint");
+    b.updater.endpoint = srv.base() + "/latest.json";
+    b.updater.unsupported = "Update STAR FORGE with your package manager.";
+    check(error_of("check_launcher_update") == "Update STAR FORGE with your package manager.", "update: an unsupported install");
+    b.updater.unsupported.reset();
+    b.updater.pubkey = key.pubkey();
+    b.updater.current = "0.2.6";
+    b.updater.targets = targets;
+    check(contains(error_of("check_launcher_update"), "could not check for launcher updates: "), "update: no latest.json");
+    check(error_of("install_launcher_update") == "Check for updates first.", "update: install needs a check");
+    srv.put("/latest.json", "");
+    check(call("check_launcher_update").is_null(), "update: an empty answer is no update");
+    srv.put("/latest.json", latest("0.2.6", both).dump());
+    check(call("check_launcher_update").is_null(), "update: up to date");
+    check(error_of("open_launcher_release") == "No release page for this update.", "update: no page without an update");
+
+    const std::string package(300000, 'L');
+    srv.put("/pkg.AppImage", package);
+    const json bad = {{"linux-x86_64-appimage", {{"url", srv.base() + "/pkg.AppImage"}, {"signature", key.sign("other")}}}};
+    srv.put("/latest.json", latest("0.3.0", bad).dump());
+    check(call("check_launcher_update") == json{{"version", "0.3.0"}, {"current", "0.2.6"}, {"page", "https://example.org/v"}},
+          "update: found");
+    call("open_launcher_release");
+    check(host.last_opened() == "https://example.org/v", "update: release notes open");
+    host.clear();
+    const std::string bad_error = error_of("install_launcher_update");
+    check(contains(bad_error, "could not install the launcher update: ") && contains(bad_error, "signature does not match") &&
+              host.installed.empty() && host.restarted == 0,
+          "update: a bad signature is not installed: " + bad_error);
+    check(error_of("install_launcher_update") == bad_error, "update: kept for a retry after a failure");
+
+    const json good = {{"linux-x86_64-appimage", {{"url", srv.base() + "/pkg.AppImage"}, {"signature", key.sign(package)}}}};
+    srv.put("/latest.json", latest("0.3.0", good).dump());
+    call("check_launcher_update");
+    host.install_error = "disk full";
+    check(error_of("install_launcher_update") == "could not install the launcher update: disk full", "update: the host's failure");
+    host.install_error.reset();
+    host.clear();
+    call("install_launcher_update");
+    const auto progress = host.of("launcher-update-progress");
+    check(host.installed == std::vector<std::string>{package} && host.restarted == 1, "update: installed, then restarted");
+    check(!progress.empty() && progress.back() == json::array({package.size(), package.size()}) &&
+              host.of("launcher-update-downloaded").size() == 1,
+          "update: progress, then downloaded");
+    check(host.of("notification") == std::vector<json>{json::array({"Updated to 0.3.0, restarting…", 0})}, "update: said so");
+    check(error_of("install_launcher_update") == "Check for updates first.", "update: installed once");
 }
 
 // Rust (lifecycle.rs): waits_for_ready_and_sting_in_either_order, watchdog_reveals_without_ui_ready.
@@ -581,6 +772,7 @@ int run(int argc, char** argv) {
         game(base);
         setup(base);
         startup_gate();
+        launcher_update(base, srv);
         exit_after_play(base / "home/.local/share/Steam/steamapps/common/star conflict");
     } catch (const std::exception& e) {
         check(false, std::string("unexpected error: ") + e.what());
