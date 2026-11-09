@@ -1,0 +1,106 @@
+// Tests the sc-launch program end to end: a server team's round trip (keygen, sign, file list,
+// check) and a player's (install, list, update in place), run as the real executable.
+//
+// Usage: cli_test <sc-launch>
+
+#include "launch/env.hpp"
+#include "launch/process.hpp"
+
+#include "check.hpp"
+
+namespace fs = std::filesystem;
+using namespace sf::launch;
+using test::check;
+using test::contains;
+
+namespace {
+
+fs::path g_exe, g_dir;
+
+// Runs sc-launch with `args` in the test folder; its output (both streams) and exit code.
+std::pair<int, std::string> sc(std::vector<std::string> args) {
+    Command cmd;
+    cmd.program = g_exe;
+    cmd.args = std::move(args);
+    cmd.cwd = g_dir;
+    cmd.set_env(env::kDataDir, ustr(g_dir / "data"));
+    cmd.set_env("STAR_FORGE_PACK_KEY", std::nullopt);
+    const fs::path out = g_dir / "out.txt";
+    auto code = spawn(cmd, Output{Output::Kind::File, out}).wait();
+    std::string text = test::read_file(out);
+    std::string clean;
+    for (char c : text)
+        if (c != '\r') clean += c;
+    return {code.value_or(-1), clean};
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    test::exit_on_crash();
+    if (argc < 2) {
+        std::printf("usage: cli_test <sc-launch>\n");
+        return 2;
+    }
+    g_exe = fs::absolute(fs::u8path(argv[1]));
+    g_dir = test::fresh_dir(fs::temp_directory_path() / "sf-cli-test");
+    const std::vector<std::string> prof{"--profiles-dir", ustr(g_dir / "profiles")};
+    auto with = [&](std::vector<std::string> more) {
+        std::vector<std::string> a = prof;
+        a.insert(a.end(), more.begin(), more.end());
+        return a;
+    };
+
+    auto [code, out] = sc({"--help"});
+    check(code == 0 && out.rfind("sc-launch - Star Conflict launcher with switchable profiles\n", 0) == 0, "--help");
+    std::tie(code, out) = sc({"bogus"});
+    check(code == 1 && out == "sc-launch: unknown command; see sc-launch --help\n", "an unknown command: " + out);
+    std::tie(code, out) = sc({"--frob"});
+    check(code == 1 && out == "sc-launch: unknown option --frob\n", "an unknown option");
+    std::tie(code, out) = sc({"--key"});
+    check(code == 1 && out == "sc-launch: --key needs a value\n", "an option without its value");
+    std::tie(code, out) = sc(with({"list"}));
+    check(code == 0 && contains(out, "no profiles in "), "no profiles yet");
+    std::tie(code, out) = sc(with({"run", "../x"}));
+    check(code == 1 && out == "sc-launch: \"../x\" is not a valid profile name\n", "a bad profile name");
+
+    // A server team's side.
+    std::tie(code, out) = sc({"pack", "keygen", "key.txt"});
+    check(code == 0 && contains(out, "public key:  ed25519:") && contains(out, "fingerprint: "), "keygen");
+    std::tie(code, out) = sc({"pack", "keygen", "key.txt"});
+    check(code == 1 && out == "sc-launch: key.txt already exists; not overwriting a key\n", "keygen won't overwrite");
+    test::write_file(g_dir / "pk/pack.json", R"({"format":1,"id":"org.example.cli","name":"CLI Test","version":"1.0.0"})");
+    test::write_file(g_dir / "pk/files/data/a.lua", "hi");
+    std::tie(code, out) = sc({"pack", "sign", "pk"});
+    check(code == 1 && out == "sc-launch: this needs --key <file> or STAR_FORGE_PACK_KEY\n", "sign needs a key");
+    std::tie(code, out) = sc({"pack", "sign", "pk", "--key", "key.txt"});
+    check(code == 0 && contains(out, "signed org.example.cli 1.0.0 (2 files) with key "), "sign: " + out);
+    std::tie(code, out) = sc({"pack", "files", "pk/files", "list.txt", "--key", "key.txt"});
+    check(code == 1 && contains(out, "needs --base-url"), "an SCMOD1 list needs --base-url");
+    std::tie(code, out) = sc({"pack", "files", "pk/files", "list.txt", "--base-url", "https://a.org/f", "--key", "key.txt"});
+    check(code == 0 && contains(out, "wrote list.txt: 1 file(s), SCMOD1") && fs::exists(g_dir / "list.txt.sig"), "an SCMOD1 list, signed");
+    std::tie(code, out) = sc({"pack", "files", "pk/files", "list.json"});
+    check(code == 0 && out == "wrote list.json: 1 file(s), STAR FORGE list\n" && !fs::exists(g_dir / "list.json.sig"),
+          "a JSON list, unsigned");
+    std::tie(code, out) = sc(with({"--game-dir", ustr(g_dir / "nogame"), "pack", "check", "pk"}));
+    check(code == 0 && contains(out, "CLI Test 1.0.0 (org.example.cli)\n") && contains(out, "  signed with a new key ") &&
+              contains(out, "(patches not checked against the game: ") && out.size() > 8 &&
+              out.substr(out.size() - 8) == "pack OK\n",
+          "pack check: " + out);
+
+    // A player's side.
+    std::tie(code, out) = sc(with({"install", "pk", "--yes"}));
+    check(code == 0 && contains(out, "installed as profile cli-test"), "install --yes");
+    std::tie(code, out) = sc(with({"list"}));
+    check(code == 0 && out == "cli-test             -                        client only   0 patch(es)  CLI Test\n", "list: " + out);
+    test::write_file(g_dir / "pk/files/data/a.lua", "changed");
+    std::tie(code, out) = sc(with({"install", "pk", "--yes"}));
+    check(code == 1 && out == "sc-launch: files/data/a.lua does not match the signed pack\n", "a changed signed pack is refused: " + out);
+    std::tie(code, out) = sc(with({"update", "cli-test"}));
+    check(code == 1 && out == "sc-launch: cli-test has no update address\n", "update without an address");
+    std::tie(code, out) = sc(with({"updates"}));
+    check(code == 0 && out == "all packs are up to date\n", "updates");
+
+    std::printf("%s (%d failed)\n", test::failures ? "FAILED" : "ok", test::failures);
+    return test::failures ? 1 : 0;
+}

@@ -103,6 +103,14 @@ if(SF_DOTENV)
     target_compile_definitions(sf_launch PRIVATE SF_DOTENV_FILE="${CMAKE_SOURCE_DIR}/.env")
 endif()
 
+# The command-line launcher (port of crates/sc-launch/src/main.rs).
+add_executable(sc_launch src/cli/main.cpp)
+target_link_libraries(sc_launch PRIVATE sf_launch)
+if(WIN32)
+    target_link_libraries(sc_launch PRIVATE shell32)
+endif()
+set_target_properties(sc_launch PROPERTIES OUTPUT_NAME sc-launch)
+
 if(WIN32)
 # Windows code shared by the agent, the injector and their tests: profile files as the agent
 # reads them (port of crates/sc-profile) and Win32 string/file helpers.
@@ -228,7 +236,11 @@ if(BUILD_TESTING)
         target_link_libraries(prepare_test PRIVATE ws2_32)
     endif()
     add_test(NAME prepare COMMAND prepare_test)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare)
+    add_executable(cli_test tests/cli_test.cpp)
+    target_link_libraries(cli_test PRIVATE sf_launch)
+    add_dependencies(cli_test sc_launch)
+    add_test(NAME cli COMMAND cli_test $<TARGET_FILE:sc_launch>)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
