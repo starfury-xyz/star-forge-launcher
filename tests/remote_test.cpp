@@ -75,6 +75,9 @@ void json_lists() {
     check(entries.size() == 1 && entries[0].url == "https://cdn.org/starfury/data/gamedata/a%20b.lua",
           "files sit next to the list, names percent-encoded: " + (entries.empty() ? "" : entries[0].url));
     check(!entries.empty() && entries[0].size == std::optional<uint64_t>(3), "sizes are read");
+    check(parse_json(R"({"files":{"x":{"sha256":")" + HASH + R"("}}})", "https://a.org/l/list.json?from=/other/")[0].url ==
+              "https://a.org/l/x",
+          "the list's folder ignores its query");
     const std::string based = R"({"base_url":"https://b.org/files/","files":{"x":{"sha256":")" + HASH + R"("}}})";
     check(parse_json(based, "https://a.org/l.json")[0].url == "https://b.org/files/x", "base_url");
     const std::string own = R"({"files":{"x":{"sha256":")" + HASH + R"(","url":"https://c.org/y"}}})";
@@ -209,6 +212,10 @@ void syncs(const fs::path& base) {
     check(done == Synced{2, 0}, "two downloaded");
     check(test::read_file(profile / "files/data/a.lua") == "one", "a.lua arrived");
     check(synced(l, &done) == "plan 0 Some(0) 2 0" && done == Synced{}, "nothing changed, nothing fetched");
+    // What the record says is trusted while the size fits: the files aren't hashed again.
+    test::write_file(profile / "files/data/a.lua", "uno");
+    check(synced(l, &done) == "plan 0 Some(0) 2 0", "a recorded file of the right size isn't hashed again");
+    test::write_file(profile / "files/data/a.lua", "one");
     check(intact(profile), "intact");
 
     l = fetch_list(from("v2.txt"), nullptr);

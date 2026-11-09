@@ -158,6 +158,7 @@ void patches(const fs::path& base) {
     test::write_file(dir / "patches/game.exe.patchset.toml", set_for("game.exe", game_sha));
     test::write_file(dir / "patches/other.dll.patchset.toml", set_for("other.dll", game_sha));
     test::write_file(dir / "patches/broken.patchset.toml", "format = 2");
+    test::write_file(dir / "patches/more.patchset.toml", set_for("game.exe", game_sha));
     profile = sf::pack::Profile::load(dir);
     s = patching::summary(dir, profile);
     check(s.modules == std::vector<std::string>{"game.exe", "other.dll"} && s.plugins == 1 && s.errors.size() == 1 &&
@@ -169,6 +170,7 @@ void patches(const fs::path& base) {
           "problems joined: " + err);
     // A module in the game root (one up from win64) is found too.
     fs::remove(dir / "patches/broken.patchset.toml");
+    fs::remove(dir / "patches/more.patchset.toml");
     test::write_file(base / "game/other.dll", game);
     test::write_file(dir / "patches/x.dll", "MZ");
     profile = sf::pack::Profile::load(dir);
