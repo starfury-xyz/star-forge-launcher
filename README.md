@@ -8,7 +8,7 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 | `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings, patches + plugins: done |
 | `sf_core` (shared lib: profile files, text helpers) | `crates/sc-profile` | what the agent and injector need (no full pack validation yet) |
 | `sf_core` patchsets (format, check/apply, core patches) | `crates/sc-patch` | done |
-| `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | args, quoting, inject.log, start/wait/cleanup done; injecting the agent to do |
+| `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | done (also double-checks a 0 LoadLibraryW result, which the Rust trusts) |
 
 Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
 or on Windows (MSVC), and both use the same CMake project and the same `build/win64/` folder.
