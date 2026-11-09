@@ -62,6 +62,14 @@ add_library(monocypher STATIC
 )
 target_include_directories(monocypher SYSTEM PUBLIC third_party/monocypher)
 
+# miniz (C): reading pack zips (and writing them, in tests).
+add_library(miniz STATIC third_party/miniz/miniz.c)
+target_include_directories(miniz SYSTEM PUBLIC third_party/miniz)
+# Vendored C, kept unchanged: its warnings aren't ours to fix.
+foreach(lib monocypher miniz)
+    target_compile_options(${lib} PRIVATE $<IF:$<BOOL:${MSVC}>,/w,-w>)
+endforeach()
+
 add_library(sf_launch STATIC
     src/crypto/base64.cpp
     src/crypto/random.cpp
@@ -80,7 +88,7 @@ add_library(sf_launch STATIC
     src/launch/steam.cpp
     src/pack/pack.cpp
 )
-target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher)
+target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher miniz)
 if(WIN32)
     target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt)  # registry (Steam's install path), downloads, random
 else()
@@ -207,7 +215,13 @@ if(BUILD_TESTING)
     add_executable(trust_test tests/trust_test.cpp)
     target_link_libraries(trust_test PRIVATE sf_launch)
     add_test(NAME trust COMMAND trust_test)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust)
+    add_executable(packs_test tests/packs_test.cpp)
+    target_link_libraries(packs_test PRIVATE sf_launch miniz)
+    if(WIN32)
+        target_link_libraries(packs_test PRIVATE ws2_32)
+    endif()
+    add_test(NAME packs COMMAND packs_test)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
