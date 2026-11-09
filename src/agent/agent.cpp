@@ -2,8 +2,8 @@
 // plugins, and hooks the Win32 file API so any game file that also exists under
 // <profile>\files\ is opened from the profile instead.
 //
-// Port status: bootstrap, profile loading, game data folders and file redirects are done.
-// Patches and folder-listing hooks are still to be ported from crates/sc-agent.
+// Everything crates/sc-agent does is ported: profile, patches and plugins, game data folder,
+// file redirects and folder listings.
 
 #include "agent/agent.hpp"
 
@@ -14,6 +14,7 @@
 #include <string>
 
 #include "agent/folders.hpp"
+#include "agent/patches.hpp"
 #include "agent/file_hooks.hpp"
 #include "common/text.hpp"
 #include "profile/profile.hpp"
@@ -76,7 +77,7 @@ bool init() {
     if (prof.trace_files) log("tracing file access");
     if (!prof.name.empty()) log("profile name: %s", prof.name.c_str());
 
-    // TODO(port): patches::apply_all (before folders, as in Rust).
+    if (!patches::apply_all(profile_dir, prof)) return false;  // the pack says don't start like this
     if (prof.own_game_data) folders::install(profile::state_local_appdata(profile_dir));
 
     if (game_root.empty()) {

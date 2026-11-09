@@ -40,6 +40,7 @@ file(COPY_FILE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CMAKE_B
 # crates/sc-profile), patchsets (crates/sc-patch) and string helpers. Static, so it's compiled
 # into each binary.
 add_library(sf_core STATIC
+    src/common/file.cpp
     src/common/text.cpp
     src/profile/profile.cpp
     src/patch/core.cpp
@@ -74,6 +75,7 @@ add_library(sc_agent SHARED
     src/agent/folders.cpp
     src/agent/hook.cpp
     src/agent/file_hooks.cpp
+    src/agent/patches.cpp
 )
 target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
 
@@ -116,8 +118,17 @@ if(BUILD_TESTING)
         DEPENDS sc_agent)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
+    # Helpers for the patch scenarios, next to load_test: a DLL that loads after the agent, and
+    # a plugin (the test copies it into the profile's patches\ folder).
+    add_library(patch_target SHARED tests/patch_target.cpp)
+    add_library(test_plugin SHARED tests/test_plugin.cpp)
+    target_include_directories(test_plugin PRIVATE src)
+    set_target_properties(patch_target test_plugin PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
+    add_dependencies(load_test patch_target test_plugin)
     # One process per scenario (see load_test.cpp).
-    set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect listing)
+    set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect listing
+        patch_exe patch_fail_exit patch_fail_continue patch_wrong_build patch_dll patch_dll_fail_exit
+        core_patch core_unknown plugin plugin_fail plugin_missing)
     foreach(scenario IN LISTS AGENT_SCENARIOS)
         add_test(NAME agent_${scenario} COMMAND load_test ${scenario})
         list(APPEND AGENT_TESTS agent_${scenario})

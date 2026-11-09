@@ -2,36 +2,17 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 #include <nlohmann/json.hpp>
 
+#include "common/file.hpp"
 #include "common/text.hpp"
 
 namespace sf::profile {
 namespace {
 
 using nlohmann::json;
-
-// Whole file into `out`. Returns 0 or the Win32 error code. Uses the Win32 API rather than
-// std::ifstream so a missing file can be told apart from other failures.
-DWORD read_file(const std::wstring& path, std::string& out) {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return GetLastError();
-    out.clear();
-    char buf[64 * 1024];
-    DWORD n = 0;
-    DWORD err = 0;
-    while (true) {
-        if (!ReadFile(h, buf, sizeof buf, &n, nullptr)) {
-            err = GetLastError();
-            break;
-        }
-        if (n == 0) break;
-        out.append(buf, n);
-    }
-    CloseHandle(h);
-    return err;
-}
 
 // `j[key]` as T, or `fallback` when the key is missing or null. Throws json::type_error when
 // the value has the wrong type (e.g. "trace_files": "yes").
@@ -156,6 +137,42 @@ std::optional<std::wstring> relative_to(const std::wstring& root_in, const std::
         std::wstring part = rel.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
         if (part.empty() || part == L"." || part == L".." || part.find(L':') != std::wstring::npos) return std::nullopt;
         if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    return rel;
+}
+
+std::vector<std::wstring> patchset_files(const std::wstring& profile_dir) {
+    const std::wstring dir = normalize(profile_dir) + L"\\" + kPatchesDir;
+    std::vector<std::wstring> out;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return out;  // no patches folder: no patchsets
+    const std::wstring suffix = L".patchset.toml";
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        std::wstring name = fd.cFileName, lower = name;
+        for (auto& c : lower)
+            if (c >= L'A' && c <= L'Z') c = wchar_t(c - L'A' + L'a');
+        if (lower.size() >= suffix.size() && lower.compare(lower.size() - suffix.size(), suffix.size(), suffix) == 0)
+            out.push_back(dir + L"\\" + name);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+std::optional<std::string> patches_rel(const std::string& path) {
+    const std::string prefix = "patches/";
+    if (path.rfind(prefix, 0) != 0) return std::nullopt;
+    const std::string rel = path.substr(prefix.size());
+    if (rel.empty() || rel.find_first_of("\\:") != std::string::npos) return std::nullopt;
+    size_t start = 0;
+    while (true) {
+        size_t end = rel.find('/', start);
+        std::string part = rel.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (part.empty() || part == "." || part == "..") return std::nullopt;
+        if (end == std::string::npos) break;
         start = end + 1;
     }
     return rel;

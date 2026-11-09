@@ -20,6 +20,8 @@ inline constexpr const wchar_t* kLocalFile = L"local.json";   // the player's ch
 inline constexpr unsigned kPackFormat = 1;                    // newest pack format we understand
 // Folder inside a profile that mirrors the game root (files\data\address.cfg, ...).
 inline constexpr const wchar_t* kFilesDir = L"files";
+// Folder inside a profile with the pack's patchsets (*.patchset.toml) and plugin DLLs.
+inline constexpr const wchar_t* kPatchesDir = L"patches";
 // Folder inside a profile holding the game's own per-user data for that profile (its
 // %LOCALAPPDATA%): store cache, notes, local server database. Never part of a pack.
 inline constexpr const wchar_t* kStateDir = L"state";
@@ -75,5 +77,13 @@ std::optional<std::wstring> relative_to(const std::wstring& root, const std::wst
 
 // Path inside the profile that would replace `rel`: <profile>\files\<rel>.
 std::wstring profile_file(const std::wstring& profile_dir, const std::wstring& rel);
+
+// The patchset files in a profile (<profile>\patches\*.patchset.toml, any case), sorted by name.
+std::vector<std::wstring> patchset_files(const std::wstring& profile_dir);
+
+// For a pack path like "patches/hooks/x.dll" (as pack.json writes them, with '/'): the part
+// inside patches/ ("hooks/x.dll"). nullopt unless it's safely inside: no '\', ':', empty parts,
+// "." or "..".
+std::optional<std::string> patches_rel(const std::string& path);
 
 }  // namespace sf::profile
