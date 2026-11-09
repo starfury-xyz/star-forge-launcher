@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <mutex>
 #include <thread>
@@ -71,11 +72,27 @@ public:
     App() : backend_(*this) {}
 
     int run(const std::vector<std::string>& links) {
+        // One launcher per data folder: a second one passes its links to the first and goes.
+        const auto data = launch::profiles::data_dir();
+        const std::string key = data ? data->u8string() : "";
+        if (hand_over(key, links)) return 0;
         app::init();
+        listen_for_instances(key, [this](const std::vector<std::string>& args) {
+            if (trace_) std::fprintf(stderr, "another launcher handed over %zu argument(s)\n", args.size());
+            restore();
+            for (const auto& a : args) backend_.receive_link(a);
+        });
         backend_.load_prefs();
         launch::packs::clear_staging(launch::profiles::default_profiles_dir());
         create_windows();
+        if (data) state_file_ = *data / "window-state.json";
+        load_window_state();
+        if (const Asset* icon = find_asset("icons/128x128.png"))
+            tray_ = Tray::create(std::string(reinterpret_cast<const char*>(icon->data), icon->size), "STAR FORGE Launcher",
+                                 [this] { restore(); }, [] { app::quit(); });
+        if (!tray_) std::fprintf(stderr, "system tray unavailable; the taskbar still works\n");
         for (const auto& l : links) backend_.receive_link(l);
+        register_links_once();
         if (gate_.native_ready()) show_main();
         // The watchdog: show the launcher even if the interface never says it's ready.
         std::thread([this] {
@@ -88,6 +105,7 @@ public:
             });
         }).detach();
         app::run();
+        save_window_state();
         // Like Tauri's app.exit: gone at once, whatever workers are still doing.
         std::fflush(nullptr);
         std::_Exit(0);
@@ -108,7 +126,14 @@ public:
         return on_ui<std::optional<std::string>>([&] { return app::pick_file(main_.get(), title, filter, extensions); });
     }
     void hide_to_tray() override {
-        // No tray yet: minimized, as Tauri does without one.
+        if (tray_) {
+            on_ui<int>([&] {
+                main_->hide();
+                return 0;
+            });
+            return;
+        }
+        // Without a tray: minimized, and said so.
         on_ui<int>([&] {
             main_->minimize();
             return 0;
@@ -195,6 +220,58 @@ private:
             }).detach();
     }
 
+    // The main window's size, position and maximized state, kept between runs like
+    // tauri-plugin-window-state does.
+    void load_window_state() {
+        if (state_file_.empty()) return;
+        std::ifstream in(state_file_);
+        const json j = json::parse(in, nullptr, false);
+        if (!j.is_object()) return;
+        NativeWindow::State s;
+        try {
+            s.x = j.at("x");
+            s.y = j.at("y");
+            s.width = j.at("width");
+            s.height = j.at("height");
+            s.maximized = j.at("maximized");
+        } catch (const std::exception&) {
+            return;
+        }
+        if (s.width >= 800 && s.height >= 450) main_->set_state(s);  // never below the minimum size
+    }
+
+    void save_window_state() {
+        if (state_file_.empty() || !main_) return;
+        const NativeWindow::State s = main_->state();
+        if (s.width <= 0 || s.height <= 0) return;
+        try {
+            launch::profiles::write_atomic(
+                state_file_,
+                json{{"x", s.x}, {"y", s.y}, {"width", s.width}, {"height", s.height}, {"maximized", s.maximized}}.dump(2) + "\n");
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "could not save the window state: %s\n", e.what());
+        }
+    }
+
+    // main.rs's setup_pack_links: packages register starforge:// when installed; a portable copy
+    // (AppImage, development build) registers itself, which also points links at wherever it is
+    // now. STAR_FORGE_NO_REGISTER leaves the desktop's handler alone (tests, side-by-side builds).
+    void register_links_once() {
+        if (launch::get_env("STAR_FORGE_NO_REGISTER")) return;
+#ifndef _WIN32
+        std::error_code ec;
+        const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+        if (!launch::get_env("APPIMAGE") && !ec && exe.string().rfind("/usr/", 0) == 0) return;
+#endif
+        std::thread([] {
+            try {
+                register_links();
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "could not register %s:// links: %s\n", launch::packs::kScheme, e.what());
+            }
+        }).detach();
+    }
+
     // lifecycle.rs's close_main_window.
     void close_main() {
         if (backend_.prefs().close_behavior == gui::CloseBehavior::Tray) {
@@ -252,6 +329,8 @@ private:
     const bool trace_ = launch::get_env("STAR_FORGE_DEVTOOLS").has_value();  // log commands to stderr
     StartupGate gate_;  // UI thread only
     std::unique_ptr<NativeWindow> main_, splash_;
+    std::unique_ptr<Tray> tray_;  // set before any command runs
+    std::filesystem::path state_file_;
 };
 
 }  // namespace

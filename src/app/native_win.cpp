@@ -87,6 +87,7 @@ struct NativeWindow::Impl {
     int min_width = 0, min_height = 0;
     HICON icon = nullptr;
     EventRegistrationToken resources{}, navigation{}, popups{};
+    bool shown = false, start_maximized = false;  // a saved maximized state, for the first show()
 
     // The webview fills the window, less a resize border on a frameless one (the window gets the
     // mouse there and says which edge it is).
@@ -323,7 +324,9 @@ void NativeWindow::load(const std::string& page) { impl_->view->navigate(std::st
 
 void NativeWindow::show() {
     HWND h = impl_->hwnd;
-    ShowWindow(h, IsIconic(h) ? SW_RESTORE : SW_SHOW);
+    const bool first = !impl_->shown;
+    impl_->shown = true;
+    ShowWindow(h, first && impl_->start_maximized ? SW_SHOWMAXIMIZED : IsIconic(h) ? SW_RESTORE : SW_SHOW);
     SetForegroundWindow(h);
 }
 
@@ -365,6 +368,22 @@ void NativeWindow::set_icon_png(const std::string& png) {
     impl_->icon = icon;
     SendMessageW(impl_->hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
     SendMessageW(impl_->hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
+}
+
+NativeWindow::State NativeWindow::state() const {
+    WINDOWPLACEMENT wp{sizeof wp};
+    GetWindowPlacement(impl_->hwnd, &wp);
+    const RECT& r = wp.rcNormalPosition;
+    return {r.left, r.top, r.right - r.left, r.bottom - r.top, IsZoomed(impl_->hwnd) || (!impl_->shown && impl_->start_maximized)};
+}
+
+void NativeWindow::set_state(const State& s) {
+    WINDOWPLACEMENT wp{sizeof wp};
+    GetWindowPlacement(impl_->hwnd, &wp);
+    wp.rcNormalPosition = {s.x, s.y, s.x + s.width, s.y + s.height};
+    wp.showCmd = SW_HIDE;  // shown later, by show()
+    SetWindowPlacement(impl_->hwnd, &wp);
+    impl_->start_maximized = s.maximized;
 }
 
 void NativeWindow::snapshot(const std::string& png_path) {
@@ -463,6 +482,181 @@ std::optional<std::string> pick_file(NativeWindow* parent, const std::string& ti
     std::wstring patterns;
     for (const auto& e : extensions) patterns += (patterns.empty() ? L"*." : L";*.") + wide(e);
     return choose(parent, title, false, std::nullopt, wide(filter_name), patterns);
+}
+
+// --- Tray: a notification-area icon, its messages going to a hidden window (a message-only one
+// would miss the TaskbarCreated broadcast sent when Explorer restarts). ---
+
+namespace {
+
+constexpr UINT kTrayMessage = WM_APP + 2;
+enum : UINT { kMenuShow = 1, kMenuExit = 2 };
+
+class WinTray final : public Tray {
+public:
+    WinTray(std::function<void()> on_show, std::function<void()> on_exit) : on_show_(std::move(on_show)), on_exit_(std::move(on_exit)) {}
+
+    ~WinTray() override {
+        Shell_NotifyIconW(NIM_DELETE, &data_);
+        if (hwnd_) DestroyWindow(hwnd_);
+        if (icon_) DestroyIcon(icon_);
+    }
+
+    bool start(const std::string& png, const std::string& tooltip) {
+        const HINSTANCE inst = GetModuleHandleW(nullptr);
+        WNDCLASSEXW wc{sizeof wc};
+        wc.lpfnWndProc = proc;
+        wc.hInstance = inst;
+        wc.lpszClassName = L"StarForgeTray";
+        RegisterClassExW(&wc);
+        hwnd_ = CreateWindowExW(0, wc.lpszClassName, nullptr, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, this);
+        if (!hwnd_) return false;
+        icon_ = CreateIconFromResourceEx(reinterpret_cast<PBYTE>(const_cast<char*>(png.data())), static_cast<DWORD>(png.size()),
+                                         TRUE, 0x00030000, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                         LR_DEFAULTCOLOR);
+        data_.cbSize = sizeof data_;
+        data_.hWnd = hwnd_;
+        data_.uID = 1;
+        data_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        data_.uCallbackMessage = kTrayMessage;
+        data_.hIcon = icon_ ? icon_ : LoadIconW(inst, MAKEINTRESOURCEW(1));
+        lstrcpynW(data_.szTip, wide(tooltip).c_str(), ARRAYSIZE(data_.szTip));
+        return Shell_NotifyIconW(NIM_ADD, &data_) != FALSE;
+    }
+
+private:
+    static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+        static const UINT taskbar_created = RegisterWindowMessageW(L"TaskbarCreated");
+        if (msg == WM_NCCREATE)
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                              reinterpret_cast<LONG_PTR>(reinterpret_cast<CREATESTRUCTW*>(lp)->lpCreateParams));
+        auto* self = reinterpret_cast<WinTray*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (self && msg == taskbar_created) {
+            Shell_NotifyIconW(NIM_ADD, &self->data_);
+            return 0;
+        }
+        // Either button opens the menu, as show_menu_on_left_click does.
+        if (self && msg == kTrayMessage && (lp == WM_LBUTTONUP || lp == WM_RBUTTONUP)) {
+            self->menu();
+            return 0;
+        }
+        return DefWindowProcW(hwnd, msg, wp, lp);
+    }
+
+    void menu() {
+        HMENU m = CreatePopupMenu();
+        AppendMenuW(m, MF_STRING, kMenuShow, L"Show STAR FORGE Launcher");
+        AppendMenuW(m, MF_STRING, kMenuExit, L"Exit");
+        POINT pt;
+        GetCursorPos(&pt);
+        SetForegroundWindow(hwnd_);  // so the menu closes when clicking elsewhere
+        const UINT chosen = static_cast<UINT>(
+            TrackPopupMenu(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, nullptr));
+        PostMessageW(hwnd_, WM_NULL, 0, 0);
+        DestroyMenu(m);
+        if (chosen == kMenuShow && on_show_) on_show_();
+        if (chosen == kMenuExit && on_exit_) on_exit_();
+    }
+
+    std::function<void()> on_show_, on_exit_;
+    HWND hwnd_ = nullptr;
+    HICON icon_ = nullptr;
+    NOTIFYICONDATAW data_{};
+};
+
+}  // namespace
+
+std::unique_ptr<Tray> Tray::create(const std::string& icon_png, const std::string& tooltip, std::function<void()> on_show,
+                                   std::function<void()> on_exit) {
+    auto tray = std::make_unique<WinTray>(std::move(on_show), std::move(on_exit));
+    if (!tray->start(icon_png, tooltip)) return nullptr;
+    return tray;
+}
+
+// --- One launcher per data folder: a named mutex says one is running; it listens on a
+// message-only window named after the folder, which later ones send their arguments to. ---
+
+namespace {
+
+const wchar_t* kInstanceClass = L"StarForgeInstance";
+std::function<void(std::vector<std::string>)> g_instances;  // UI thread
+
+std::wstring instance_name(const std::string& key) {
+    uint64_t h = 1469598103934665603ull;  // FNV-1a
+    for (unsigned char c : key) h = (h ^ c) * 1099511628211ull;
+    wchar_t name[64];
+    swprintf(name, 64, L"star-forge-%016llx", static_cast<unsigned long long>(h));
+    return name;
+}
+
+LRESULT CALLBACK instance_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_COPYDATA) {
+        // The arguments, each ended by a NUL.
+        const auto* cd = reinterpret_cast<const COPYDATASTRUCT*>(lp);
+        const std::string message(static_cast<const char*>(cd->lpData), cd->cbData);
+        std::vector<std::string> args;
+        for (size_t at = 0, end; (end = message.find('\0', at)) != std::string::npos; at = end + 1)
+            args.push_back(message.substr(at, end - at));
+        if (g_instances) post([args] { g_instances(args); });
+        return TRUE;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+}  // namespace
+
+bool hand_over(const std::string& key, const std::vector<std::string>& args) {
+    const std::wstring name = instance_name(key);
+    // Held until this launcher exits.
+    CreateMutexW(nullptr, FALSE, (L"Local\\" + name).c_str());
+    if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
+    std::string message;
+    for (const auto& arg : args) message.append(arg).push_back('\0');
+    // The first launcher may still be starting: give its window a moment to appear.
+    for (int i = 0; i < 50; ++i) {
+        if (HWND first = FindWindowExW(HWND_MESSAGE, nullptr, kInstanceClass, name.c_str())) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(first, &pid);
+            AllowSetForegroundWindow(pid);  // it may bring its window to the front
+            COPYDATASTRUCT cd{1, static_cast<DWORD>(message.size()), message.data()};
+            DWORD_PTR result;
+            SendMessageTimeoutW(first, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cd), SMTO_ABORTIFHUNG, 5000, &result);
+            break;
+        }
+        Sleep(100);
+    }
+    return true;
+}
+
+void listen_for_instances(const std::string& key, std::function<void(std::vector<std::string>)> f) {
+    g_instances = std::move(f);
+    const HINSTANCE inst = GetModuleHandleW(nullptr);
+    WNDCLASSEXW wc{sizeof wc};
+    wc.lpfnWndProc = instance_proc;
+    wc.hInstance = inst;
+    wc.lpszClassName = kInstanceClass;
+    RegisterClassExW(&wc);
+    CreateWindowExW(0, kInstanceClass, instance_name(key).c_str(), 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
+    // WM_COPYDATA comes from a lower-integrity launcher too.
+    if (HWND hwnd = FindWindowExW(HWND_MESSAGE, nullptr, kInstanceClass, instance_name(key).c_str()))
+        ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+}
+
+void register_links() {
+    // What tauri-plugin-deep-link does: HKCU\Software\Classes\starforge, opening this program.
+    wchar_t exe[MAX_PATH * 4];
+    const DWORD n = GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
+    if (n == 0 || n == ARRAYSIZE(exe)) throw std::runtime_error("cannot find this program");
+    const std::wstring command = L"\"" + std::wstring(exe) + L"\" \"%1\"";
+    const std::wstring name = L"URL:STAR FORGE Launcher", empty;
+    auto set = [](const wchar_t* key, const wchar_t* value, const std::wstring& data) {
+        const LSTATUS r = RegSetKeyValueW(HKEY_CURRENT_USER, key, value, REG_SZ, data.c_str(),
+                                          static_cast<DWORD>((data.size() + 1) * sizeof(wchar_t)));
+        if (r != ERROR_SUCCESS) throw std::runtime_error("cannot register starforge:// links (error " + std::to_string(r) + ")");
+    };
+    set(L"Software\\Classes\\starforge", nullptr, name);
+    set(L"Software\\Classes\\starforge", L"URL Protocol", empty);
+    set(L"Software\\Classes\\starforge\\shell\\open\\command", nullptr, command);
 }
 
 void open(const std::string& target) {

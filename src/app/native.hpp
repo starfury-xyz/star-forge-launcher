@@ -56,6 +56,15 @@ public:
     // Shrinks and moves the window to fit the monitor it's on (unless maximized).
     void fit_to_monitor();
     void set_icon_png(const std::string& png);
+    // Size, position and maximized state, as tauri-plugin-window-state keeps them.
+    struct State {
+        int x = 0, y = 0, width = 0, height = 0;  // the un-maximized frame
+        bool maximized = false;
+    };
+    State state() const;
+    // Applies a saved state before the window is first shown.
+    void set_state(const State& state);
+
     // Development aid: saves what the page shows as a PNG.
     void snapshot(const std::string& png_path);
 
@@ -70,6 +79,23 @@ public:
 private:
     std::shared_ptr<Impl> impl_;  // shared with callbacks queued for the UI thread, which check it's still there
 };
+
+// The tray icon with its menu: "Show STAR FORGE Launcher" and "Exit".
+class Tray {
+public:
+    // nullptr when this desktop has no tray. The callbacks run on the UI thread.
+    static std::unique_ptr<Tray> create(const std::string& icon_png, const std::string& tooltip, std::function<void()> on_show,
+                                        std::function<void()> on_exit);
+    virtual ~Tray() = default;
+};
+
+// One launcher per data folder (`key`): a second one hands its arguments to the first and quits.
+// True when another launcher took them; this one should exit.
+bool hand_over(const std::string& key, const std::vector<std::string>& args);
+// Hears from later launchers (call after hand_over returned false); `f` runs on the UI thread.
+void listen_for_instances(const std::string& key, std::function<void(std::vector<std::string>)> f);
+// Makes this program the desktop's handler for starforge:// links. Throws std::runtime_error.
+void register_links();
 
 // Origin the interface is served from.
 extern const char* const kOrigin;

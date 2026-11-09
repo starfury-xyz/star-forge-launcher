@@ -1,7 +1,14 @@
 // The launcher's native side on Linux: GTK 3 windows with WebKitGTK 4.1 (through webview/webview),
-// the interface served on a custom URI scheme, GTK file choosers, and xdg-open.
+// the interface served on a custom URI scheme, GTK file choosers, and xdg-open. The tray is in
+// tray_sni.cpp.
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <stdexcept>
 #include <thread>
 
@@ -14,6 +21,7 @@
 #include "app/native.hpp"
 #include "launch/env.hpp"
 #include "launch/process.hpp"
+#include "launch/profiles.hpp"
 
 namespace sf::app {
 
@@ -77,6 +85,8 @@ struct NativeWindow::Impl {
     gint press_button = 1;
     gdouble press_x = 0, press_y = 0;
     guint32 press_time = GDK_CURRENT_TIME;
+    // The un-maximized frame, kept up to date for state().
+    NativeWindow::State normal;
 
     // The window edge under (x, y) in window coordinates, for resizing a frameless window.
     std::optional<GdkWindowEdge> edge_at(double x, double y) const {
@@ -125,6 +135,17 @@ gboolean on_motion(GtkWidget* widget, GdkEventMotion* e, gpointer data) {
     return FALSE;
 }
 
+// Notes the window's frame whenever it moves or resizes while not maximized.
+gboolean on_configure(GtkWidget* widget, GdkEventConfigure*, gpointer data) {
+    auto* impl = static_cast<NativeWindow::Impl*>(data);
+    GtkWindow* win = GTK_WINDOW(widget);
+    if (!gtk_window_is_maximized(win)) {
+        gtk_window_get_position(win, &impl->normal.x, &impl->normal.y);
+        gtk_window_get_size(win, &impl->normal.width, &impl->normal.height);
+    }
+    return FALSE;
+}
+
 gboolean on_delete(GtkWidget*, GdkEvent*, gpointer data) {
     auto* impl = static_cast<NativeWindow::Impl*>(data);
     if (impl->owner->on_close_requested) impl->owner->on_close_requested();
@@ -163,6 +184,9 @@ NativeWindow::NativeWindow(const WindowSpec& spec) : impl_(std::make_shared<Impl
         gtk_widget_set_app_paintable(w.window, TRUE);
     }
     g_signal_connect(w.window, "delete-event", G_CALLBACK(on_delete), &w);
+    g_signal_connect(w.window, "configure-event", G_CALLBACK(on_configure), &w);
+    w.normal.width = spec.width;
+    w.normal.height = spec.height;
 
     const bool debug = launch::get_env("STAR_FORGE_DEVTOOLS").has_value();
     w.view = std::make_unique<webview::webview>(debug, w.window);
@@ -265,6 +289,21 @@ void NativeWindow::set_icon_png(const std::string& png) {
     g_object_unref(loader);
 }
 
+NativeWindow::State NativeWindow::state() const {
+    State s = impl_->normal;
+    s.maximized = gtk_window_is_maximized(GTK_WINDOW(impl_->window));
+    return s;
+}
+
+void NativeWindow::set_state(const State& s) {
+    GtkWindow* win = GTK_WINDOW(impl_->window);
+    // (Wayland keeps window positions to itself; the move is ignored there.)
+    gtk_window_resize(win, s.width, s.height);
+    gtk_window_move(win, s.x, s.y);
+    impl_->normal = s;
+    if (s.maximized) gtk_window_maximize(win);
+}
+
 void NativeWindow::snapshot(const std::string& png_path) {
     auto* page = static_cast<WebKitWebView*>(impl_->view->browser_controller().value());
     webkit_web_view_get_snapshot(
@@ -341,6 +380,108 @@ std::optional<std::string> pick_file(NativeWindow* parent, const std::string& ti
         gtk_file_filter_add_pattern(filter, ("*." + e).c_str());
     }
     return choose(parent, title, GTK_FILE_CHOOSER_ACTION_OPEN, std::nullopt, filter);
+}
+
+namespace {
+
+// The listening socket for a data folder: an abstract one (no file to clean up), named after a
+// hash of the folder.
+sockaddr_un instance_address(const std::string& key, socklen_t& len) {
+    uint64_t h = 1469598103934665603ull;  // FNV-1a
+    for (unsigned char c : key) h = (h ^ c) * 1099511628211ull;
+    char name[64];
+    const int n = std::snprintf(name, sizeof name, "star-forge-%016llx", static_cast<unsigned long long>(h));
+    sockaddr_un a{};
+    a.sun_family = AF_UNIX;
+    std::memcpy(a.sun_path + 1, name, n);  // sun_path[0] == 0: abstract
+    len = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + 1 + n);
+    return a;
+}
+
+}  // namespace
+
+bool hand_over(const std::string& key, const std::vector<std::string>& args) {
+    socklen_t len;
+    const sockaddr_un a = instance_address(key, len);
+    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return false;
+    if (connect(fd, reinterpret_cast<const sockaddr*>(&a), len) != 0) {
+        close(fd);
+        return false;
+    }
+    // The arguments, each ended by a NUL; the first launcher reads to the end.
+    std::string message;
+    for (const auto& arg : args) message.append(arg).push_back('\0');
+    for (size_t sent = 0; sent < message.size();) {
+        const ssize_t n = send(fd, message.data() + sent, message.size() - sent, MSG_NOSIGNAL);
+        if (n <= 0) break;
+        sent += static_cast<size_t>(n);
+    }
+    close(fd);
+    return true;
+}
+
+void listen_for_instances(const std::string& key, std::function<void(std::vector<std::string>)> f) {
+    socklen_t len;
+    const sockaddr_un a = instance_address(key, len);
+    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return;
+    if (bind(fd, reinterpret_cast<const sockaddr*>(&a), len) != 0 || listen(fd, 8) != 0) {
+        // Another launcher started at the same moment and has it; this one carries on alone.
+        close(fd);
+        return;
+    }
+    std::thread([fd, f = std::move(f)] {
+        for (;;) {
+            const int c = accept4(fd, nullptr, nullptr, SOCK_CLOEXEC);
+            if (c < 0) continue;
+            std::string message;
+            char buf[4096];
+            for (ssize_t n; (n = read(c, buf, sizeof buf)) > 0 && message.size() < (1 << 20);) message.append(buf, n);
+            close(c);
+            std::vector<std::string> args;
+            for (size_t at = 0, end; (end = message.find('\0', at)) != std::string::npos; at = end + 1)
+                args.push_back(message.substr(at, end - at));
+            post([f, args] { f(args); });
+        }
+    }).detach();
+}
+
+void register_links() {
+    // What tauri-plugin-deep-link does: a hidden desktop entry for the scheme, made the default.
+    std::string exe;
+    if (auto appimage = launch::get_env("APPIMAGE")) {
+        exe = *appimage;
+    } else {
+        std::error_code ec;
+        exe = std::filesystem::read_symlink("/proc/self/exe", ec).string();
+        if (ec) throw std::runtime_error("cannot find this program: " + ec.message());
+    }
+    std::filesystem::path dir;
+    if (auto xdg = launch::get_env("XDG_DATA_HOME"); xdg && !xdg->empty()) dir = *xdg;
+    else if (auto home = launch::get_env("HOME")) dir = std::filesystem::path(*home) / ".local" / "share";
+    else throw std::runtime_error("HOME is not set");
+    dir /= "applications";
+    std::filesystem::create_directories(dir);
+    const std::string file = "star-forge-handler.desktop";
+    launch::profiles::write_atomic(dir / file,
+                                   "[Desktop Entry]\nType=Application\nName=STAR FORGE Launcher\nTerminal=false\n"
+                                   "MimeType=x-scheme-handler/starforge\nNoDisplay=true\nExec=\"" +
+                                       exe + "\" %u\n");
+    auto run = [](std::string program, std::vector<std::string> args) {
+        launch::Command cmd;
+        cmd.program = std::move(program);
+        cmd.args = std::move(args);
+        cmd.env = launch::env::host_env();
+        try {
+            return launch::spawn(cmd, launch::Output{launch::Output::Kind::Null, {}}).wait() == 0;
+        } catch (const std::exception&) {
+            return false;
+        }
+    };
+    run("update-desktop-database", {dir.string()});  // optional: only refreshes a cache
+    if (!run("xdg-mime", {"default", file, "x-scheme-handler/starforge"}))
+        throw std::runtime_error("xdg-mime could not make " + file + " the starforge:// handler");
 }
 
 void open(const std::string& target) {
