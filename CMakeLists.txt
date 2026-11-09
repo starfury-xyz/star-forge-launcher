@@ -53,7 +53,7 @@ add_library(sc_agent SHARED
     src/agent/agent.cpp
     src/agent/folders.cpp
     src/agent/hook.cpp
-    src/agent/hooks.cpp
+    src/agent/file_hooks.cpp
 )
 target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
 

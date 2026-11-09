@@ -1,10 +1,13 @@
 // File API detours. A path inside the game root is replaced with the profile's copy when
-// <profile>\files\<same relative path> exists. Port of crates/sc-agent/src/hooks.rs.
+// <profile>\files\<same relative path> exists.
+//
+// Port of crates/sc-agent/src/hooks.rs. Named file_hooks here so it isn't confused with
+// hook.cpp, the MinHook wrapper it uses.
 //
 // Port status: opening files and attribute queries are done; folder listings (FindFirstFile and
 // friends, so profile-only files show up in the engine's scan of data\) are still to do.
 
-#include "agent/hooks.hpp"
+#include "agent/file_hooks.hpp"
 
 #include <windows.h>
 
@@ -17,7 +20,7 @@
 #include "common/text.hpp"
 #include "profile/profile.hpp"
 
-namespace sf::agent::hooks {
+namespace sf::agent::file_hooks {
 namespace {
 
 using CreateFileWFn = HANDLE(WINAPI*)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
@@ -211,4 +214,4 @@ void install(const std::wstring& game_root, const std::wstring& profile_dir, boo
     log("file hooks installed");
 }
 
-}  // namespace sf::agent::hooks
+}  // namespace sf::agent::file_hooks

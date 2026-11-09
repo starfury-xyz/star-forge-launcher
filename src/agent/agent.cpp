@@ -14,7 +14,7 @@
 #include <string>
 
 #include "agent/folders.hpp"
-#include "agent/hooks.hpp"
+#include "agent/file_hooks.hpp"
 #include "common/text.hpp"
 #include "profile/profile.hpp"
 
@@ -83,7 +83,7 @@ bool init() {
         log("could not work out the game root; file redirects disabled");
         return true;
     }
-    hooks::install(game_root, profile_dir, prof.trace_files);
+    file_hooks::install(game_root, profile_dir, prof.trace_files);
     return true;
 }
 
