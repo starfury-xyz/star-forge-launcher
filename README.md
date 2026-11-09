@@ -5,7 +5,7 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 
 | Component | Rust source | Status |
 |---|---|---|
-| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects; folder listings + patches to do |
+| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings; patches to do |
 | `sf_core` (shared lib: profile files, text helpers) | `crates/sc-profile` | what the agent needs (no full pack validation yet) |
 | injector | `crates/sc-inject` | not started |
 
@@ -82,6 +82,9 @@ xwin has no debug CRT, so every build uses the static release CRT (`/MT`), on bo
 file/folder API calls). It runs one scenario per process (`load_test redirect`, ...), because a
 DLL with live hooks must never be unloaded; ctest registers each as `agent_<scenario>`. Run one
 with `ctest --preset win64 -R redirect -V`.
+
+Wine is close to Windows but not identical: e.g. its `FindClose` accepts any handle, so a test
+that relies on Windows rejecting a bad one can only fail on Windows. Run the tests on both.
 
 Every ported step adds checks (or a new test) and is proven by breaking the code on purpose and
 watching the right check fail, so each one works before the next starts.

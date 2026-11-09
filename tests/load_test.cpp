@@ -190,6 +190,9 @@ std::string list(const std::wstring& pattern, bool ex = false) {
         names.push_back(n == "." || n == ".." ? n : n + ":" + std::to_string(d.nFileSizeLow));
     } while (FindNextFileA(h, &d));
     const bool done_ok = GetLastError() == ERROR_NO_MORE_FILES;
+    // On Windows, FindClose fails for a handle it didn't make, so this catches the agent passing
+    // its own listing handles to the real FindClose. Wine's FindClose returns TRUE for any
+    // handle, so under wine that bug goes unnoticed: run the tests on Windows too.
     const bool closed = FindClose(h);
     std::sort(names.begin(), names.end());
     std::string out;
