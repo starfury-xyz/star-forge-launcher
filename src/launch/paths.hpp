@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <system_error>
 
 namespace sf::launch {
 
@@ -23,8 +24,17 @@ std::optional<std::string> get_env(const char* name);
 // Sets (or, with nullopt, removes) an environment variable of this process.
 void set_env(const char* name, const std::optional<std::string>& value);
 
-// A whole file as bytes; nullopt if it can't be read.
-std::optional<std::string> read_text(const fs::path& path);
+// A whole file as bytes; nullopt if it can't be read (`ec`, if given, then says why).
+std::optional<std::string> read_text(const fs::path& path, std::error_code* ec = nullptr);
+
+// "<path>: <why> (os error N)", like Rust's io::Error messages.
+std::string io_error(const fs::path& path, const std::error_code& ec);
+// read_text that throws std::runtime_error(io_error(...)).
+std::string read_or_throw(const fs::path& path);
+// Creates or replaces a file. Throws std::runtime_error(io_error(...)).
+void write_or_throw(const fs::path& path, const std::string& data);
+// Whether `ec` means the file (or a folder on its path) doesn't exist.
+bool not_found(const std::error_code& ec);
 
 // Same as sc-launch's plain_part: true if `part` is one path component that means the same file
 // on Linux and Windows: not empty, "." or "..", no characters Windows forbids (<>:"|?* and

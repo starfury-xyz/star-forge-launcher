@@ -1,8 +1,9 @@
 #include "launch/paths.hpp"
 
+#include <cerrno>
+#include <cstdio>
 #include <cstdlib>
-#include <fstream>
-#include <sstream>
+#include <stdexcept>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -36,13 +37,55 @@ void set_env(const char* name, const std::optional<std::string>& value) {
 #endif
 }
 
-std::optional<std::string> read_text(const fs::path& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return std::nullopt;
-    std::stringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
+std::optional<std::string> read_text(const fs::path& path, std::error_code* ec) {
+    // fopen rather than ifstream: it leaves the reason in errno.
+#ifdef _WIN32
+    FILE* f = _wfopen(path.wstring().c_str(), L"rb");
+#else
+    FILE* f = std::fopen(path.c_str(), "rb");
+#endif
+    if (!f) {
+        if (ec) *ec = std::error_code(errno, std::generic_category());
+        return std::nullopt;
+    }
+    std::string out;
+    char buf[64 * 1024];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n);
+    bool bad = std::ferror(f);
+    std::fclose(f);
+    if (bad) {
+        if (ec) *ec = std::make_error_code(std::errc::io_error);
+        return std::nullopt;
+    }
+    if (ec) ec->clear();
+    return out;
 }
+
+std::string io_error(const fs::path& path, const std::error_code& ec) {
+    return ustr(path) + ": " + ec.message() + " (os error " + std::to_string(ec.value()) + ")";
+}
+
+std::string read_or_throw(const fs::path& path) {
+    std::error_code ec;
+    auto text = read_text(path, &ec);
+    if (!text) throw std::runtime_error(io_error(path, ec));
+    return *text;
+}
+
+void write_or_throw(const fs::path& path, const std::string& data) {
+#ifdef _WIN32
+    FILE* f = _wfopen(path.wstring().c_str(), L"wb");
+#else
+    FILE* f = std::fopen(path.c_str(), "wb");
+#endif
+    if (!f) throw std::runtime_error(io_error(path, std::error_code(errno, std::generic_category())));
+    bool ok = std::fwrite(data.data(), 1, data.size(), f) == data.size();
+    ok = std::fclose(f) == 0 && ok;
+    if (!ok) throw std::runtime_error(io_error(path, std::make_error_code(std::errc::io_error)));
+}
+
+bool not_found(const std::error_code& ec) { return ec == std::errc::no_such_file_or_directory; }
 
 bool plain_part(const std::string& part) {
     if (part.empty() || part == "." || part == "..") return false;

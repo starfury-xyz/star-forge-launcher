@@ -60,7 +60,9 @@ add_library(sf_launch STATIC
     src/launch/launch.cpp
     src/launch/paths.cpp
     src/launch/process.cpp
+    src/launch/profiles.cpp
     src/launch/steam.cpp
+    src/pack/pack.cpp
 )
 target_link_libraries(sf_launch PUBLIC sf_patch)
 if(WIN32)
@@ -153,7 +155,22 @@ if(BUILD_TESTING)
     target_link_libraries(process_test PRIVATE sf_launch)
     add_dependencies(process_test proc_helper)
     add_test(NAME process COMMAND process_test $<TARGET_FILE:proc_helper>)
-    set(PORTABLE_TESTS patch launch setup process)
+    add_executable(pack_test tests/pack_test.cpp)
+    target_link_libraries(pack_test PRIVATE sf_launch)
+    # Optional: a folder of real profiles installed by the Rust launcher, to check pack.json comes
+    # out byte for byte the same. Defaults to the standard Linux location (natively or via Z:).
+    set(_profiles "$ENV{HOME}/.local/share/star-forge/profiles")
+    if(NOT DEFINED SF_PROFILES_DIR AND CMAKE_HOST_UNIX AND IS_DIRECTORY "${_profiles}")
+        if(WIN32)
+            string(REPLACE "/" "\\" _z "${_profiles}")
+            set(SF_PROFILES_DIR "Z:${_z}")
+        else()
+            set(SF_PROFILES_DIR "${_profiles}")
+        endif()
+    endif()
+    set(SF_PROFILES_DIR "${SF_PROFILES_DIR}" CACHE STRING "Real profiles for pack_test (empty: skip that part)")
+    add_test(NAME pack COMMAND pack_test ${SF_PROFILES_DIR})
+    set(PORTABLE_TESTS patch launch setup process pack)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
