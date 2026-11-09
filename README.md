@@ -5,9 +5,9 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 
 | Component | Rust source | Status |
 |---|---|---|
-| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings; patches to do |
+| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings, patches + plugins: done |
 | `sf_core` (shared lib: profile files, text helpers) | `crates/sc-profile` | what the agent needs (no full pack validation yet) |
-| `sf_core` patchsets (format, check/apply, core patches) | `crates/sc-patch` | done; the agent doesn't apply them yet |
+| `sf_core` patchsets (format, check/apply, core patches) | `crates/sc-patch` | done |
 | injector | `crates/sc-inject` | not started |
 
 Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
@@ -44,6 +44,9 @@ downloads. Tests run under wine.
 `patch_test` also checks the core patches against your installed `game.exe` (on Linux it finds the
 Steam install itself; elsewhere pass `-DSF_GAME_EXE=C:/path/to/win64/game.exe`, or it skips that part).
 `core-patches/` is a copy of star-forge's: when star-forge changes them, copy them over again.
+
+Plugins include `src/agent/plugin_api.h` (plain C, same layout as the Rust agent's, so a plugin
+works with either agent) and export `starforge_plugin_init`; `tests/test_plugin.cpp` is a minimal one.
 
 xwin has no debug CRT, so every build uses the static release CRT (`/MT`), on both platforms.
 
