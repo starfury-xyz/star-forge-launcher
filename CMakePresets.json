@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "win64",
+      "displayName": "Windows x64 (clang-cl + xwin)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win64",
+      "toolchainFile": "${sourceDir}/cmake/clang-cl-xwin.cmake",
+      "cacheVariables": { "SF_ARCH": "x86_64", "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "win64", "configurePreset": "win64" }
+  ]
+}
