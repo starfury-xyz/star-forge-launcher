@@ -1,7 +1,8 @@
 // Stands in for game.exe in inject_test: writes what it was started with to
 // <SC_PROFILE>\fake_game.txt (one "key=value" per line, args in order), then exits. A windowed
 // program, like the game: a console one brings a console host process along, which wine counts
-// in the injector's job.
+// in the injector's job. Also writes <SC_PROFILE>\fake_game_modules.txt: where each DLL the
+// tests inject was loaded ("sc_agent.dll=0x...", or "=no").
 //
 //   --exit=N       exit with code N (default 0)
 //   --leave-child  start a copy of itself that keeps running (like the game's local server),
@@ -12,6 +13,8 @@
 
 #include <shellapi.h>
 
+#include <cstdint>
+#include <cstdio>
 #include <string>
 
 #include "common/file.hpp"
@@ -54,6 +57,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
     }
     sf::write_file(profile + L"\\fake_game.txt", out);
+    std::string mods;
+    for (const wchar_t* dll : {L"sc_agent.dll", L"zero_low.dll"}) {
+        char at[32] = "no";
+        if (HMODULE m = GetModuleHandleW(dll)) std::snprintf(at, sizeof at, "0x%llx", (unsigned long long)(uintptr_t)m);
+        mods += sf::utf8(dll) + "=" + at + "\n";
+    }
+    sf::write_file(profile + L"\\fake_game_modules.txt", mods);
     LocalFree(argv);
     return code;
 }

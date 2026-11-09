@@ -1,9 +1,10 @@
-// Port of star-forge crates/sc-inject/src/main.rs, the parts that start and wait for the game.
-// The injection itself (inject() in the Rust) comes in step 6b.
+// Port of star-forge crates/sc-inject/src/main.rs.
 
 #include "inject/inject.hpp"
 
 #include <windows.h>
+
+#include <tlhelp32.h>
 
 #include <filesystem>
 #include <optional>
@@ -82,6 +83,56 @@ std::wstring exe_dir() {
     DWORD n = GetModuleFileNameW(nullptr, buf, static_cast<DWORD>(std::size(buf)));
     std::wstring p(buf, n);
     return p.substr(0, p.rfind(L'\\'));
+}
+
+// Whether `process` has a module loaded from `path` (compared ignoring case).
+bool has_module(HANDLE process, const std::wstring& path) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(process));
+    if (snap == INVALID_HANDLE_VALUE) return false;
+    MODULEENTRY32W me{};
+    me.dwSize = sizeof me;
+    bool found = false;
+    for (BOOL ok = Module32FirstW(snap, &me); ok && !found; ok = Module32NextW(snap, &me))
+        found = CompareStringOrdinal(me.szExePath, -1, path.c_str(), -1, TRUE) == CSTR_EQUAL;
+    CloseHandle(snap);
+    return found;
+}
+
+// Classic LoadLibraryW injection into the suspended game: write the DLL's path into the game's
+// memory, then start a thread there that calls LoadLibraryW on it. kernel32 is at the same
+// address in every process (per boot), so our LoadLibraryW is the game's too.
+void inject(HANDLE process, const std::wstring& dll) {
+    const size_t bytes = (dll.size() + 1) * sizeof(wchar_t);
+    auto load = reinterpret_cast<LPTHREAD_START_ROUTINE>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "LoadLibraryW")));
+    if (!load) throw Failure(last_error("GetProcAddress(LoadLibraryW)"));
+
+    void* mem = VirtualAllocEx(process, nullptr, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!mem) throw Failure(last_error("VirtualAllocEx"));
+    std::string err;
+    if (!WriteProcessMemory(process, mem, dll.c_str(), bytes, nullptr)) {
+        err = last_error("WriteProcessMemory");
+    } else if (HANDLE thread = CreateRemoteThread(process, nullptr, 0, load, mem, 0, nullptr); !thread) {
+        err = last_error("CreateRemoteThread");
+    } else {
+        DWORD waited = WaitForSingleObject(thread, 30000);
+        DWORD module = 0;
+        GetExitCodeThread(thread, &module);
+        CloseHandle(thread);
+        // The thread's exit code is LoadLibraryW's result cut to its low 32 bits; 0 means it
+        // failed, unless the DLL happened to load at an address like 0x200000000, so then
+        // look in the game's module list before calling it a failure. (The Rust injector
+        // trusts the 0.)
+        if (waited != WAIT_OBJECT_0)
+            err = "timed out waiting for LoadLibraryW in the game";
+        else if (module == 0 && !has_module(process, dll))
+            err = "the agent (" + utf8(dll) +
+                  ") did not load; if the pack has patches, they may not match this game build (see agent.log in "
+                  "the profile folder)";
+    }
+    // Only after the thread is done with it (on a timeout it may still read it later: leave it).
+    if (err.rfind("timed out", 0) != 0) VirtualFreeEx(process, mem, 0, MEM_RELEASE);
+    if (!err.empty()) throw Failure(err);
 }
 
 int launch(const std::vector<std::wstring>& argv) {
@@ -164,9 +215,16 @@ int launch(const std::vector<std::wstring>& argv) {
     if (!job || !AssignProcessToJobObject(job, pi.hProcess))
         say(last_error("job object setup") + "; processes the game starts will outlive it");
 
-    // Step 6b: inject sc_agent.dll here, while the game is still suspended.
-    (void)dll;
-    say("resuming game (no agent yet: injection is step 6b)");
+    try {
+        inject(pi.hProcess, dll);
+    } catch (...) {
+        TerminateProcess(pi.hProcess, 1);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        if (job) CloseHandle(job);
+        throw;
+    }
+    say("agent injected, resuming game");
 
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);

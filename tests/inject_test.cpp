@@ -189,6 +189,50 @@ void no_agent() {
     check(!game_ran(), "the game was not started");
 }
 
+std::string modules() { return test::read_file(g_profile + L"\\fake_game_modules.txt"); }
+
+// The agent (sc_agent.dll next to sc-inject.exe, the default) is in the game before it runs.
+void agent() {
+    test::write_file(g_profile + L"\\pack.json", kPack);
+    std::string printed;
+    check(run_inject(args(), printed) == 0, "exit code 0");
+    check(contains(inject_log(), "agent injected, resuming game\n"), "inject.log: agent injected");
+    check(contains(modules(), "sc_agent.dll=0x"), "the agent was loaded in the game when its code ran");
+    std::printf("  %s", modules().c_str());
+    const std::string log = test::read_file(g_profile + L"\\agent.log");
+    check(contains(log, " loaded into " + sf::utf8(g_game) + "\n"), "agent.log: loaded into fake_game.exe");
+    check(contains(log, "file hooks installed\n"), "agent.log: the agent ran to the end");
+}
+
+// An agent that refuses to start (here: the pack asks for a core patch it doesn't have) stops the
+// game before any of its code runs.
+void agent_refuses() {
+    test::write_file(g_profile + L"\\pack.json", R"({ "format": 1, "id": "x", "name": "T", "version": "1.0.0",
+        "patches": { "core": ["no-such-patch"] } })");
+    refuses("inject.log: the agent did not load", "did not load; if the pack has patches");
+    check(contains(test::read_file(g_profile + L"\\agent.log"), "unknown core patch"), "agent.log says why");
+}
+
+// Something that isn't a DLL at all.
+void not_a_dll() {
+    test::write_file(g_profile + L"\\pack.json", kPack);
+    test::write_file(g_profile + L"\\fake.dll", "not a DLL");
+    std::string printed;
+    check(run_inject(args({L"--dll", g_profile + L"\\fake.dll"}), printed) == 1, "exit 1");
+    check(contains(inject_log(), "did not load"), "inject.log: did not load");
+    check(!game_ran(), "the game was not started");
+}
+
+// zero_low.dll always loads at 0x200000000: LoadLibraryW's result cut to 32 bits is 0 there,
+// which must not be mistaken for a failure.
+void zero_low() {
+    test::write_file(g_profile + L"\\pack.json", kPack);
+    std::string printed;
+    check(run_inject(args({L"--dll", g_win64 + L"\\zero_low.dll"}), printed) == 0, "exit code 0");
+    check(contains(modules(), "zero_low.dll=0x200000000\n"), "zero_low.dll loaded at 0x200000000");
+    check(contains(inject_log(), "agent injected, resuming game\n"), "inject.log: injected");
+}
+
 // A process the game leaves behind (like its local server) is stopped when the game exits.
 void leftover() {
     test::write_file(g_profile + L"\\pack.json", kPack);
@@ -223,6 +267,10 @@ int main(int argc, char** argv) {
     else if (scenario == "bad_server") bad_server();
     else if (scenario == "no_agent") no_agent();
     else if (scenario == "leftover") leftover();
+    else if (scenario == "agent") agent();
+    else if (scenario == "agent_refuses") agent_refuses();
+    else if (scenario == "not_a_dll") not_a_dll();
+    else if (scenario == "zero_low") zero_low();
     else {
         std::printf("unknown scenario \"%s\"\n", scenario.c_str());
         return 2;

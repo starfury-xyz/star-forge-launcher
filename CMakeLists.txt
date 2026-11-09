@@ -149,9 +149,13 @@ if(BUILD_TESTING)
     set_target_properties(fake_game PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
     add_executable(inject_test tests/inject_test.cpp)
     target_link_libraries(inject_test PRIVATE sf_inject shell32)
-    add_dependencies(inject_test sc_inject fake_game)
+    # A DLL that always loads at 0x200000000 (no relocations), where LoadLibraryW's result cut to
+    # 32 bits is 0.
+    add_library(zero_low SHARED tests/zero_low.cpp)
+    target_link_options(zero_low PRIVATE /BASE:0x200000000 /FIXED /DYNAMICBASE:NO)
+    add_dependencies(inject_test sc_inject fake_game sc_agent zero_low)
     set(INJECT_SCENARIOS quoting game_args profile_args unix_paths bad_args bad_profile bad_patchset bad_server
-        no_agent leftover)
+        no_agent leftover agent agent_refuses not_a_dll zero_low)
     foreach(scenario IN LISTS INJECT_SCENARIOS)
         add_test(NAME inject_${scenario} COMMAND inject_test ${scenario})
         list(APPEND INJECT_TESTS inject_${scenario})
