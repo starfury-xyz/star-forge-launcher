@@ -8,7 +8,10 @@
 #include "patch/patchset.hpp"
 #include "patch/sha1.hpp"
 
-#include "test_util.hpp"
+#include <algorithm>
+#include <cstring>
+
+#include "check.hpp"
 
 using namespace sf::patch;
 using test::check;

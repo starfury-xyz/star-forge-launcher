@@ -4,23 +4,27 @@ project(starforge VERSION 0.2.6 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-# Static release CRT (/MT), like the patcher: the agent must not depend on a VC++ redist inside
-# game.exe, and xwin has no debug CRT anyway.
-set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if(NOT WIN32)
-    message(FATAL_ERROR "Configure with -DCMAKE_TOOLCHAIN_FILE=cmake/clang-cl-xwin.cmake (or a preset)")
+# Two kinds of build:
+#  - Windows (win64 presets): everything. The agent and injector only exist here.
+#  - Linux native (linux preset): the portable parts, i.e. the launcher (which runs the game
+#    through Proton) and the patch code it shares, with their tests.
+add_compile_definitions(SF_VERSION="${PROJECT_VERSION}")
+if(WIN32)
+    # Static release CRT (/MT), like the patcher: the agent must not depend on a VC++ redist
+    # inside game.exe, and xwin has no debug CRT anyway.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
+    add_compile_options(/EHsc /W3 /Zi)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        # clang-cl warns about MSVC flags it accepts but ignores; cl.exe would reject this option.
+        add_compile_options(-Wno-unused-command-line-argument)
+    endif()
+    add_link_options(/debug /ignore:4099)
+else()
+    add_compile_options(-Wall -Wextra)
 endif()
-
-add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS
-                        SF_VERSION="${PROJECT_VERSION}")
-add_compile_options(/EHsc /W3 /Zi)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # clang-cl warns about MSVC flags it accepts but ignores; cl.exe would reject this option.
-    add_compile_options(-Wno-unused-command-line-argument)
-endif()
-add_link_options(/debug /ignore:4099)
 
 # The core patchsets (core-patches/*.patchset.toml), embedded as text in sf_core like Rust's
 # include_str!. Re-generated whenever one of them changes.
@@ -36,22 +40,46 @@ file(WRITE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CORE_INC}")
 file(COPY_FILE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
      ONLY_IF_DIFFERENT)
 
-# Code shared by the agent, the tests and (later) the launcher: profile files (port of
-# crates/sc-profile), patchsets (crates/sc-patch) and string helpers. Static, so it's compiled
-# into each binary.
-add_library(sf_core STATIC
-    src/common/file.cpp
-    src/common/text.cpp
-    src/profile/profile.cpp
+# Patchsets (port of crates/sc-patch): portable, shared by the agent and the launcher. Static
+# libraries, so each binary gets its own copy compiled in.
+add_library(sf_patch STATIC
     src/patch/core.cpp
     src/patch/patchset.cpp
     src/patch/sha1.cpp
     src/patch/toml_impl.cpp
 )
-target_include_directories(sf_core PUBLIC src PRIVATE "${CMAKE_BINARY_DIR}/generated")
+target_include_directories(sf_patch PUBLIC src PRIVATE "${CMAKE_BINARY_DIR}/generated")
 # SYSTEM: vendored headers' own warnings aren't ours to fix.
-target_include_directories(sf_core SYSTEM PUBLIC third_party third_party/tomlplusplus)
-target_compile_definitions(sf_core PUBLIC TOML_HEADER_ONLY=0)
+target_include_directories(sf_patch SYSTEM PUBLIC third_party third_party/tomlplusplus)
+target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
+
+# The launcher's machinery (port of crates/sc-launch), portable: finding Steam, Proton and the
+# game, profiles, downloads, packs. The sc-launch CLI and the GUI are thin layers over it.
+add_library(sf_launch STATIC
+    src/launch/env.cpp
+    src/launch/paths.cpp
+    src/launch/steam.cpp
+)
+target_link_libraries(sf_launch PUBLIC sf_patch)
+if(WIN32)
+    target_link_libraries(sf_launch PUBLIC advapi32)  # registry (Steam's install path)
+endif()
+# Development builds can read <repo>/.env at startup (machine-specific STAR_FORGE_* overrides,
+# see star-forge's .env.example). Off by default, so a release never does.
+option(SF_DOTENV "Read ${CMAKE_SOURCE_DIR}/.env at startup (development builds)" OFF)
+if(SF_DOTENV)
+    target_compile_definitions(sf_launch PRIVATE SF_DOTENV_FILE="${CMAKE_SOURCE_DIR}/.env")
+endif()
+
+if(WIN32)
+# Windows code shared by the agent, the injector and their tests: profile files as the agent
+# reads them (port of crates/sc-profile) and Win32 string/file helpers.
+add_library(sf_core STATIC
+    src/common/file.cpp
+    src/common/text.cpp
+    src/profile/profile.cpp
+)
+target_link_libraries(sf_core PUBLIC sf_patch)
 
 # MinHook (C): function hooking for the agent. Same sources the Rust minhook crate builds.
 # hde is its instruction decoder, one per CPU architecture.
@@ -86,11 +114,35 @@ target_link_libraries(sf_inject PUBLIC sf_core)
 add_executable(sc_inject WIN32 src/inject/main.cpp)
 target_link_libraries(sc_inject PRIVATE sf_inject shell32)
 set_target_properties(sc_inject PROPERTIES OUTPUT_NAME sc-inject)  # the name sc-launch looks for
+endif()  # WIN32
 
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
 # set by the toolchain).
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(patch_test tests/patch_test.cpp)
+    target_link_libraries(patch_test PRIVATE sf_patch)
+    # Optional: the real game.exe, to check the core patches against the installed build.
+    # Defaults to the Steam install on Linux (natively, or seen through wine's Z: drive); pass
+    # -DSF_GAME_EXE=C:/.../game.exe on Windows. The test skips that part when it's empty.
+    set(_steam_game "$ENV{HOME}/.local/share/Steam/steamapps/common/star conflict/win64/game.exe")
+    if(NOT DEFINED SF_GAME_EXE AND CMAKE_HOST_UNIX AND EXISTS "${_steam_game}")
+        if(WIN32)
+            string(REPLACE "/" "\\" _z "${_steam_game}")
+            set(SF_GAME_EXE "Z:${_z}")
+        else()
+            set(SF_GAME_EXE "${_steam_game}")
+        endif()
+    endif()
+    set(SF_GAME_EXE "${SF_GAME_EXE}" CACHE STRING "game.exe for patch_test (empty: skip that part)")
+    add_test(NAME patch COMMAND patch_test "${SF_GAME_EXE}")
+
+    add_executable(launch_test tests/launch_test.cpp)
+    target_link_libraries(launch_test PRIVATE sf_launch)
+    add_test(NAME launch COMMAND launch_test)
+    set(PORTABLE_TESTS patch launch)
+
+if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
     add_executable(profile_test tests/profile_test.cpp)
     target_link_libraries(profile_test PRIVATE sf_core)
@@ -98,19 +150,6 @@ if(BUILD_TESTING)
     add_custom_command(TARGET profile_test POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tests/data" "$<TARGET_FILE_DIR:profile_test>/data")
     add_test(NAME profile COMMAND profile_test)
-
-    add_executable(patch_test tests/patch_test.cpp)
-    target_link_libraries(patch_test PRIVATE sf_core)
-    # Optional: the real game.exe, to check the core patches against the installed build.
-    # Defaults to the Steam install on Linux (seen through wine's Z: drive); pass
-    # -DSF_GAME_EXE=C:/.../game.exe on Windows. The test skips that part when it's empty.
-    set(_steam_game "$ENV{HOME}/.local/share/Steam/steamapps/common/star conflict/win64/game.exe")
-    if(NOT DEFINED SF_GAME_EXE AND CMAKE_HOST_UNIX AND EXISTS "${_steam_game}")
-        string(REPLACE "/" "\\" _z "${_steam_game}")
-        set(SF_GAME_EXE "Z:${_z}")
-    endif()
-    set(SF_GAME_EXE "${SF_GAME_EXE}" CACHE STRING "game.exe for patch_test (empty: skip that part)")
-    add_test(NAME patch COMMAND patch_test "${SF_GAME_EXE}")
 
     add_executable(text_test tests/text_test.cpp)
     target_link_libraries(text_test PRIVATE sf_core)
@@ -161,5 +200,8 @@ if(BUILD_TESTING)
         list(APPEND INJECT_TESTS inject_${scenario})
     endforeach()
 
-    set_tests_properties(profile patch text ${AGENT_TESTS} ${INJECT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
+    set(WINDOWS_TESTS profile text ${AGENT_TESTS} ${INJECT_TESTS})
+endif()  # WIN32
+
+    set_tests_properties(${PORTABLE_TESTS} ${WINDOWS_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
 endif()

@@ -25,14 +25,24 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux native (launcher + portable code)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
     }
   ],
   "buildPresets": [
     { "name": "win64", "configurePreset": "win64" },
-    { "name": "win64-msvc", "configurePreset": "win64-msvc" }
+    { "name": "win64-msvc", "configurePreset": "win64-msvc" },
+    { "name": "linux", "configurePreset": "linux" }
   ],
   "testPresets": [
     { "name": "win64", "configurePreset": "win64", "output": { "outputOnFailure": true } },
-    { "name": "win64-msvc", "configurePreset": "win64-msvc", "output": { "outputOnFailure": true } }
+    { "name": "win64-msvc", "configurePreset": "win64-msvc", "output": { "outputOnFailure": true } },
+    { "name": "linux", "configurePreset": "linux", "output": { "outputOnFailure": true } }
   ]
 }
