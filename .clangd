@@ -1,0 +1,4 @@
+# The compile database is in the preset's build dir, which clangd doesn't search by default.
+# Run `cmake --preset win64` once to create it.
+CompileFlags:
+  CompilationDatabase: build/win64

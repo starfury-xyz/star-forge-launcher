@@ -1,0 +1,7 @@
+{
+  // clangd understands the clang-cl cross-compile (via .clangd -> build/win64); the
+  // Microsoft/Cursor C++ engine doesn't, so turn its IntelliSense off to avoid duplicate errors.
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": true
+}
