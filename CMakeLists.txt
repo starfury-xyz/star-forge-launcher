@@ -56,8 +56,10 @@ target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
 # The launcher's machinery (port of crates/sc-launch), portable: finding Steam, Proton and the
 # game, profiles, downloads, packs. The sc-launch CLI and the GUI are thin layers over it.
 add_library(sf_launch STATIC
+    src/crypto/sha256.cpp
     src/launch/env.cpp
     src/launch/launch.cpp
+    src/launch/net.cpp
     src/launch/paths.cpp
     src/launch/process.cpp
     src/launch/profiles.cpp
@@ -66,7 +68,10 @@ add_library(sf_launch STATIC
 )
 target_link_libraries(sf_launch PUBLIC sf_patch)
 if(WIN32)
-    target_link_libraries(sf_launch PUBLIC advapi32)  # registry (Steam's install path)
+    target_link_libraries(sf_launch PUBLIC advapi32 winhttp)  # registry (Steam's install path), downloads
+else()
+    find_package(CURL REQUIRED)
+    target_link_libraries(sf_launch PUBLIC CURL::libcurl)
 endif()
 # Development builds can read <repo>/.env at startup (machine-specific STAR_FORGE_* overrides,
 # see star-forge's .env.example). Off by default, so a release never does.
@@ -170,7 +175,13 @@ if(BUILD_TESTING)
     endif()
     set(SF_PROFILES_DIR "${SF_PROFILES_DIR}" CACHE STRING "Real profiles for pack_test (empty: skip that part)")
     add_test(NAME pack COMMAND pack_test ${SF_PROFILES_DIR})
-    set(PORTABLE_TESTS patch launch setup process pack)
+    add_executable(net_test tests/net_test.cpp)
+    target_link_libraries(net_test PRIVATE sf_launch)
+    if(WIN32)
+        target_link_libraries(net_test PRIVATE ws2_32)
+    endif()
+    add_test(NAME net COMMAND net_test)
+    set(PORTABLE_TESTS patch launch setup process pack net)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
