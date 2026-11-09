@@ -5,6 +5,8 @@
 // every signed one verifies (they were signed by the Rust tool), and that its manifest.json comes
 // out byte for byte the same when read and written again. Only reads them.
 
+#include <algorithm>
+
 #include "crypto/base64.hpp"
 #include "launch/profiles.hpp"
 #include "launch/signing.hpp"
@@ -223,6 +225,14 @@ void packs() {
         test::write_file(d2 / "manifest.sig", sign_bytes(key, t));
         check(error_of([&] { verify(d2, Depth::Full); }) == "manifest.json: format 2 is newer than this launcher understands; update it",
               "a newer manifest format");
+    }
+
+    // Listed sorted, whatever order the folder gives them in.
+    {
+        const fs::path d4 = pack_dir("sorted");
+        for (const char* n : {"q", "b", "z", "a", "m", "c", "y", "k", "d", "x", "e", "w"}) test::write_file(d4 / "resources" / n, n);
+        auto files = pack_files(d4, sf::launch::profiles::read_pack(d4));
+        check(std::is_sorted(files.begin(), files.end()) && files.size() == 15, "pack files come out sorted");
     }
 
     // A files_from pack's game files are signed through its list, not the manifest.
