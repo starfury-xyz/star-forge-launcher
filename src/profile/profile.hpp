@@ -5,6 +5,7 @@
 // address, game args, ...) come when the launcher is ported.
 
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -17,6 +18,8 @@ inline constexpr const wchar_t* kAgentLog = L"agent.log";
 inline constexpr const wchar_t* kPackFile = L"pack.json";     // from the server's pack
 inline constexpr const wchar_t* kLocalFile = L"local.json";   // the player's changes, optional
 inline constexpr unsigned kPackFormat = 1;                    // newest pack format we understand
+// Folder inside a profile that mirrors the game root (files\data\address.cfg, ...).
+inline constexpr const wchar_t* kFilesDir = L"files";
 // Folder inside a profile holding the game's own per-user data for that profile (its
 // %LOCALAPPDATA%): store cache, notes, local server database. Never part of a pack.
 inline constexpr const wchar_t* kStateDir = L"state";
@@ -63,5 +66,14 @@ std::wstring normalize(const std::wstring& path);
 
 // The profile's stand-in for %LOCALAPPDATA%: <profile>\state\AppData\Local.
 std::wstring state_local_appdata(const std::wstring& profile_dir);
+
+// If `full` (an absolute path) lies inside `root`, the path relative to it, e.g.
+// root C:\Games\SC + full C:\games\sc\data\a.cfg -> data\a.cfg (case-insensitive, any slashes).
+// nullopt for anything outside root, root itself, and anything that could escape a profile
+// folder or address a stream: empty parts, ".", "..", or a ':' in a part.
+std::optional<std::wstring> relative_to(const std::wstring& root, const std::wstring& full);
+
+// Path inside the profile that would replace `rel`: <profile>\files\<rel>.
+std::wstring profile_file(const std::wstring& profile_dir, const std::wstring& rel);
 
 }  // namespace sf::profile

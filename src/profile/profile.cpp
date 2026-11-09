@@ -137,4 +137,32 @@ std::wstring state_local_appdata(const std::wstring& profile_dir) {
     return normalize(profile_dir) + L"\\" + kStateDir + L"\\AppData\\Local";
 }
 
+std::optional<std::wstring> relative_to(const std::wstring& root_in, const std::wstring& full_in) {
+    const std::wstring root = normalize(root_in);
+    const std::wstring full = normalize(full_in);
+    if (full.size() <= root.size() + 1) return std::nullopt;  // root itself, or shorter
+    // Same root, ignoring ASCII case (like Rust's eq_ignore_ascii_case; Windows paths are
+    // case-insensitive), followed by a separator: C:\SC2\x isn't inside C:\SC.
+    auto lower = [](wchar_t c) { return c >= L'A' && c <= L'Z' ? wchar_t(c - L'A' + L'a') : c; };
+    for (size_t i = 0; i < root.size(); ++i)
+        if (lower(full[i]) != lower(root[i])) return std::nullopt;
+    if (full[root.size()] != L'\\') return std::nullopt;
+
+    std::wstring rel = full.substr(root.size() + 1);
+    // Every part must be a plain name.
+    size_t start = 0;
+    while (true) {
+        size_t end = rel.find(L'\\', start);
+        std::wstring part = rel.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        if (part.empty() || part == L"." || part == L".." || part.find(L':') != std::wstring::npos) return std::nullopt;
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    return rel;
+}
+
+std::wstring profile_file(const std::wstring& profile_dir, const std::wstring& rel) {
+    return normalize(profile_dir) + L"\\" + kFilesDir + L"\\" + rel;
+}
+
 }  // namespace sf::profile

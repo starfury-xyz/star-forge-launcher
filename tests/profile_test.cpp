@@ -107,5 +107,21 @@ int main() {
     check(normalize(L"\\??\\C:\\a") == L"C:\\a", "normalize drops \\??\\");
     check(normalize(L"C:\\") == L"C:\\", "normalize keeps a drive root");
 
+    // relative_to / profile_file: the same cases as sc-profile's Rust tests.
+    const std::wstring ROOT = L"Z:\\home\\user\\.local\\share\\Steam\\steamapps\\common\\star conflict";
+    auto rel = [&](const std::wstring& full) { return relative_to(ROOT, full).value_or(L"(none)"); };
+    check(rel(ROOT + L"\\data\\address.cfg") == L"data\\address.cfg", "relative_to: inside root");
+    check(rel(L"z:/HOME/user/.local/share/Steam/steamapps/common/Star Conflict//data/ui/x.lua") == L"data\\ui\\x.lua",
+          "relative_to: case-insensitive and slash tolerant");
+    check(rel(L"\\\\?\\" + ROOT + L"\\data\\a.cfg") == L"data\\a.cfg", "relative_to: \\\\?\\ prefix");
+    check(rel(L"Z:\\home\\user\\other\\data\\a.cfg") == L"(none)", "relative_to: outside root");
+    check(rel(ROOT + L"2\\data\\a.cfg") == L"(none)", "relative_to: sibling folder with the same prefix");
+    check(rel(ROOT) == L"(none)" && rel(ROOT + L"\\") == L"(none)", "relative_to: root itself");
+    check(rel(ROOT + L"\\data\\..\\..\\x") == L"(none)", "relative_to: rejects ..");
+    check(rel(ROOT + L"\\data\\.\\x") == L"(none)", "relative_to: rejects .");
+    check(rel(ROOT + L"\\data\\x.cfg:evil") == L"(none)", "relative_to: rejects streams (:)");
+    check(profile_file(L"Z:\\p\\", L"data\\a.cfg") == L"Z:\\p\\files\\data\\a.cfg", "profile_file joins");
+    check(state_local_appdata(L"Z:\\p\\") == L"Z:\\p\\state\\AppData\\Local", "state_local_appdata joins");
+
     return test::failures ? 1 : 0;
 }
