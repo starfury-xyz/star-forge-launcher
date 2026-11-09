@@ -199,7 +199,7 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
               profiles::read_local(profiles / "my-server").shared_game_data,
           "edited in pack.json, game data choice in local.json");
     check(!fs::exists(profiles / "my-server/files/data/address.cfg"), "a generated address.cfg goes with the server");
-    test::write_file(profiles / "my-server-2/files/data/address.cfg", "// mine\nset net_masterServerAddress \"a:1\"\n");
+    test::write_file(profiles / "my-server-2/files/data/address.cfg", "set net_masterServerAddress \"a:1\"\n// mine\n");
     call("save_profile", input("my-server-2", "Two", "", false, true));
     check(fs::exists(profiles / "my-server-2/files/data/address.cfg"), "a hand-written one stays");
     check(error_of("save_profile", input("nope", "X", "", false, true)) == "profile \"nope\" does not exist", "editing a missing profile");
@@ -277,6 +277,16 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     check(contains(error_of("check_pack_update", {{"id", "gui-pack"}}), u + "/pack.json"), "a failed check is an error");
     check(call("check_pack_updates").empty(), "... but quiet in the background check");
 
+    // A review lists 50 files at most; a pack kept with the launcher says so instead of its folder.
+    const fs::path many = base / "data" / "staging" / "samples" / "many";
+    test::write_file(many / "pack.json", R"({"format":1,"id":"org.example.many","name":"Many","version":"1.0.0"})");
+    for (int i = 0; i < 51; ++i) test::write_file(many / "files/data" / ("f" + std::to_string(100 + i) + ".lua"), "x");
+    review = call("inspect_pack", {{"source", ustr(many)}});
+    check(review["fileCount"] == 51 && review["files"].size() == 50 && review["files"][49] == "data/f149.lua",
+          "a review shows the first 50 files");
+    check(review["origin"] == "Included with STAR FORGE", "a bundled sample's origin: " + review["origin"].dump());
+    call("discard_pack", {{"token", review["token"]}});
+
     // A pack whose game files come from a list: the download window.
     srv.put("/a.cfg", "listed");
     srv.put("/list.txt", "SCMOD1\ndata/a.cfg\t" + sha("listed") + "\t" + u + "/a.cfg\n");
@@ -295,6 +305,18 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
           "download events: " + kinds);
     check(test::read_file(profiles / "dl/files/data/a.cfg") == "listed", "the file arrived");
 
+    // Nothing to download: no window. Each download has its own id.
+    {
+        sf::gui::Backend::Session s(b, "update", "X");
+        remote::FileList list;
+        remote::SyncEvent plan(remote::SyncEvent::Plan);
+        plan.list = &list;
+        host.clear();
+        s.report(plan);
+        s.report(remote::SyncEvent(remote::SyncEvent::File));
+        s.finish(std::nullopt);
+        check(host.of("download-progress").empty(), "nothing to download: no events");
+    }
     // Cancelling a download.
     {
         sf::gui::Backend::Session s(b, "update", "X");
@@ -305,6 +327,7 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         host.clear();
         s.report(plan);
         const uint64_t id = host.of("download-progress").at(0)["id"];
+        check(id != dl[0]["id"].get<uint64_t>(), "downloads have their own ids");
         call("cancel_download", {{"id", id}});
         check(s.report(remote::SyncEvent(remote::SyncEvent::File)) == std::string(sf::gui::kCancelled) && s.cancelled(),
               "a cancelled download stops at its next step");
@@ -343,8 +366,10 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
 
     // Deleting forgets the pack's key and the selection.
     call("update_launcher_preferences", {{"update", {{"key", "selectedProfile"}, {"value", "dl"}}}});
+    trust::pin("org.example.dl", signing::SecretKey::generate().public_key());
     call("delete_profile", {{"id", "dl"}});
     check(!fs::exists(profiles / "dl") && b.prefs().selected_profile.empty(), "delete: gone, selection cleared");
+    check(!trust::pinned("org.example.dl"), "delete: the pack's key is forgotten");
     check(error_of("delete_profile", {{"id", "../data"}}) == "profile \"../data\" does not exist", "delete: only profiles");
 }
 
@@ -396,6 +421,8 @@ void game(const fs::path& base) {
     fs::permissions(run, fs::perms::owner_all);
     test::write_file(library / "steamapps/compatdata/212070/config_info", "v1\n" + ustr(proton) + "/files/share/fonts/\n");
     fs::create_directories(library / "steamapps/compatdata/212070/pfx");
+    test::write_file(library / "steamapps/appmanifest_212070.acf",
+                     "\"AppState\"\n{\n\t\"appid\"\t\t\"212070\"\n\t\"installdir\"\t\t\"star conflict\"\n}");
 #endif
     test::write_file(library / "appcache/librarycache/212070_library_hero.jpg", kJpeg);
     test::write_file(library / "appcache/librarycache/212070/abc/logo.png", kPng);
@@ -419,6 +446,11 @@ void game(const fs::path& base) {
     check(art["hero"] == "data:image/jpeg;base64,/9j/4GpwZWc=" && art["logo"] == "data:image/png;base64,iVBORw0KGgpwbmc=",
           "Steam's artwork: " + art.dump());
 #endif
+    // The player's folder: images that are too big or not images are passed over.
+    test::write_file(base / "bad/big.png", kPng + std::string(8 << 20, 'x'));
+    test::write_file(base / "bad/fake.png", "not an image");
+    call("update_launcher_preferences", {{"update", {{"key", "backgroundFolder"}, {"value", ustr(base / "bad")}}}});
+    check(call("get_artwork")["hero"] == art["hero"], "no usable image in the folder: Steam's art");
     test::write_file(base / "bg/b.PNG", kPng);
     test::write_file(base / "bg/a.txt", "x");
     call("update_launcher_preferences", {{"update", {{"key", "backgroundFolder"}, {"value", ustr(base / "bg")}}}});
@@ -435,6 +467,7 @@ void game(const fs::path& base) {
     call("update_launcher_preferences", {{"update", {{"key", "selectedProfile"}, {"value", "my-server"}}}});
     call("update_launcher_preferences", {{"update", {{"key", "launchBehavior"}, {"value", "tray"}}}});
     test::write_file(profiles / "my-server/inject.log", "error: boom\n");
+    const json pending = call("inspect_pack", {{"source", ustr(base / "pk")}});
     host.clear();
     call("perform_launcher_action", {{"action", "launch"}});
     b.wait_idle();
@@ -445,6 +478,8 @@ void game(const fs::path& base) {
     check(error_of("finish_setup", {{"gameDir", ""}, {"profilesDir", "/x"}, {"moveProfiles", false}}) ==
               "Close the game before changing the setup.",
           "no setup changes while it runs");
+    check(error_of("install_pack", {{"token", pending["token"]}}) == "Close the game before installing or updating a pack.",
+          "no installs while it runs");
 #endif
     check(wait_for([] { return phase() == "ready"; }), "the game exits");
     check(wait_for([] { return host.restored >= 2; }) && host.hidden == 1, "the launcher went to the tray and comes back");
@@ -470,7 +505,17 @@ void setup(const fs::path& base) {
     b.wait_idle();
     check(fs::exists(moved / "my-server/pack.json") && !fs::exists(old / "my-server"), "profiles moved");
     check(profiles::default_profiles_dir() == moved && call("get_setup_info")["profilesDir"] == ustr(moved), "the new folder is used");
+#ifndef _WIN32
+    check(b.prefs().setup_done && b.prefs().game_directory.empty(), "setup done; the folder Steam knows isn't stored");
+#else
     check(b.prefs().setup_done && b.prefs().game_directory == ustr(game), "setup done, the chosen game folder kept");
+#endif
+    const fs::path other = base / "game2";
+    test::write_file(other / "win64" / "game.exe", "MZ");
+    fs::create_directories(other / "data");
+    call("finish_setup", {{"gameDir", ustr(other)}, {"profilesDir", ustr(moved)}, {"moveProfiles", false}});
+    b.wait_idle();
+    check(b.prefs().game_directory == ustr(other), "another game folder is stored");
     call("finish_setup", {{"gameDir", ""}, {"profilesDir", ustr(old)}, {"moveProfiles", false}});
     b.wait_idle();
     check(profiles::default_profiles_dir() == old && fs::exists(moved / "my-server") && b.prefs().game_directory.empty(),
