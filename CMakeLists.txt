@@ -55,7 +55,16 @@ target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
 
 # The launcher's machinery (port of crates/sc-launch), portable: finding Steam, Proton and the
 # game, profiles, downloads, packs. The sc-launch CLI and the GUI are thin layers over it.
+# Monocypher (C): ed25519 for pack signatures (RFC 8032, with its optional SHA-512 part).
+add_library(monocypher STATIC
+    third_party/monocypher/monocypher.c
+    third_party/monocypher/monocypher-ed25519.c
+)
+target_include_directories(monocypher SYSTEM PUBLIC third_party/monocypher)
+
 add_library(sf_launch STATIC
+    src/crypto/base64.cpp
+    src/crypto/random.cpp
     src/crypto/sha256.cpp
     src/launch/env.cpp
     src/launch/launch.cpp
@@ -63,12 +72,13 @@ add_library(sf_launch STATIC
     src/launch/paths.cpp
     src/launch/process.cpp
     src/launch/profiles.cpp
+    src/launch/signing.cpp
     src/launch/steam.cpp
     src/pack/pack.cpp
 )
-target_link_libraries(sf_launch PUBLIC sf_patch)
+target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher)
 if(WIN32)
-    target_link_libraries(sf_launch PUBLIC advapi32 winhttp)  # registry (Steam's install path), downloads
+    target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt)  # registry (Steam's install path), downloads, random
 else()
     find_package(CURL REQUIRED)
     target_link_libraries(sf_launch PUBLIC CURL::libcurl)
@@ -181,7 +191,10 @@ if(BUILD_TESTING)
         target_link_libraries(net_test PRIVATE ws2_32)
     endif()
     add_test(NAME net COMMAND net_test)
-    set(PORTABLE_TESTS patch launch setup process pack net)
+    add_executable(signing_test tests/signing_test.cpp)
+    target_link_libraries(signing_test PRIVATE sf_launch)
+    add_test(NAME signing COMMAND signing_test ${SF_PROFILES_DIR})
+    set(PORTABLE_TESTS patch launch setup process pack net signing)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
