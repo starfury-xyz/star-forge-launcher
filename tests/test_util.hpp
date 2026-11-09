@@ -14,6 +14,17 @@ namespace test {
 
 inline int failures = 0;
 
+// Call first in main(). A crash (e.g. a hook jumping into an unloaded DLL) then prints CRASH and
+// exits with code 3 at once, instead of wine opening its debugger and the test hanging.
+inline void exit_on_crash() {
+    SetUnhandledExceptionFilter([](EXCEPTION_POINTERS* e) -> LONG {
+        std::printf("CRASH: exception 0x%08lx at %p (%d checks failed before it)\n", e->ExceptionRecord->ExceptionCode,
+                    e->ExceptionRecord->ExceptionAddress, failures);
+        std::fflush(stdout);
+        ExitProcess(3);
+    });
+}
+
 inline void check(bool ok, const char* what) {
     std::printf("%s: %s\n", ok ? "PASS" : "FAIL", what);
     if (!ok) ++failures;

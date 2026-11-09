@@ -24,6 +24,7 @@ static std::string local_appdata_a(int csidl) {
 }
 
 int main() {
+    test::exit_on_crash();
     const std::wstring win64 = test::exe_dir();
     const std::wstring game_root = test::dir_of(win64);
     const std::wstring dll = win64 + L"\\sc_agent.dll";
@@ -75,7 +76,9 @@ int main() {
     check(!contains(text, "game data folder"), "shared game data: no folder redirect");
     check(local_appdata_w(CSIDL_LOCAL_APPDATA) == real_local, "shared game data: %LOCALAPPDATA% unchanged");
     check(GetFileAttributesW(state.c_str()) == INVALID_FILE_ATTRIBUTES, "shared game data: no state folder");
-    if (m) FreeLibrary(m);
+    // Unload only if the agent hooked nothing: a hook left pointing into an unloaded DLL
+    // crashes the next caller.
+    if (m && !contains(text, "game data folder")) FreeLibrary(m);
     if (test::failures) std::printf("--- agent.log ---\n%s", text.c_str());
 
     // 4. The default, own game data: %LOCALAPPDATA% becomes <profile>\state\AppData\Local, for

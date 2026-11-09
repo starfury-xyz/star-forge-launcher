@@ -7,6 +7,7 @@
 using test::check;
 
 int main() {
+    test::exit_on_crash();
     check(sf::utf8(L"caf\u00e9") == "caf\xc3\xa9", "utf8 encodes non-ASCII");
     check(sf::wide("caf\xc3\xa9") == L"caf\u00e9", "wide decodes UTF-8");
     check(sf::utf8(sf::wide("\xd0\x9f\xd1\x80\xd0\xb8")) == "\xd0\x9f\xd1\x80\xd0\xb8", "utf8/wide round trip (Cyrillic)");

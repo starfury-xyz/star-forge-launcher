@@ -83,5 +83,6 @@ if(BUILD_TESTING)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
     add_test(NAME agent_load COMMAND load_test)
-    set_tests_properties(profile text agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
+    # TIMEOUT: a hung test fails after 60 s instead of blocking ctest.
+    set_tests_properties(profile text agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
 endif()

@@ -35,6 +35,7 @@ std::string load_error(const std::wstring& dir) {
 }  // namespace
 
 int main() {
+    test::exit_on_crash();
     g_root = test::exe_dir() + L"\\profile_test_data";
     CreateDirectoryW(g_root.c_str(), nullptr);
 
