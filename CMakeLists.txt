@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(starforge VERSION 0.2.5 LANGUAGES C CXX)
+project(starforge VERSION 0.2.6 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
