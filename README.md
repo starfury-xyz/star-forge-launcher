@@ -6,12 +6,24 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 | Component | Rust source | Status |
 |---|---|---|
 | `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings, patches + plugins: done |
-| `sf_core` (shared lib: profile files, text helpers) | `crates/sc-profile` | what the agent and injector need (no full pack validation yet) |
-| `sf_core` patchsets (format, check/apply, core patches) | `crates/sc-patch` | done |
+| `sf_core` (Windows lib: profile files as the agent reads them, Win32 helpers) | `crates/sc-profile` | what the agent and injector need (no full pack validation yet) |
+| `sf_patch` (portable lib: patchset format, check/apply, core patches) | `crates/sc-patch` | done |
+| `sf_launch` (portable lib: the launcher) | `crates/sc-launch` | env overrides, Steam/game detection done; Proton, profiles, downloads, packs, CLI to do |
 | `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | done (also double-checks a 0 LoadLibraryW result, which the Rust trusts) |
 
 Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
 or on Windows (MSVC), and both use the same CMake project and the same `build/win64/` folder.
+
+The launcher also runs **natively on Linux** (it starts the game through Proton), so its
+portable code (`sf_patch`, `sf_launch`) has a third preset, `linux`, built with the system
+compiler into `build/linux/`:
+
+```sh
+cmake --preset linux && cmake --build --preset linux && ctest --preset linux
+```
+
+Portable code keeps text as UTF-8 `std::string` and converts paths only with
+`sf::launch::upath()` / `ustr()` (see `src/launch/paths.hpp` for why).
 
 ## Developer setup: Linux
 
@@ -34,7 +46,7 @@ downloads. Tests run under wine.
    ```
    This downloads Microsoft's packages and implies accepting their license. To use another
    location, pass `-DXWIN=/path/to/xwin` or set the `XWIN` env var.
-3. Build and test:
+3. Build and test (Windows build, plus the `linux` preset above for the launcher):
    ```sh
    cmake --preset win64
    cmake --build --preset win64     # -> build/win64/sc_agent.dll

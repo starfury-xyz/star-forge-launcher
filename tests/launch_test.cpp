@@ -139,6 +139,11 @@ int main() {
         check(app && steam::is_game_dir(app->dir), "is_game_dir: win64/game.exe + data/");
         check(!steam::find_app(libs, "1"), "find_app: an app that isn't installed");
         check(!steam::is_game_dir(lib2), "is_game_dir: some other folder");
+        fs::create_directories(tmp / "data_only" / "data");
+        check(!steam::is_game_dir(tmp / "data_only"), "is_game_dir: data/ alone isn't enough");
+        fs::create_directories(tmp / "exe_only" / "win64");
+        test::write_file(tmp / "exe_only" / "win64" / "game.exe", "MZ");
+        check(!steam::is_game_dir(tmp / "exe_only"), "is_game_dir: win64/game.exe alone isn't enough");
     }
 
     return test::failures ? 1 : 0;
