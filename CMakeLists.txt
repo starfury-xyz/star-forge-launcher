@@ -57,7 +57,9 @@ target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
 # game, profiles, downloads, packs. The sc-launch CLI and the GUI are thin layers over it.
 add_library(sf_launch STATIC
     src/launch/env.cpp
+    src/launch/launch.cpp
     src/launch/paths.cpp
+    src/launch/process.cpp
     src/launch/steam.cpp
 )
 target_link_libraries(sf_launch PUBLIC sf_patch)
@@ -140,7 +142,18 @@ if(BUILD_TESTING)
     add_executable(launch_test tests/launch_test.cpp)
     target_link_libraries(launch_test PRIVATE sf_launch)
     add_test(NAME launch COMMAND launch_test)
-    set(PORTABLE_TESTS patch launch)
+    add_executable(setup_test tests/setup_test.cpp)
+    target_link_libraries(setup_test PRIVATE sf_launch)
+    add_test(NAME setup COMMAND setup_test)
+    add_executable(proc_helper tests/proc_helper.cpp)
+    if(WIN32)
+        target_link_libraries(proc_helper PRIVATE shell32)
+    endif()
+    add_executable(process_test tests/process_test.cpp)
+    target_link_libraries(process_test PRIVATE sf_launch)
+    add_dependencies(process_test proc_helper)
+    add_test(NAME process COMMAND process_test $<TARGET_FILE:proc_helper>)
+    set(PORTABLE_TESTS patch launch setup process)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
