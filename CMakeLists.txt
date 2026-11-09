@@ -32,12 +32,29 @@ target_include_directories(sf_core PUBLIC src)
 # SYSTEM: vendored headers' own warnings aren't ours to fix.
 target_include_directories(sf_core SYSTEM PUBLIC third_party)
 
+# MinHook (C): function hooking for the agent. Same sources the Rust minhook crate builds.
+# hde is its instruction decoder, one per CPU architecture.
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(MINHOOK_HDE third_party/minhook/src/hde/hde64.c)
+else()
+    set(MINHOOK_HDE third_party/minhook/src/hde/hde32.c)
+endif()
+add_library(minhook STATIC
+    third_party/minhook/src/buffer.c
+    third_party/minhook/src/hook.c
+    third_party/minhook/src/trampoline.c
+    ${MINHOOK_HDE}
+)
+target_include_directories(minhook SYSTEM PUBLIC third_party/minhook/include)
+
 # Agent DLL injected into game.exe (port of crates/sc-agent).
 add_library(sc_agent SHARED
     src/agent/dllmain.cpp
     src/agent/agent.cpp
+    src/agent/folders.cpp
+    src/agent/hook.cpp
 )
-target_link_libraries(sc_agent PRIVATE sf_core kernel32)
+target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
 
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
 # set by the toolchain).
@@ -51,8 +68,12 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tests/data" "$<TARGET_FILE_DIR:profile_test>/data")
     add_test(NAME profile COMMAND profile_test)
 
+    add_executable(text_test tests/text_test.cpp)
+    target_link_libraries(text_test PRIVATE sf_core)
+    add_test(NAME text COMMAND text_test)
+
     add_executable(load_test tests/load_test.cpp)
-    target_link_libraries(load_test PRIVATE sf_core)
+    target_link_libraries(load_test PRIVATE sf_core shell32)
     set_target_properties(load_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
     # Copy the agent next to the test on every build where it changed (a POST_BUILD step on
     # load_test would only run when the test itself relinks, leaving a stale DLL).
@@ -62,5 +83,5 @@ if(BUILD_TESTING)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
     add_test(NAME agent_load COMMAND load_test)
-    set_tests_properties(profile agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
+    set_tests_properties(profile text agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
 endif()

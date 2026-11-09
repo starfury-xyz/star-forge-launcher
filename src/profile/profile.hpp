@@ -17,6 +17,9 @@ inline constexpr const wchar_t* kAgentLog = L"agent.log";
 inline constexpr const wchar_t* kPackFile = L"pack.json";     // from the server's pack
 inline constexpr const wchar_t* kLocalFile = L"local.json";   // the player's changes, optional
 inline constexpr unsigned kPackFormat = 1;                    // newest pack format we understand
+// Folder inside a profile holding the game's own per-user data for that profile (its
+// %LOCALAPPDATA%): store cache, notes, local server database. Never part of a pack.
+inline constexpr const wchar_t* kStateDir = L"state";
 
 // `patches.method` in pack.json. Only "inject" exists today.
 enum class PatchMethod { Inject };
@@ -57,5 +60,8 @@ Profile load(const std::wstring& dir);
 // Same as sc_profile::normalize: drops a \\?\ or \??\ prefix, turns / into \, collapses
 // repeated separators and strips trailing ones (keeping a drive root like C:\).
 std::wstring normalize(const std::wstring& path);
+
+// The profile's stand-in for %LOCALAPPDATA%: <profile>\state\AppData\Local.
+std::wstring state_local_appdata(const std::wstring& profile_dir);
 
 }  // namespace sf::profile

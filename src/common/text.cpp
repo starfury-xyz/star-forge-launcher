@@ -20,6 +20,16 @@ std::wstring wide(const std::string& s) {
     return w;
 }
 
+std::optional<std::string> ansi(const std::wstring& w) {
+    if (w.empty()) return std::string();
+    BOOL lossy = FALSE;
+    int n = WideCharToMultiByte(CP_ACP, 0, w.data(), static_cast<int>(w.size()), nullptr, 0, nullptr, &lossy);
+    if (n <= 0 || lossy) return std::nullopt;
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_ACP, 0, w.data(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+    return s;
+}
+
 std::string win_error(unsigned long code) {
     wchar_t* buf = nullptr;
     DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,

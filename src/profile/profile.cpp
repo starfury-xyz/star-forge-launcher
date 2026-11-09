@@ -133,4 +133,8 @@ std::wstring normalize(const std::wstring& path) {
     return out;
 }
 
+std::wstring state_local_appdata(const std::wstring& profile_dir) {
+    return normalize(profile_dir) + L"\\" + kStateDir + L"\\AppData\\Local";
+}
+
 }  // namespace sf::profile
