@@ -78,6 +78,12 @@ Profile load(const std::wstring& dir) {
         profile.name = get_or<std::string>(pack, "name", "");
         if (trim(profile.name).empty()) throw Error("name is empty");
         if (auto it = pack.find("patches"); it != pack.end() && !it->is_null()) profile.patches = parse_patches(*it);
+        if (auto it = pack.find("server"); it != pack.end() && !it->is_null()) {
+            if (auto a = get_or<std::string>(*it, "address", ""); !a.empty()) profile.server = a;
+            profile.local_server = get_or<bool>(*it, "local", false);
+        }
+        if (auto it = pack.find("game"); it != pack.end() && !it->is_null())
+            profile.args = get_or<std::vector<std::string>>(*it, "args", {});
     } catch (const std::exception& e) {
         throw Error(std::string("pack.json: ") + e.what());
     }
@@ -94,10 +100,42 @@ Profile load(const std::wstring& dir) {
         profile.trace_files = get_or<bool>(local, "trace_files", false);
         profile.patch_choices = get_or<decltype(profile.patch_choices)>(local, "patches", {});
         profile.own_game_data = !get_or<bool>(local, "shared_game_data", false);
+        // "server": "" means "no server" (unlike a missing key, which keeps the pack's).
+        if (auto it = local.find("server"); it != local.end() && !it->is_null()) {
+            std::string s = it->get<std::string>();
+            profile.server = s.empty() ? std::nullopt : std::optional<std::string>(s);
+        }
+        profile.local_server = get_or<bool>(local, "local_server", profile.local_server);
+        for (auto& a : get_or<std::vector<std::string>>(local, "args", {})) profile.args.push_back(a);
     } catch (const std::exception& e) {
         throw Error(std::string("local.json: ") + e.what());
     }
     return profile;
+}
+
+std::vector<std::string> game_args(const Profile& profile) {
+    std::vector<std::string> out;
+    if (profile.local_server) out.push_back("-launchLocalServer");
+    out.insert(out.end(), profile.args.begin(), profile.args.end());
+    return out;
+}
+
+std::optional<std::string> address_cfg(const Profile& profile) {
+    if (!profile.server) return std::nullopt;
+    const std::string& s = *profile.server;
+    bool ok = !s.empty() && s.size() <= 255 && std::all_of(s.begin(), s.end(), [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' ||
+               c == ':' || c == '_';
+    });
+    if (!ok) throw Error("server \"" + s + "\": expected host:port");
+    return "set net_masterServerAddress \"" + s + "\"\r\n";
+}
+
+std::wstring windows_path_from_arg(const std::wstring& arg) {
+    if (arg.empty() || arg[0] != L'/') return arg;
+    std::wstring out = L"Z:" + arg;
+    std::replace(out.begin(), out.end(), L'/', L'\\');
+    return out;
 }
 
 std::wstring normalize(const std::wstring& path) {

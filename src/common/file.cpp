@@ -25,4 +25,14 @@ unsigned long read_file(const std::wstring& path, std::string& out) {
     return err;
 }
 
+unsigned long write_file(const std::wstring& path, const std::string& data) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                           nullptr);
+    if (h == INVALID_HANDLE_VALUE) return GetLastError();
+    DWORD n = 0;
+    DWORD err = WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &n, nullptr) ? 0 : GetLastError();
+    CloseHandle(h);
+    return err;
+}
+
 }  // namespace sf

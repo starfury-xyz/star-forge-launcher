@@ -81,6 +81,33 @@ int main() {
         check(p.name == "Test Pack", "blank local.json name falls back to the pack's");
     }
 
+    // Server and game args (what sc-inject uses), as in sc-profile's pack_parses_and_merges_local_settings.
+    {
+        const std::string pack = R"({ "format": 1, "id": "x", "name": "Starfury", "version": "1.2.0",
+            "server": { "address": "starfury.xyz:3801" }, "game": { "args": ["-a"] } })";
+        Profile plain = load(make(L"server", pack));
+        check(game_args(plain) == std::vector<std::string>{"-a"}, "game args from the pack");
+        check(address_cfg(plain) == std::string("set net_masterServerAddress \"starfury.xyz:3801\"\r\n"),
+              "address.cfg for the pack's server");
+        Profile mine = load(make(L"server_local", pack, R"({ "server": "", "local_server": true, "args": ["-b"] })"));
+        check(!mine.server && !address_cfg(mine), "local.json server \"\": no server, no address.cfg");
+        check(game_args(mine) == std::vector<std::string>{"-launchLocalServer", "-a", "-b"},
+              "local server flag first, then the pack's args, then local.json's");
+        Profile other = load(make(L"server_other", pack, R"({ "server": "127.0.0.1:3801" })"));
+        check(other.server == std::string("127.0.0.1:3801"), "local.json server replaces the pack's");
+        Profile bad = load(make(L"server_bad", pack, R"({ "server": "a\" ; quit" })"));
+        try {
+            address_cfg(bad);
+            check(false, "unsafe server address rejected");
+        } catch (const Error& e) {
+            check(test::contains(e.what(), "expected host:port"), "unsafe server address rejected");
+        }
+    }
+
+    // windows_path_from_arg: wine's Z: drive.
+    check(windows_path_from_arg(L"/home/a/game.exe") == L"Z:\\home\\a\\game.exe", "unix path -> Z:");
+    check(windows_path_from_arg(L"C:\\Games\\x") == L"C:\\Games\\x", "windows path unchanged");
+
     // Errors: each one names the file, so agent.log says what to fix.
     {
         std::string e = load_error(make(L"no_pack", ""));

@@ -79,6 +79,14 @@ add_library(sc_agent SHARED
 )
 target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
 
+# Injector (port of crates/sc-inject): starts game.exe suspended with the agent in it. The logic
+# is a library so tests can call quote() directly; WIN32 = a windowed program (no console window).
+add_library(sf_inject STATIC src/inject/inject.cpp)
+target_link_libraries(sf_inject PUBLIC sf_core)
+add_executable(sc_inject WIN32 src/inject/main.cpp)
+target_link_libraries(sc_inject PRIVATE sf_inject shell32)
+set_target_properties(sc_inject PROPERTIES OUTPUT_NAME sc-inject)  # the name sc-launch looks for
+
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
 # set by the toolchain).
 include(CTest)
@@ -134,5 +142,20 @@ if(BUILD_TESTING)
         list(APPEND AGENT_TESTS agent_${scenario})
     endforeach()
     # TIMEOUT: a hung test fails after 60 s instead of blocking ctest.
-    set_tests_properties(profile patch text ${AGENT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
+
+    # sc-inject on a fake game that writes down how it was started.
+    add_executable(fake_game WIN32 tests/fake_game.cpp)
+    target_link_libraries(fake_game PRIVATE sf_core shell32)
+    set_target_properties(fake_game PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
+    add_executable(inject_test tests/inject_test.cpp)
+    target_link_libraries(inject_test PRIVATE sf_inject shell32)
+    add_dependencies(inject_test sc_inject fake_game)
+    set(INJECT_SCENARIOS quoting game_args profile_args unix_paths bad_args bad_profile bad_patchset bad_server
+        no_agent leftover)
+    foreach(scenario IN LISTS INJECT_SCENARIOS)
+        add_test(NAME inject_${scenario} COMMAND inject_test ${scenario})
+        list(APPEND INJECT_TESTS inject_${scenario})
+    endforeach()
+
+    set_tests_properties(profile patch text ${AGENT_TESTS} ${INJECT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
 endif()

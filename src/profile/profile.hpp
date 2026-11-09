@@ -1,8 +1,8 @@
 #pragma once
 
 // Port of star-forge crates/sc-profile: the profile folder's files and how they combine.
-// Only what the agent needs so far; the launcher-side parts (full pack validation, server
-// address, game args, ...) come when the launcher is ported.
+// What the agent and the injector need; the launcher-side parts (full pack validation,
+// installing, updates, ...) come when the launcher is ported.
 
 #include <map>
 #include <optional>
@@ -15,6 +15,7 @@ namespace sf::profile {
 // Names shared with the Rust launcher; they must match sc_profile's constants.
 inline constexpr const wchar_t* kProfileEnv = L"SC_PROFILE";  // env var sc-launch sets for the agent
 inline constexpr const wchar_t* kAgentLog = L"agent.log";
+inline constexpr const wchar_t* kInjectLog = L"inject.log";  // what sc-inject says
 inline constexpr const wchar_t* kPackFile = L"pack.json";     // from the server's pack
 inline constexpr const wchar_t* kLocalFile = L"local.json";   // the player's changes, optional
 inline constexpr unsigned kPackFormat = 1;                    // newest pack format we understand
@@ -45,6 +46,11 @@ struct Patches {
 // A profile ready to launch: pack.json with the player's local.json applied.
 struct Profile {
     std::string name;   // local.json name if set (and not blank), else the pack's
+    // Master server host:port (local.json "server", else pack.json server.address); none
+    // when neither sets one, or local.json sets "".
+    std::optional<std::string> server;
+    bool local_server = false;      // also start the game's bundled local server
+    std::vector<std::string> args;  // extra game arguments: the pack's, then local.json's
     bool trace_files = false;
     Patches patches;
     // The player's patch choices from local.json: module -> patch id -> on.
@@ -61,6 +67,18 @@ struct Error : std::runtime_error {
 
 // Reads pack.json and the optional local.json from a profile folder. Throws Error.
 Profile load(const std::wstring& dir);
+
+// The game's command-line arguments for this profile: -launchLocalServer if wanted, then args.
+std::vector<std::string> game_args(const Profile& profile);
+
+// Contents of the address.cfg the injector writes (files\data\address.cfg), pointing the game
+// at the profile's server; nullopt when there is no server. Throws Error for an address that
+// isn't host:port-shaped (it ends up inside a game config file, so only safe characters).
+std::optional<std::string> address_cfg(const Profile& profile);
+
+// Same as sc_profile::windows_path_from_arg: under wine a Unix absolute path (/home/...) is
+// reachable through the Z: drive, so "/home/a" -> "Z:\home\a". Anything else is unchanged.
+std::wstring windows_path_from_arg(const std::wstring& arg);
 
 // Same as sc_profile::normalize: drops a \\?\ or \??\ prefix, turns / into \, collapses
 // repeated separators and strips trailing ones (keeping a drive root like C:\).

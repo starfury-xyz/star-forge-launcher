@@ -8,4 +8,7 @@ namespace sf {
 // so callers can tell a missing file from other failures (sf::win_error turns it into text).
 unsigned long read_file(const std::wstring& path, std::string& out);
 
+// Creates or replaces a file with `data`. Returns 0, or the Win32 error code.
+unsigned long write_file(const std::wstring& path, const std::string& data);
+
 }  // namespace sf
