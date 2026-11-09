@@ -1,0 +1,39 @@
+# STAR FORGE core patches for game.exe. Packs turn them on by id
+# (pack.json: "patches": {"core": ["loose-before-packed"]}); see docs/client-patches.md.
+# Each write lists the bytes it replaces, and the whole set is tied to the
+# game.exe builds it was checked against by sha1, so nothing is applied to a build
+# it wasn't made for. 1.99.0.167301 has the same bytes at every write and the
+# same data table globals the cave reads, so both builds are listed.
+format = 1
+exe = "game.exe"
+sha1 = [
+    "b30106fa113523a323573c0d79c300f29b503296", # 1.99.0.167293
+    "165397c745536e6c610e3d831e17ca128f5cbc2b", # 1.99.0.167301
+]
+build = "1.99.0.167293, 1.99.0.167301"
+image_base = 0x140000000
+
+[[patch]]
+id = "loose-before-packed"
+title = "Loose files override packed ones"
+description = """The data file table (FUN_14001aee0) is sorted by name, then by signed id, and
+deduplicated keeping the first entry. Packed files have negative ids, so a file inside a .pak
+always beat a loose file at the same path. This calls a cave (core-patches/loose_first.s, in .code slack)
+instead of the sort: it flips bit 31 of every id, sorts, and flips them back, which turns the
+tie-break into an unsigned compare: loose files first (in datasource order), then packs (in their
+original order). The stock install has no loose file that duplicates a packed one, so only a
+profile's files/ overrides change anything."""
+default = true
+optional = false
+
+[[patch.write]]
+va = 0x140a40670
+orig = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+bytes = "4889c84839d0730d817008000000804883c010ebee4883ec28e8a2f05dff4883c428488b05771454008b157914540048c1e2044801c24839d0730d817008000000804883c010ebeec3"
+comment = "loose_first.s (assembled at 0x140a40670)"
+
+[[patch.write]]
+va = 0x14001b307
+orig = "e824440000"
+bytes = "e86453a200"
+comment = "call loose_first instead of the sort at 0x14001f730"

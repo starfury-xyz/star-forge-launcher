@@ -22,15 +22,35 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 add_link_options(/debug /ignore:4099)
 
+# The core patchsets (core-patches/*.patchset.toml), embedded as text in sf_core like Rust's
+# include_str!. Re-generated whenever one of them changes.
+file(GLOB CORE_PATCHSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/core-patches/*.patchset.toml")
+set(CORE_INC "")
+foreach(f IN LISTS CORE_PATCHSETS)
+    get_filename_component(name "${f}" NAME)
+    file(READ "${f}" text)
+    string(APPEND CORE_INC "{\"core/${name}\", R\"sfcore(${text})sfcore\"},\n")
+endforeach()
+# Written via a temp file and copied only when different, so core.cpp only rebuilds on a real change.
+file(WRITE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CORE_INC}")
+file(COPY_FILE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
+     ONLY_IF_DIFFERENT)
+
 # Code shared by the agent, the tests and (later) the launcher: profile files (port of
-# crates/sc-profile) and string helpers. Static, so it's compiled into each binary.
+# crates/sc-profile), patchsets (crates/sc-patch) and string helpers. Static, so it's compiled
+# into each binary.
 add_library(sf_core STATIC
     src/common/text.cpp
     src/profile/profile.cpp
+    src/patch/core.cpp
+    src/patch/patchset.cpp
+    src/patch/sha1.cpp
+    src/patch/toml_impl.cpp
 )
-target_include_directories(sf_core PUBLIC src)
+target_include_directories(sf_core PUBLIC src PRIVATE "${CMAKE_BINARY_DIR}/generated")
 # SYSTEM: vendored headers' own warnings aren't ours to fix.
-target_include_directories(sf_core SYSTEM PUBLIC third_party)
+target_include_directories(sf_core SYSTEM PUBLIC third_party third_party/tomlplusplus)
+target_compile_definitions(sf_core PUBLIC TOML_HEADER_ONLY=0)
 
 # MinHook (C): function hooking for the agent. Same sources the Rust minhook crate builds.
 # hde is its instruction decoder, one per CPU architecture.
@@ -69,6 +89,19 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tests/data" "$<TARGET_FILE_DIR:profile_test>/data")
     add_test(NAME profile COMMAND profile_test)
 
+    add_executable(patch_test tests/patch_test.cpp)
+    target_link_libraries(patch_test PRIVATE sf_core)
+    # Optional: the real game.exe, to check the core patches against the installed build.
+    # Defaults to the Steam install on Linux (seen through wine's Z: drive); pass
+    # -DSF_GAME_EXE=C:/.../game.exe on Windows. The test skips that part when it's empty.
+    set(_steam_game "$ENV{HOME}/.local/share/Steam/steamapps/common/star conflict/win64/game.exe")
+    if(NOT DEFINED SF_GAME_EXE AND CMAKE_HOST_UNIX AND EXISTS "${_steam_game}")
+        string(REPLACE "/" "\\" _z "${_steam_game}")
+        set(SF_GAME_EXE "Z:${_z}")
+    endif()
+    set(SF_GAME_EXE "${SF_GAME_EXE}" CACHE STRING "game.exe for patch_test (empty: skip that part)")
+    add_test(NAME patch COMMAND patch_test "${SF_GAME_EXE}")
+
     add_executable(text_test tests/text_test.cpp)
     target_link_libraries(text_test PRIVATE sf_core)
     add_test(NAME text COMMAND text_test)
@@ -90,5 +123,5 @@ if(BUILD_TESTING)
         list(APPEND AGENT_TESTS agent_${scenario})
     endforeach()
     # TIMEOUT: a hung test fails after 60 s instead of blocking ctest.
-    set_tests_properties(profile text ${AGENT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
+    set_tests_properties(profile patch text ${AGENT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
 endif()
