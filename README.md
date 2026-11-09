@@ -8,7 +8,8 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 | `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings, patches + plugins: done |
 | `sf_core` (Windows lib: profile files as the agent reads them, Win32 helpers) | `crates/sc-profile` | what the agent and injector need (no full pack validation yet) |
 | `sf_patch` (portable lib: patchset format, check/apply, core patches) | `crates/sc-patch` | done |
-| `sf_launch` (portable lib: the launcher) | `crates/sc-launch` | env overrides, Steam/game/Proton detection, sc-inject command, process spawning, pack model (`src/pack`), profiles + settings sync, downloads (libcurl / WinHTTP), pack signatures (ed25519 via vendored Monocypher; verifies Rust-signed packs) done; pack install + trust, remote file lists, CLI to do |
+| `sf_launch` (portable lib: the launcher) | `crates/sc-launch` | done: env overrides, Steam/game/Proton detection, sc-inject command, process spawning, pack model (`src/pack`), profiles + settings sync, downloads (libcurl / WinHTTP), pack signatures (ed25519 via vendored Monocypher; verifies Rust-signed packs), trust pins, pack install/update (zip via vendored miniz), remote file lists + sync, launch prep |
+| `sc-launch` (CLI) | `crates/sc-launch/src/main.rs` | done; same output as the Rust tool, `pack sign`/`pack files` byte-identical. Ran the real game end to end with C++ sc-launch + sc-inject + agent |
 | `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | done (also double-checks a 0 LoadLibraryW result, which the Rust trusts) |
 
 Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
