@@ -8,27 +8,74 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 | `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap only (env, log, game root) |
 | injector | `crates/sc-inject` | not started |
 
-## Toolchain (Linux)
+Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
+or on Windows (MSVC), and both use the same CMake project and the same `build/win64/` folder.
 
-Same as `star-forge/patcher`: `clang-cl` + `lld-link` (clang/lld packages) cross-compiling
-against the MSVC CRT + Windows SDK fetched by [cargo-xwin](https://github.com/rust-cross/cargo-xwin),
-plus `cmake` (3.21+) and `ninja`.
+## Developer setup: Linux
 
-- x86_64 (default; game.exe and the launcher) uses cargo-xwin's default cache,
-  `~/.cache/cargo-xwin/xwin`, which the Rust launcher build already fills.
-- x86 (`-DSF_ARCH=x86`, server exes) uses `~/.cache/star-forge-xwin/xwin`, the patcher's cache.
-- Override either one with `-DXWIN=/path/to/xwin` or the `XWIN` env var.
+Same toolchain as `star-forge/patcher`: `clang-cl` + `lld-link` cross-compiling against
+Microsoft's CRT + Windows SDK, which [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
+downloads. Tests run under wine.
 
-xwin has no debug CRT, so every build uses the static release CRT (`/MT`).
+1. Tools:
+   ```sh
+   sudo pacman -S clang lld cmake ninja wine           # Arch / CachyOS
+   sudo apt install clang lld cmake ninja-build wine   # Debian / Ubuntu
+   ```
+   `clang-cl`, `lld-link` and `llvm-rc` must be on `PATH` under those names (some distros
+   only install versioned names like `clang-cl-18`; symlink them if so).
+2. Microsoft CRT + SDK (one-time). If you've built the Rust launcher you already have them in
+   `~/.cache/cargo-xwin/xwin`. Otherwise:
+   ```sh
+   cargo install cargo-xwin
+   cargo xwin env --target x86_64-pc-windows-msvc >/dev/null
+   ```
+   This downloads Microsoft's packages and implies accepting their license. To use another
+   location, pass `-DXWIN=/path/to/xwin` or set the `XWIN` env var.
+3. Build and test:
+   ```sh
+   cmake --preset win64
+   cmake --build --preset win64     # -> build/win64/sc_agent.dll
+   ctest --preset win64             # runs the test exes under wine
+   ```
 
-## Build
+xwin has no debug CRT, so every build uses the static release CRT (`/MT`), on both platforms.
 
-```sh
-cmake --preset win64
-cmake --build --preset win64     # -> build/win64/sc_agent.dll
-ctest --preset win64             # runs tests/*.exe under wine
-```
+## Developer setup: Windows
 
-`tests/load_test.cpp` plays game.exe: it lives in `build/win64/fakegame/win64/`, loads
-`sc_agent.dll` like sc-inject would, and checks `agent.log`. Every ported step adds checks there
-(or a new test) so each one is proven to work before the next starts.
+> The Windows preset has not been verified on a Windows machine yet. If something below
+> fails, report the exact error so we can fix the preset or these notes.
+
+1. Install **Visual Studio 2022** (Community is fine) or **Build Tools for Visual Studio 2022**
+   with the **"Desktop development with C++"** workload. It includes MSVC, the Windows SDK,
+   CMake and Ninja; nothing else is needed (no wine, no xwin).
+2. Clone with Git for Windows. `.gitattributes` keeps files LF, so `core.autocrlf` doesn't
+   matter.
+3. Build and test, either way:
+   - **Command line:** open **"x64 Native Tools Command Prompt for VS 2022"** (the normal
+     prompt doesn't have `cl` on `PATH`), then:
+     ```bat
+     cmake --preset win64-msvc
+     cmake --build --preset win64-msvc
+     ctest --preset win64-msvc
+     ```
+   - **Visual Studio:** *File → Open → Folder…*, pick the repo. It reads `CMakePresets.json`;
+     choose **win64-msvc** in the toolbar, then *Build → Build All* and *Test → Run CTests*.
+   - **Cursor / VS Code:** see the next section. CMake Tools sets up the MSVC environment by
+     itself; pick the **win64-msvc** preset when it asks.
+
+## Editor (all platforms)
+
+- **Cursor / VS Code:** the repo's `.vscode/` turns on CMake presets and turns off the
+  built-in C++ IntelliSense (it doesn't understand the cross-compile and shows false
+  errors). Install the recommended **clangd** and **CMake Tools** extensions when prompted.
+- **clangd** (Cursor, VS Code, Kate, Neovim, Zed, ...): `.clangd` points it at
+  `build/win64/compile_commands.json`, which configuring creates. Files show bogus errors
+  (`windows.h` not found, ...) until you've configured once. After that, restart clangd.
+- **Visual Studio:** works from the presets as-is; ignore `.clangd` and `.vscode/`.
+
+## Tests
+
+`tests/load_test.cpp` plays game.exe: it's built into `build/win64/fakegame/win64/`, loads
+`sc_agent.dll` like sc-inject would, and checks `agent.log`. Every ported step adds checks
+there (or a new test) so each one is proven to work before the next starts.

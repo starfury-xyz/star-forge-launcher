@@ -1,0 +1,5 @@
+# Mixed Linux/Windows team: LF in the repo and working tree, whatever core.autocrlf says.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.dll binary
+*.exe binary

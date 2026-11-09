@@ -3,29 +3,36 @@
   "configurePresets": [
     {
       "name": "win64",
-      "displayName": "Windows x64 (clang-cl + xwin)",
+      "displayName": "Windows x64 (Linux: clang-cl + xwin)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/win64",
       "toolchainFile": "${sourceDir}/cmake/clang-cl-xwin.cmake",
       "cacheVariables": {
         "SF_ARCH": "x86_64",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-      }
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "win64-msvc",
+      "displayName": "Windows x64 (Windows: MSVC)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win64",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     }
   ],
   "buildPresets": [
-    {
-      "name": "win64",
-      "configurePreset": "win64"
-    }
+    { "name": "win64", "configurePreset": "win64" },
+    { "name": "win64-msvc", "configurePreset": "win64-msvc" }
   ],
   "testPresets": [
-    {
-      "name": "win64",
-      "configurePreset": "win64",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
+    { "name": "win64", "configurePreset": "win64", "output": { "outputOnFailure": true } },
+    { "name": "win64-msvc", "configurePreset": "win64-msvc", "output": { "outputOnFailure": true } }
   ]
 }

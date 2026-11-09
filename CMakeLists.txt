@@ -15,7 +15,11 @@ endif()
 
 add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS
                         SF_VERSION="${PROJECT_VERSION}")
-add_compile_options(/EHsc /W3 /Zi -Wno-unused-command-line-argument)
+add_compile_options(/EHsc /W3 /Zi)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # clang-cl warns about MSVC flags it accepts but ignores; cl.exe would reject this option.
+    add_compile_options(-Wno-unused-command-line-argument)
+endif()
 add_link_options(/debug /ignore:4099)
 
 # Agent DLL injected into game.exe (port of crates/sc-agent).
@@ -26,7 +30,8 @@ add_library(sc_agent SHARED
 target_include_directories(sc_agent PRIVATE src)
 target_link_libraries(sc_agent PRIVATE kernel32)
 
-# Tests run the Windows binaries under wine (CMAKE_CROSSCOMPILING_EMULATOR, set by the toolchain).
+# Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
+# set by the toolchain).
 include(CTest)
 if(BUILD_TESTING)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
