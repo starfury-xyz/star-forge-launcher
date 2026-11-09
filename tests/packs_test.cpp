@@ -232,12 +232,23 @@ void signed_packs(const fs::path& base) {
     const std::string name = install(staged, profiles_dir, sf::launch::remote::quiet).name;
     const fs::path dir = profiles_dir / name;
     check(test::read_file(dir / "pack.json") == before, "a signed pack.json stays byte for byte");
-    check(verify_installed(dir) == Trust{Trust::Pinned, key.public_key(), ""}, "pinned on install");
+    check(trust::pinned("org.example.signed") == key.public_key(), "pinned on install");
+    check(verify_installed(dir) == Trust{Trust::Pinned, key.public_key(), ""}, "verifies as pinned");
 
     check(contains(error_of([&] { stage(make("v2-other", "1.1.0", &other), profiles_dir); }), "was signed with key"),
           "another key can't update it");
     check(contains(error_of([&] { stage(make("v2-unsigned", "1.1.0", nullptr), profiles_dir); }), "normally signed"),
           "nor an unsigned copy");
+    // Checked again at install: another install may have pinned a key since the review.
+    {
+        const fs::path other_profiles = base / "other-profiles";
+        trust::unpin("org.example.signed");
+        Staged first = stage(make("w1", "1.0.0", &other), other_profiles);  // reviewed while nothing was pinned
+        trust::pin("org.example.signed", key.public_key());
+        check(contains(error_of([&] { install(first, other_profiles, sf::launch::remote::quiet); }), "was signed with key"),
+              "a key pinned since the review is refused at install");
+        check(!fs::exists(first.dir), "... and the staging folder goes");
+    }
     Staged v2 = stage(make("v2", "1.1.0", &key), profiles_dir);
     check(v2.trust == Trust{Trust::Pinned, key.public_key(), ""}, "the same key: pinned");
     install(v2, profiles_dir, sf::launch::remote::quiet);
@@ -263,6 +274,7 @@ void urls(const fs::path& base) {
     const std::string zip = zip_bytes({{"pack.json", manifest("2.0.0")}, {"files/data/a.cfg", "zipped"}});
     srv.put("/p.zip", zip);
     srv.put("/pack.json", manifest("2.0.0", R"(,"download":{"url":")" + u + R"(/p.zip","sha256":")" + sha(zip) + R"("})"));
+    srv.put("/upper.json", manifest("2.0.0", R"(,"download":{"url":")" + u + R"(/p.zip","sha256":")" + upper(sha(zip)) + R"("})"));
     srv.put("/bad.json", manifest("2.0.0", R"(,"download":{"url":")" + u + R"(/p.zip","sha256":")" + sha("other") + R"("})"));
     srv.put("/wrong.json", manifest("3.0.0", R"(,"download":{"url":")" + u + R"(/p.zip","sha256":")" + sha(zip) + R"("})"));
     srv.put("/list.txt", "SCMOD1\ndata/l.cfg\t" + sha("listed") + "\t" + u + "/l.cfg\n");
@@ -288,6 +300,7 @@ void urls(const fs::path& base) {
     const std::string name = install(p, profiles_dir, sf::launch::remote::quiet).name;
     check(test::read_file(profiles_dir / name / "files/data/a.cfg") == "zipped", "installed from the zip");
 
+    check(error_of([&] { discard(stage(from("/upper.json"), profiles_dir)); }).empty(), "an upper-case SHA-256 is fine");
     check(error_of([&] { stage(from("/bad.json"), profiles_dir); }) ==
               u + "/p.zip: download does not match the SHA-256 in " + u + "/bad.json; not installing it",
           "a zip that doesn't match its SHA-256");
