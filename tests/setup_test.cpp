@@ -48,6 +48,7 @@ int main() {
     check(library_of(upath("/s/lib/steamapps/common/star conflict")) == upath("/s/lib"), "library_of");
     check(library_of(upath("/s/lib/SteamApps/Common/star conflict/")) == upath("/s/lib"), "library_of: any case, trailing /");
     check(!library_of(upath("/games/star conflict")), "library_of: not in a library");
+    check(!library_of(upath("/s/lib/other/common/star conflict")), "library_of: common/ must be inside steamapps/");
 
     // SteamFix
     check(SteamFix{SteamFix::Kind::InstallGame}.url() == "steam://install/212070", "fix url: install game");
@@ -232,6 +233,17 @@ int main() {
         check(threw, "command: a shared path with ':' is refused");
 #endif
         check(c.cwd == game / "win64", "command: runs in the game's win64 folder");
+        // The profile path is made absolute and canonical first: "..", a relative path or a
+        // symlink would otherwise reach the injector (and wine) as given.
+        fs::create_directories(tmp / "profiles/other");
+        bool canonical = false;
+        try {
+            Command c2 = command(s, tmp / "profiles/other/../starfury", {});
+            canonical = std::find(c2.args.begin(), c2.args.end(), tool_path(fs::canonical(profile))) != c2.args.end();
+        } catch (const std::exception& e) {
+            std::printf("  %s\n", e.what());
+        }
+        check(canonical, "command: the profile path is canonical");
         bool missing = false;
         try {
             command(s, tmp / "no-such-profile", {});
