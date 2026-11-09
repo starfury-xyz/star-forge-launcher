@@ -53,6 +53,7 @@ add_library(sc_agent SHARED
     src/agent/agent.cpp
     src/agent/folders.cpp
     src/agent/hook.cpp
+    src/agent/hooks.cpp
 )
 target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
 
@@ -82,7 +83,12 @@ if(BUILD_TESTING)
         DEPENDS sc_agent)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
-    add_test(NAME agent_load COMMAND load_test)
+    # One process per scenario (see load_test.cpp).
+    set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect)
+    foreach(scenario IN LISTS AGENT_SCENARIOS)
+        add_test(NAME agent_${scenario} COMMAND load_test ${scenario})
+        list(APPEND AGENT_TESTS agent_${scenario})
+    endforeach()
     # TIMEOUT: a hung test fails after 60 s instead of blocking ctest.
-    set_tests_properties(profile text agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
+    set_tests_properties(profile text ${AGENT_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60)
 endif()

@@ -30,6 +30,16 @@ std::optional<std::string> ansi(const std::wstring& w) {
     return s;
 }
 
+std::optional<std::wstring> from_ansi(const char* s) {
+    if (!s) return std::nullopt;
+    int n = MultiByteToWideChar(CP_ACP, 0, s, -1, nullptr, 0);  // -1: up to the NUL, counting it
+    if (n <= 0) return std::nullopt;
+    std::wstring w(n, L'\0');
+    MultiByteToWideChar(CP_ACP, 0, s, -1, w.data(), n);
+    w.pop_back();  // the NUL
+    return w;
+}
+
 std::string win_error(unsigned long code) {
     wchar_t* buf = nullptr;
     DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,

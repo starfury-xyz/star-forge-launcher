@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -50,17 +51,10 @@ inline void write_file(const std::wstring& path, const std::string& text) {
     f << text;
 }
 
-// Fresh empty folder (removes the files a previous run left in it; tests don't nest folders).
+// Fresh empty folder: whatever a previous run left there is deleted.
 inline std::wstring fresh_dir(const std::wstring& path) {
-    CreateDirectoryW(path.c_str(), nullptr);
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((path + L"\\*").c_str(), &fd);
-    if (h != INVALID_HANDLE_VALUE) {
-        do {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((path + L"\\" + fd.cFileName).c_str());
-        } while (FindNextFileW(h, &fd));
-        FindClose(h);
-    }
+    std::filesystem::remove_all(path);
+    std::filesystem::create_directories(path);
     return path;
 }
 
