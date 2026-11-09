@@ -179,6 +179,14 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) {
             check(contains(e.what(), "local.json: unknown field `bogus`"), "a bad local.json is an error");
         }
+        // local.json's server isn't part of the pack's validation, but load() still refuses it.
+        test::write_file(root / "one" / "local.json", R"({"server": "a\" ; quit"})");
+        try {
+            profiles::load(root / "one");
+            check(false, "an unsafe local.json server is refused on load");
+        } catch (const Error& e) {
+            check(contains(e.what(), "expected host:port"), "an unsafe local.json server is refused on load");
+        }
         fs::remove(root / "one" / "local.json");
         try {
             profiles::load(root / "missing");
