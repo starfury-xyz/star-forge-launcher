@@ -5,7 +5,7 @@ crates in `star-forge` stay the reference until each part here is a drop-in repl
 
 | Component | Rust source | Status |
 |---|---|---|
-| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap + profile loading; patches, folders, file hooks to do |
+| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders; patches + file hooks to do |
 | `sf_core` (shared lib: profile files, text helpers) | `crates/sc-profile` | what the agent needs (no full pack validation yet) |
 | injector | `crates/sc-inject` | not started |
 
