@@ -67,3 +67,9 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 # included, links the static release one.
 set(CMAKE_TRY_COMPILE_CONFIGURATION Release)
 set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+
+# ctest runs the built .exe files under wine.
+find_program(WINE_EXECUTABLE wine)
+if(WINE_EXECUTABLE)
+    set(CMAKE_CROSSCOMPILING_EMULATOR "${WINE_EXECUTABLE}")
+endif()

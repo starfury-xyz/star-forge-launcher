@@ -25,3 +25,20 @@ add_library(sc_agent SHARED
 )
 target_include_directories(sc_agent PRIVATE src)
 target_link_libraries(sc_agent PRIVATE kernel32)
+
+# Tests run the Windows binaries under wine (CMAKE_CROSSCOMPILING_EMULATOR, set by the toolchain).
+include(CTest)
+if(BUILD_TESTING)
+    set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
+    add_executable(load_test tests/load_test.cpp)
+    set_target_properties(load_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
+    # Copy the agent next to the test on every build where it changed (a POST_BUILD step on
+    # load_test would only run when the test itself relinks, leaving a stale DLL).
+    add_custom_command(OUTPUT "${FAKEGAME}/sc_agent.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:sc_agent> "${FAKEGAME}/sc_agent.dll"
+        DEPENDS sc_agent)
+    add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
+    add_dependencies(load_test fakegame_agent)
+    add_test(NAME agent_load COMMAND load_test)
+    set_tests_properties(agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
+endif()

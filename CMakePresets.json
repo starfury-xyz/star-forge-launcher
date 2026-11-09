@@ -7,10 +7,25 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/win64",
       "toolchainFile": "${sourceDir}/cmake/clang-cl-xwin.cmake",
-      "cacheVariables": { "SF_ARCH": "x86_64", "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+      "cacheVariables": {
+        "SF_ARCH": "x86_64",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "win64", "configurePreset": "win64" }
+    {
+      "name": "win64",
+      "configurePreset": "win64"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "win64",
+      "configurePreset": "win64",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
   ]
 }

@@ -26,4 +26,9 @@ xwin has no debug CRT, so every build uses the static release CRT (`/MT`).
 ```sh
 cmake --preset win64
 cmake --build --preset win64     # -> build/win64/sc_agent.dll
+ctest --preset win64             # runs tests/*.exe under wine
 ```
+
+`tests/load_test.cpp` plays game.exe: it lives in `build/win64/fakegame/win64/`, loads
+`sc_agent.dll` like sc-inject would, and checks `agent.log`. Every ported step adds checks there
+(or a new test) so each one is proven to work before the next starts.
