@@ -22,20 +22,37 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 add_link_options(/debug /ignore:4099)
 
+# Code shared by the agent, the tests and (later) the launcher: profile files (port of
+# crates/sc-profile) and string helpers. Static, so it's compiled into each binary.
+add_library(sf_core STATIC
+    src/common/text.cpp
+    src/profile/profile.cpp
+)
+target_include_directories(sf_core PUBLIC src)
+# SYSTEM: vendored headers' own warnings aren't ours to fix.
+target_include_directories(sf_core SYSTEM PUBLIC third_party)
+
 # Agent DLL injected into game.exe (port of crates/sc-agent).
 add_library(sc_agent SHARED
     src/agent/dllmain.cpp
     src/agent/agent.cpp
 )
-target_include_directories(sc_agent PRIVATE src)
-target_link_libraries(sc_agent PRIVATE kernel32)
+target_link_libraries(sc_agent PRIVATE sf_core kernel32)
 
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
 # set by the toolchain).
 include(CTest)
 if(BUILD_TESTING)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
+    add_executable(profile_test tests/profile_test.cpp)
+    target_link_libraries(profile_test PRIVATE sf_core)
+    # Sample packs the test reads, next to the exe.
+    add_custom_command(TARGET profile_test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tests/data" "$<TARGET_FILE_DIR:profile_test>/data")
+    add_test(NAME profile COMMAND profile_test)
+
     add_executable(load_test tests/load_test.cpp)
+    target_link_libraries(load_test PRIVATE sf_core)
     set_target_properties(load_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
     # Copy the agent next to the test on every build where it changed (a POST_BUILD step on
     # load_test would only run when the test itself relinks, leaving a stale DLL).
@@ -45,5 +62,5 @@ if(BUILD_TESTING)
     add_custom_target(fakegame_agent ALL DEPENDS "${FAKEGAME}/sc_agent.dll")
     add_dependencies(load_test fakegame_agent)
     add_test(NAME agent_load COMMAND load_test)
-    set_tests_properties(agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
+    set_tests_properties(profile agent_load PROPERTIES ENVIRONMENT "WINEDEBUG=-all")
 endif()
