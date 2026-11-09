@@ -116,6 +116,9 @@ int main() {
     check(rel(L"\\\\?\\" + ROOT + L"\\data\\a.cfg") == L"data\\a.cfg", "relative_to: \\\\?\\ prefix");
     check(rel(L"Z:\\home\\user\\other\\data\\a.cfg") == L"(none)", "relative_to: outside root");
     check(rel(ROOT + L"2\\data\\a.cfg") == L"(none)", "relative_to: sibling folder with the same prefix");
+    // Not in the Rust tests: with a one-character suffix the separator check isn't the only
+    // thing rejecting it (the rest starts with an empty part), so test a longer one too.
+    check(rel(ROOT + L"_backup\\data\\a.cfg") == L"(none)", "relative_to: sibling folder with a longer suffix");
     check(rel(ROOT) == L"(none)" && rel(ROOT + L"\\") == L"(none)", "relative_to: root itself");
     check(rel(ROOT + L"\\data\\..\\..\\x") == L"(none)", "relative_to: rejects ..");
     check(rel(ROOT + L"\\data\\.\\x") == L"(none)", "relative_to: rejects .");
