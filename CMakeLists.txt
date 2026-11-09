@@ -79,6 +79,7 @@ add_library(sf_launch STATIC
     src/launch/net.cpp
     src/launch/packs.cpp
     src/launch/patching.cpp
+    src/launch/prepare.cpp
     src/launch/paths.cpp
     src/launch/process.cpp
     src/launch/profiles.cpp
@@ -221,7 +222,13 @@ if(BUILD_TESTING)
         target_link_libraries(packs_test PRIVATE ws2_32)
     endif()
     add_test(NAME packs COMMAND packs_test)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs)
+    add_executable(prepare_test tests/prepare_test.cpp)
+    target_link_libraries(prepare_test PRIVATE sf_launch)
+    if(WIN32)
+        target_link_libraries(prepare_test PRIVATE ws2_32)
+    endif()
+    add_test(NAME prepare COMMAND prepare_test)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")
