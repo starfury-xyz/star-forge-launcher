@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json",
+  "format": 1,
+  "id": "org.starforge.samples.sc-classic-europe",
+  "name": "Star Conflict Classic Europe",
+  "version": "1.0.0",
+  "description": "Star Conflict Europe, an unofficial community server. Its client files (login screen, recipes, shop, limits) come from the server's own file list, so they stay in step with the server. Sample profile kept with STAR FORGE; not made by the server team.",
+  "links": {
+    "website": "https://star-conflict-eu-server.mak17.workers.dev/",
+    "source": "https://github.com/TheMakaf/star-conflict-public-europe"
+  },
+  "server": { "address": "57.131.200.242:3801", "local": false },
+  "files_from": { "scmod1": "https://star-conflict-eu-server.mak17.workers.dev/sc-mods/manifest.txt" },
+  "update": { "url": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/samples/sc-classic-europe/pack.json" }
+}

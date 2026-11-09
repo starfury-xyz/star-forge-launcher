@@ -111,6 +111,20 @@ if(WIN32)
 endif()
 set_target_properties(sc_launch PROPERTIES OUTPUT_NAME sc-launch)
 
+# The launcher's backend (port of star-forge gui/src-tauri): the commands its HTML/JS interface
+# invokes, without the window, so it builds and tests anywhere.
+file(READ samples/sc-classic-europe/pack.json SF_SAMPLE_SC_CLASSIC_EUROPE)
+configure_file(src/gui/samples.hpp.in ${CMAKE_BINARY_DIR}/generated/gui/samples.hpp @ONLY)
+add_library(sf_gui STATIC
+    src/gui/backend.cpp
+    src/gui/game.cpp
+    src/gui/prefs.cpp
+    src/gui/profiles.cpp
+    src/gui/setup.cpp
+)
+target_include_directories(sf_gui PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(sf_gui PUBLIC sf_launch)
+
 if(WIN32)
 # Windows code shared by the agent, the injector and their tests: profile files as the agent
 # reads them (port of crates/sc-profile) and Win32 string/file helpers.
@@ -236,11 +250,18 @@ if(BUILD_TESTING)
         target_link_libraries(prepare_test PRIVATE ws2_32)
     endif()
     add_test(NAME prepare COMMAND prepare_test)
+    add_executable(gui_test tests/gui_test.cpp)
+    target_link_libraries(gui_test PRIVATE sf_gui)
+    if(WIN32)
+        target_link_libraries(gui_test PRIVATE ws2_32)
+    endif()
+    target_compile_definitions(gui_test PRIVATE SF_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME gui COMMAND gui_test $<TARGET_FILE:proc_helper>)
     add_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE sf_launch)
     add_dependencies(cli_test sc_launch)
     add_test(NAME cli COMMAND cli_test $<TARGET_FILE:sc_launch>)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli gui)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")

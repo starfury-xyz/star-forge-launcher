@@ -104,15 +104,20 @@ inline bool boolean(const json& v) {
     if (!v.is_boolean()) invalid(v, "a boolean");
     return v.get<bool>();
 }
+// Whole numbers that aren't negative. Parsed JSON stores them unsigned; json values built in
+// C++ (json{{"id", 1}}) store them signed.
+inline bool non_negative(const json& v) {
+    return v.is_number_unsigned() || (v.is_number_integer() && v.get<int64_t>() >= 0);
+}
 inline uint32_t u32(const json& v) {
-    if (!v.is_number_unsigned() || v.get<uint64_t>() > 0xffffffffull) {
+    if (!non_negative(v) || v.get<uint64_t>() > 0xffffffffull) {
         if (v.is_number_integer()) throw Error("invalid value: integer `" + v.dump() + "`, expected u32");
         invalid(v, "u32");
     }
     return static_cast<uint32_t>(v.get<uint64_t>());
 }
 inline uint64_t u64(const json& v) {
-    if (!v.is_number_unsigned()) {
+    if (!non_negative(v)) {
         if (v.is_number_integer()) throw Error("invalid value: integer `" + v.dump() + "`, expected u64");
         invalid(v, "u64");
     }
