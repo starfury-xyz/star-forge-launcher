@@ -122,6 +122,7 @@ jobs:
           mkdir -p out cli
           cp build/appimage/*.AppImage build/packages/*.deb build/packages/*.rpm build/packages/*-setup.exe out/
           cp build/linux/sc-launch win-tools/sc-inject.exe win-tools/sc_agent.dll cli/
+          strip cli/sc-launch
           tar -czf "out/sc-launch_${version}_linux_x64.tar.gz" -C cli .
           ls -l out
       - uses: actions/upload-artifact@v4
