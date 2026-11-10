@@ -7,9 +7,9 @@
 #   packaging/appimage.sh            -> build/appimage/STAR_FORGE_Launcher-<version>-x86_64.AppImage
 #
 # Needs the Windows sc-inject.exe and sc_agent.dll (they go in tools/): from the win64 build, or
-# from WIN_TOOLS=<folder> (CI builds them on Windows). And linuxdeploy, its gtk and appimage
-# plugins and AppImageKit's AppRun: by default Tauri's cached copies in ~/.cache/tauri
-# (TOOLS=<folder> to use others).
+# from WIN_TOOLS=<folder> (CI builds them on Windows). And linuxdeploy, its appimage plugin,
+# Tauri's fork of its gtk plugin (upstream's doesn't patch WebKitGTK) and AppImageKit's AppRun:
+# by default Tauri's cached copies in ~/.cache/tauri (TOOLS=<folder> to use others).
 #
 # The AppImage runs on systems with this one's glibc or newer: build releases on an old distro.
 set -euo pipefail
