@@ -44,7 +44,8 @@ jobs:
           cp $b/star-forge.exe launcher/
           cp $b/sc-inject.exe $b/sc_agent.dll launcher/tools/
           cp $b/sc-launch.exe $b/sc-inject.exe $b/sc_agent.dll cli/
-          cp $b/sc-inject.exe $b/sc_agent.dll tools/
+          # For the Linux job: the tools go in its packages, and it builds the Windows installer.
+          cp $b/star-forge.exe $b/sc-inject.exe $b/sc_agent.dll tools/
           (cd launcher && 7z a "../out/STAR_FORGE_Launcher-${version}-windows-x64.zip" . >/dev/null)
           (cd cli && 7z a "../out/sc-launch_${version}_windows_x64.zip" . >/dev/null)
           ls -l out
@@ -69,7 +70,7 @@ jobs:
         run: |
           sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
-          sudo apt-get install -y ninja-build libcurl4-openssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev patchelf librsvg2-dev
+          sudo apt-get install -y ninja-build libcurl4-openssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev patchelf librsvg2-dev dpkg-dev rpm nsis
       - uses: actions/download-artifact@v4
         with:
           name: windows-tools
@@ -90,12 +91,16 @@ jobs:
           cmake --build --preset linux --target star_forge sc_launch
       - name: AppImage
         run: TOOLS="$PWD/appimage-tools" WIN_TOOLS="$PWD/win-tools" packaging/appimage.sh
+      - name: deb and rpm
+        run: WIN_TOOLS="$PWD/win-tools" packaging/linux-packages.sh
+      - name: Windows installer
+        run: WIN_BUILD="$PWD/win-tools" packaging/nsis.sh
       - name: Collect release files
         run: |
           set -euo pipefail
           version=$(sed -n 's/^project(starforge VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           mkdir -p out cli
-          cp build/appimage/*.AppImage out/
+          cp build/appimage/*.AppImage build/packages/*.deb build/packages/*.rpm build/packages/*-setup.exe out/
           cp build/linux/sc-launch win-tools/sc-inject.exe win-tools/sc_agent.dll cli/
           tar -czf "out/sc-launch_${version}_linux_x64.tar.gz" -C cli .
           ls -l out
@@ -122,4 +127,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --draft --prerelease \
             --title "STAR FORGE Launcher (C++) ${GITHUB_REF_NAME#cpp-v}" \
-            --notes "C++ build of the STAR FORGE Launcher. Linux: the AppImage. Windows: unzip and run star-forge.exe (keep tools/ next to it). sc-launch archives: the command-line launcher."
+            --notes "C++ build of the STAR FORGE Launcher. Linux: the AppImage, .deb or .rpm. Windows: the -setup.exe installer, or the zip (run star-forge.exe; keep tools/ next to it). sc-launch archives: the command-line launcher."

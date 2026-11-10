@@ -129,13 +129,23 @@ bool arg_bool(const char* command, const json& args, const char* key) {
     return read_arg(command, key, [&] { return serde::boolean(v); });
 }
 
+std::vector<fs::path> default_tool_folders(const fs::path& exe_dir) {
+    std::vector<fs::path> out;
+#ifndef _WIN32
+    if (exe_dir.filename() == "bin") out.push_back(exe_dir.parent_path() / "lib" / "STAR FORGE Launcher" / "tools");
+#endif
+    out.push_back(exe_dir / "tools");
+    out.push_back(exe_dir);
+    return out;
+}
+
 // --- the backend ---
 
 Backend::Backend(Host& host)
     : host_(host), game_(std::make_unique<Game>()), reviews_(std::make_unique<Reviews>()),
       downloads_(std::make_unique<DownloadState>()), updates_(std::make_unique<Updates>()) {
     const fs::path exe_dir = launch::current_exe().parent_path();
-    tool_folders = {exe_dir, exe_dir / "tools"};
+    tool_folders = default_tool_folders(exe_dir);
     resources = exe_dir;
 }
 

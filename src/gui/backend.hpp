@@ -115,7 +115,7 @@ public:
     void notify(const std::string& message, NotificationLevel level);
 
     // Folders searched for sc-inject.exe and sc_agent.dll after STAR_FORGE_TOOLS_DIR (by default
-    // this program's folder and its tools/ subfolder).
+    // default_tool_folders()).
     std::vector<fs::path> tool_folders;
     // The launcher's own files (icons/ for the AppImage menu entry).
     fs::path resources;
@@ -225,6 +225,10 @@ std::optional<std::string> data_url(const fs::path& path);
 size_t random_below(size_t n);
 // Path::starts_with: whole components.
 bool path_starts_with(const fs::path& path, const fs::path& prefix);
+// Where a launcher in `exe_dir` has its tools: in a deb or rpm (<prefix>/bin/star-forge),
+// <prefix>/lib/STAR FORGE Launcher/tools, as Tauri's resource folder; else tools/ next to it, or
+// right beside it.
+std::vector<fs::path> default_tool_folders(const fs::path& exe_dir);
 // "<path>: <why>" for a failed folder creation; throws std::runtime_error.
 void create_dirs(const fs::path& dir);
 

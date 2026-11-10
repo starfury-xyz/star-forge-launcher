@@ -395,6 +395,17 @@ void game(const fs::path& base) {
     auto& b = *g_backend;
     const fs::path profiles = base / "data" / "profiles";
 
+    // Where the tools are looked for: a deb/rpm's /usr/lib folder first (Linux), then tools/,
+    // then beside the program.
+    using V = std::vector<fs::path>;
+#ifdef _WIN32
+    check(sf::gui::default_tool_folders("C:/x/bin") == V{"C:/x/bin/tools", "C:/x/bin"}, "tool folders: no /usr/lib on Windows");
+#else
+    check(sf::gui::default_tool_folders("/usr/bin") == V{"/usr/lib/STAR FORGE Launcher/tools", "/usr/bin/tools", "/usr/bin"},
+          "tool folders: a deb/rpm's /usr/lib/STAR FORGE Launcher/tools");
+#endif
+    check(sf::gui::default_tool_folders(base / "app") == V{base / "app" / "tools", base / "app"}, "tool folders: tools/, then beside");
+
     // Nothing installed.
     host.clear();
     call("initialize_launcher");
