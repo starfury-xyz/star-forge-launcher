@@ -145,6 +145,13 @@ int main() {
 #endif
 
     // find_game / resolve on a fake install: <library>/steamapps/common/star conflict.
+#ifndef _WIN32
+    // resolve() finds the runtime through Steam's own libraries: a fake Steam in a fake HOME,
+    // listing the library, so this machine's Steam (or none, on CI) doesn't count.
+    touch(tmp / "home/.local/share/Steam/steamapps/libraryfolders.vdf",
+          "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"" + ustr(library) + "\"\n\t}\n}\n");
+    set_env("HOME", ustr(tmp / "home"));
+#endif
     const fs::path game = library / "steamapps/common/star conflict";
     const fs::path tools = tmp / "tools";
     fs::create_directories(game / "data");
