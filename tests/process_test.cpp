@@ -67,7 +67,12 @@ int main(int argc, char** argv) {
         check(contains(got, "env:SF_REMOVED=(unset)\n"), "a removed variable is gone");
         check(contains(got, "env:SF_NEW=\xc3\xa9\n"), "a new variable is set (UTF-8)");
         check(contains(got, "env:SF_TWICE=second\n"), "the later change wins");
-        check(contains(got, "cwd=" + ustr(fs::canonical(tmp / "work dir")) + "\n"), "runs in the given folder");
+        // The same folder, however it's spelled (Windows' TEMP can be an 8.3 short name like RUNNER~1).
+        const size_t at = got.find("cwd=");
+        const std::string cwd = at == std::string::npos ? "" : got.substr(at + 4, got.find('\n', at) - at - 4);
+        std::error_code ec;
+        if (!fs::equivalent(fs::u8path(cwd), tmp / "work dir", ec)) std::printf("cwd: %s\n", cwd.c_str());
+        check(fs::equivalent(fs::u8path(cwd), tmp / "work dir", ec), "runs in the given folder");
         check(code == 7, "the exit code comes back");
         check(cmd.env_value("SF_PARENT_ONLY") == std::string("from parent") && !cmd.env_value("SF_REMOVED") &&
                   cmd.env_value("SF_TWICE") == std::string("second"),

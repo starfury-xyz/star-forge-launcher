@@ -238,8 +238,14 @@ void fetch_once(const std::string& url, Sink& sink) {
     curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent.c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
+#if LIBCURL_VERSION_NUM >= 0x075500  // 7.85 added the _STR forms (Ubuntu 22.04 has 7.81)
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, https ? "https" : "http,https");
     curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https");
+#else
+    const long protocols = https ? CURLPROTO_HTTPS : CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, protocols);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, protocols);
+#endif
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);  // 4xx/5xx: no body, CURLE_HTTP_RETURNED_ERROR
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(kConnectSeconds));
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);  // stalled: under 1 byte/s ...

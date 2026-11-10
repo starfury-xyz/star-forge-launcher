@@ -105,7 +105,7 @@ void game_args() {
     check(saw == expect, "the game got SC_PROFILE, its own folder as working dir, and every arg unchanged");
     const std::string log = inject_log();
     check(contains(log, "profile " + sf::utf8(g_profile) + "\n"), "inject.log: profile");
-    check(contains(log, "starting \"" + sf::utf8(g_game) + "\" plain \"with space\""), "inject.log: command line");
+    check(contains(log, "starting " + sf::utf8(quote(g_game)) + " plain \"with space\""), "inject.log: command line");
     check(contains(log, "game exited with 42\n"), "inject.log: exit code");
     check(contains(printed, "sc-inject: game exited with 42\n"), "stdout gets the same lines, prefixed");
     check(test::read_file(g_profile + L"\\files\\data\\address.cfg") == "set net_masterServerAddress \"127.0.0.1:3801\"\r\n",
@@ -219,7 +219,9 @@ void not_a_dll() {
     test::write_file(g_profile + L"\\fake.dll", "not a DLL");
     std::string printed;
     check(run_inject(args({L"--dll", g_profile + L"\\fake.dll"}), printed) == 1, "exit 1");
-    check(contains(inject_log(), "did not load"), "inject.log: did not load");
+    const std::string log = inject_log();
+    if (!contains(log, "did not load")) std::printf("inject.log:\n%s\n", log.c_str());
+    check(contains(log, "did not load"), "inject.log: did not load");
     check(!game_ran(), "the game was not started");
 }
 
@@ -251,6 +253,9 @@ void leftover() {
 
 int main(int argc, char** argv) {
     test::exit_on_crash();
+    // No "Bad Image" or other error boxes from the game (it inherits this through sc-inject):
+    // nobody is there to close them on CI, and wine shows none anyway.
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     const std::string scenario = argc > 1 ? argv[1] : "";
     g_win64 = test::exe_dir();
     g_fakegame = g_win64 + L"\\fakegame\\win64";
