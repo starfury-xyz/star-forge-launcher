@@ -1,0 +1,50 @@
+name: CI
+
+# Builds everything and runs the tests: Linux natively (the launcher and portable code), Windows
+# natively with MSVC (everything, including the agent and injector).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux
+    # The oldest supported runner, as for star-forge's packages: what's built here runs on this
+    # glibc or newer.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          # Skip rebuilding the man page index after installing: on GitHub's runners that
+          # trigger alone can take many minutes.
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libcurl4-openssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build
+        run: |
+          cmake --preset linux
+          cmake --build --preset linux
+      - name: Test
+        run: ctest --preset linux
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build
+        run: |
+          cmake --preset win64-msvc
+          cmake --build --preset win64-msvc
+      - name: Test
+        run: ctest --preset win64-msvc

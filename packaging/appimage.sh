@@ -6,9 +6,10 @@
 #
 #   packaging/appimage.sh            -> build/appimage/STAR_FORGE_Launcher-<version>-x86_64.AppImage
 #
-# Needs the linux and win64 builds (the Windows sc-inject.exe and sc_agent.dll go in tools/) and
-# linuxdeploy, its gtk and appimage plugins and AppImageKit's AppRun: by default Tauri's cached
-# copies in ~/.cache/tauri (TOOLS=<folder> to use others).
+# Needs the Windows sc-inject.exe and sc_agent.dll (they go in tools/): from the win64 build, or
+# from WIN_TOOLS=<folder> (CI builds them on Windows). And linuxdeploy, its gtk and appimage
+# plugins and AppImageKit's AppRun: by default Tauri's cached copies in ~/.cache/tauri
+# (TOOLS=<folder> to use others).
 #
 # The AppImage runs on systems with this one's glibc or newer: build releases on an old distro.
 set -euo pipefail
@@ -27,13 +28,17 @@ export PATH="$tools:$PATH"
 chmod +x "$tools"/linuxdeploy-x86_64.AppImage "$tools"/linuxdeploy-plugin-*
 
 cmake --build --preset linux --target star_forge
-cmake --build --preset win64 --target sc_inject sc_agent
+win_tools="${WIN_TOOLS:-}"
+if [ -z "$win_tools" ]; then
+    cmake --build --preset win64 --target sc_inject sc_agent
+    win_tools="$root/build/win64"
+fi
 
 rm -rf "$appdir"
 mkdir -p "$appdir/usr/bin/tools" "$appdir/usr/bin/icons" "$appdir/usr/share/applications"
 install -m755 "$root/build/linux/star-forge" "$appdir/usr/bin/star-forge"
 strip "$appdir/usr/bin/star-forge"
-install -m644 "$root/build/win64/sc-inject.exe" "$root/build/win64/sc_agent.dll" "$appdir/usr/bin/tools/"
+install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$appdir/usr/bin/tools/"
 # For "Add to applications menu" (Backend::resources is the program's folder).
 cp "$root"/gui/icons/*.png "$appdir/usr/bin/icons/"
 for size in 32x32 128x128; do
