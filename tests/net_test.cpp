@@ -189,9 +189,13 @@ void downloads(test::Server& srv, const fs::path& dir) {
     check(e && e->kind == Kind::Stopped && std::string(e->what()) == "download cancelled", "the callback stops it");
     check(calls == 1 && srv.hits("/stream.bin") == 2, "... at once, not retried");
 
+    auto start = std::chrono::steady_clock::now();
     e = fetch_error("https://127.0.0.1:" + srv.url("").substr(17) + "/ok.txt", dest);
+    auto took = std::chrono::steady_clock::now() - start;
     check(e && e->kind == Kind::Tls, std::string("https to a plain server is a TLS failure") + (e ? std::string(": ") + e->what() : ""));
-    check(srv.hits("?") == 1, "... not retried");
+    // Not retried: no 1 s wait before a second try. (Not counted at the server: Windows' TLS
+    // reconnects by itself to try an older TLS version, within the one try.)
+    check(srv.hits("?") >= 1 && took < std::chrono::seconds(1), "... not retried");
 
     e = fetch_error(srv.url("/ok.txt"), dir / "no such folder" / "out");
     check(e && e->kind == Kind::Disk && contains(e->what(), "Couldn't save ok.txt: "), "an unwritable destination is a disk error");
