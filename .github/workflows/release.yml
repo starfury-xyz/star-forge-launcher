@@ -29,7 +29,16 @@ jobs:
           want="${GITHUB_REF_NAME#cpp-v}"
           have=$(sed -n 's/^project(starforge VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           [ "$want" = "$have" ] || { echo "tag $GITHUB_REF_NAME but CMakeLists.txt says $have"; exit 1; }
+      - uses: hendrikmuhs/ccache-action@v1.2.24
+        with:
+          key: windows
+          variant: sccache
+          # The cache ci.yml saves on main.
+          save: false
       - name: Build
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           cmake --preset win64-msvc
           cmake --build --preset win64-msvc --target star_forge sc_launch sc_inject sc_agent
@@ -88,7 +97,15 @@ jobs:
           # AppImageKit's AppRun (the project is archived; this is its last build).
           curl -fsSLo AppRun-x86_64 https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-x86_64
           echo "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f  AppRun-x86_64" | sha256sum -c
+      - uses: hendrikmuhs/ccache-action@v1.2.24
+        with:
+          key: linux
+          # The cache ci.yml saves on main.
+          save: false
       - name: Build
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           cmake --preset linux
           cmake --build --preset linux --target star_forge sc_launch

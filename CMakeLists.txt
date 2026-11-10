@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
+# MSVC debug info as CMAKE_MSVC_DEBUG_INFORMATION_FORMAT says, not a /Zi in the default flags.
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+endif()
 project(starforge VERSION 0.2.6 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -16,7 +20,10 @@ if(WIN32)
     # inside game.exe, and xwin has no debug CRT anyway.
     set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
     add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
-    add_compile_options(/EHsc /W3 /Zi)
+    # Debug info in each object (/Z7) rather than a shared .pdb (/Zi): CI's compiler cache
+    # (sccache) can only cache the former. The linker still writes a .pdb.
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+    add_compile_options(/EHsc /W3)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # clang-cl warns about MSVC flags it accepts but ignores; cl.exe would reject this option.
         add_compile_options(-Wno-unused-command-line-argument)
