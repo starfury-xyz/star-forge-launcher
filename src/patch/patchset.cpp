@@ -229,6 +229,13 @@ std::vector<std::string> overlaps(const std::vector<const Patch*>& patches) {
     return out;
 }
 
+bool overlap(const Patch& a, const Patch& b) {
+    for (const Write& x : a.writes)
+        for (const Write& y : b.writes)
+            if (x.va < y.va + y.orig.size() && y.va < x.va + x.orig.size()) return true;
+    return false;
+}
+
 // --- checking and applying --------------------------------------------------------------------------
 
 State check(Target& t, const Patch& p) {

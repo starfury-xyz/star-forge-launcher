@@ -22,8 +22,8 @@ struct Loaded {
     std::string error;
 };
 
-// Everything a profile patches: the core patches its pack turns on, then the pack's own
-// patchsets.
+// Everything a profile patches: the core patches its pack or the player turns on
+// (core::requested), then the pack's own patchsets.
 std::vector<Loaded> all_sets(const fs::path& profile_dir, const pack::Profile& profile);
 // The patchsets in a profile folder, parsed. Unreadable ones are errors.
 std::vector<Loaded> load_sets(const fs::path& profile_dir);

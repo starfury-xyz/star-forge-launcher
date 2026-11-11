@@ -83,6 +83,7 @@ add_library(sf_launch STATIC
     src/crypto/sha256.cpp
     src/launch/env.cpp
     src/launch/launch.cpp
+    src/launch/mods.cpp
     src/launch/net.cpp
     src/launch/packs.cpp
     src/launch/patching.cpp
@@ -301,6 +302,9 @@ if(BUILD_TESTING)
         target_link_libraries(prepare_test PRIVATE ws2_32)
     endif()
     add_test(NAME prepare COMMAND prepare_test)
+    add_executable(mods_test tests/mods_test.cpp)
+    target_link_libraries(mods_test PRIVATE sf_launch)
+    add_test(NAME mods COMMAND mods_test)
     add_executable(gui_test tests/gui_test.cpp)
     target_link_libraries(gui_test PRIVATE sf_gui monocypher)
     if(WIN32)
@@ -347,7 +351,7 @@ if(WIN32)
     # One process per scenario (see load_test.cpp).
     set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect listing
         patch_exe patch_fail_exit patch_fail_continue patch_wrong_build patch_dll patch_dll_fail_exit
-        core_patch core_unknown plugin plugin_fail plugin_missing)
+        core_patch core_by_player core_unknown plugin plugin_fail plugin_missing)
     foreach(scenario IN LISTS AGENT_SCENARIOS)
         add_test(NAME agent_${scenario} COMMAND load_test ${scenario})
         list(APPEND AGENT_TESTS agent_${scenario})

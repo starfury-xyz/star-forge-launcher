@@ -116,7 +116,6 @@ std::string apply_set(const Patchset& set, HMODULE module, const Profile& profil
     auto* base = reinterpret_cast<uint8_t*>(module);
     Memory mem(base, set.image_base, image_size(base));
     patch::Enabled en = set.enabled(choices(profile, set.exe));
-    for (const auto& w : en.warnings) log("warning: %s", w.c_str());
     if (auto o = patch::overlaps(en.on); !o.empty()) return "enabled patches overlap: " + o.front();
 
     std::vector<const Patch*> go;
@@ -265,7 +264,8 @@ bool apply_all(const std::wstring& profile_dir, const Profile& profile) {
     };
     std::vector<Entry> entries;
     try {
-        for (Patchset& s : patch::core::sets(profile.patches.core)) entries.push_back({std::move(s), ""});
+        for (Patchset& s : patch::core::sets(patch::core::requested(profile.patches.core, profile.patch_choices)))
+            entries.push_back({std::move(s), ""});
     } catch (const std::exception& e) {
         entries.push_back({std::nullopt, e.what()});
     }
@@ -282,6 +282,12 @@ bool apply_all(const std::wstring& profile_dir, const Profile& profile) {
             entries.push_back({std::nullopt, e.what()});
         }
     }
+
+    // Switches in local.json naming patches nobody has (checked per module across every set).
+    std::vector<const Patchset*> loaded;
+    for (const Entry& e : entries)
+        if (e.set) loaded.push_back(&*e.set);
+    for (const auto& w : patch::core::unknown_choices(loaded, profile.patch_choices)) log("warning: %s", w.c_str());
 
     std::string own_exe;  // this process's exe file name, e.g. game.exe
     if (auto p = module_path(nullptr)) own_exe = utf8(p->substr(p->rfind(L'\\') + 1));

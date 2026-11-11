@@ -101,6 +101,47 @@ int main(int argc, char** argv) {
     std::tie(code, out) = sc(with({"updates"}));
     check(code == 0 && out == "all packs are up to date\n", "updates");
 
+    // Patch switches: the core patch is listed and can be switched on for this profile.
+    std::tie(code, out) = sc(with({"patches", "cli-test"}));
+    check(code == 0 && contains(out, "game.exe (core") && contains(out, "  off  loose-before-packed "), "patches: " + out);
+    std::tie(code, out) = sc(with({"patches", "cli-test", "on", "game.exe", "loose-before-packed"}));
+    check(code == 0 && out == "cli-test: game.exe loose-before-packed is on\n", "patches on: " + out);
+    std::tie(code, out) = sc(with({"list"}));
+    check(contains(out, "client only   1 patch(es)"), "list counts the switched-on core patch: " + out);
+    std::tie(code, out) = sc(with({"patches", "cli-test"}));
+    check(contains(out, "  on * loose-before-packed "), "patches: marked as the player's switch");
+    std::tie(code, out) = sc(with({"patches", "cli-test", "default", "game.exe", "loose-before-packed"}));
+    check(code == 0 && contains(out, "back to the pack's default"), "patches default");
+    std::tie(code, out) = sc(with({"patches", "cli-test", "yes", "game.exe", "loose-before-packed"}));
+    check(code == 1 && out == "sc-launch: expected on, off or default, not \"yes\"\n", "patches: a bad switch word");
+
+    // A server install: proxy in place, one exe whose build doesn't match, so status fails.
+    const fs::path cloud = g_dir / "cloud";
+    test::write_file(cloud / "libcrypto-1_1_tg.dll", "proxy");
+    test::write_file(cloud / "libcrypto-1_1_tg_orig.dll", "orig");
+    test::write_file(cloud / "Hub.exe", "MZ");
+    test::write_file(cloud / "starforge/patchsets/Hub.exe.patchset.toml", R"(format = 1
+exe = "Hub.exe"
+sha1 = "0000000000000000000000000000000000000000"
+image_base = 0x400000
+[[patch]]
+id = "a"
+[[patch.write]]
+va = 0x401000
+orig = "74"
+bytes = "eb"
+)");
+    std::tie(code, out) = sc({"server", "status", ustr(cloud)});
+    check(code == 1 && contains(out, "proxy:   installed") && contains(out, "  on   a ") &&
+              contains(out, "problem: Hub.exe is a different build") && contains(out, "server has problems\n"),
+          "server status: " + out);
+    std::tie(code, out) = sc({"server", "off", ustr(cloud), "hub.exe", "a"});
+    check(code == 0 && contains(out, "restart the server"), "server off");
+    check(contains(test::read_file(cloud / "starforge/patcher.toml"), "[patches.\"Hub.exe\"]\n\"a\" = false\n"),
+          "server off: written to patcher.toml");
+    std::tie(code, out) = sc({"server", "status", ustr(cloud)});
+    check(contains(out, "  off* a "), "server status: the switch is shown");
+
     std::printf("%s (%d failed)\n", test::failures ? "FAILED" : "ok", test::failures);
     return test::failures ? 1 : 0;
 }

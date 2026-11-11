@@ -72,6 +72,8 @@ struct Patchset {
 
 // One message per pair of patches that write the same bytes.
 std::vector<std::string> overlaps(const std::vector<const Patch*>& patches);
+// Whether two patches write any of the same bytes (so they can't both be on).
+bool overlap(const Patch& a, const Patch& b);
 
 // An image patches are checked against and written to, addressed by virtual address in the
 // patchset's address space.

@@ -19,6 +19,7 @@
 
 #include "launch/env.hpp"
 #include "launch/launch.hpp"
+#include "launch/mods.hpp"
 #include "launch/packs.hpp"
 #include "launch/patching.hpp"
 #include "launch/prepare.hpp"
@@ -48,6 +49,17 @@ const char* kUsage =
     "  sc-launch [OPTIONS] updates           Check installed packs for new versions\n"
     "  sc-launch [OPTIONS] update <profile> [--yes]\n"
     "                                        Install the newest version of a profile's pack\n"
+    "  sc-launch [OPTIONS] patches <profile> List a profile's game patches and which are on\n"
+    "  sc-launch [OPTIONS] patches <profile> on|off|default <exe> <id>\n"
+    "                                        Switch one of them on or off, or back to what\n"
+    "                                        the pack says (saved in the profile's local.json)\n"
+    "\n"
+    "FOR SERVER HOSTS:\n"
+    "  sc-launch server status <cloud-dir>   Check a server install the way its processes\n"
+    "                                        will at startup: proxy DLL, exe builds, patches\n"
+    "  sc-launch server on|off|default <cloud-dir> <exe> <id>\n"
+    "                                        Switch a server patch (saved in\n"
+    "                                        starforge/patcher.toml; applies on restart)\n"
     "\n"
     "FOR SERVER TEAMS:\n"
     "  sc-launch pack check <zip|folder|url> Show what a pack would do and check it the\n"
@@ -234,6 +246,80 @@ int install_reviewed(const packs::Staged& staged, const fs::path& profiles_dir, 
     return 0;
 }
 
+// One patch per line, grouped by module and patchset: "on"/"off", '*' when it's the player's own
+// switch, then id and title, then anything worth knowing. `module` limits it to one module.
+void print_toggles(const mods::List& list, const std::optional<std::string>& module = std::nullopt) {
+    std::string group;
+    for (const mods::Toggle& t : list.toggles) {
+        if (module && t.module != *module) continue;
+        const std::string g = t.module + " (" + t.source + (t.build.empty() ? "" : ", build " + t.build) + ")";
+        if (g != group) std::printf("%s\n", (group = g).c_str());
+        std::string notes;
+        if (t.optional) notes += " [optional]";
+        if (!t.conflicts.empty()) notes += " [clashes with " + join(t.conflicts, ", ") + "]";
+        std::printf("  %s%s %s %s%s\n", t.on ? "on " : "off", t.chosen ? "*" : " ", pad(t.id, 28).c_str(), t.title.c_str(),
+                    notes.c_str());
+    }
+}
+
+// After a switch: warns if that patch is now on together with one it clashes with.
+void warn_clashes(const mods::List& list, const std::string& module, const std::string& id) {
+    std::fflush(stdout);  // after the line saying what was switched
+    for (const std::string& c : mods::clashes_on(list, module, id))
+        std::fprintf(stderr, "warning: %s clashes with %s, which is also on; switch one off or the patches won't apply\n",
+                     id.c_str(), c.c_str());
+}
+
+// on|off|default as a switch value; throws for anything else.
+std::optional<bool> switch_value(const std::string& word) {
+    if (word == "on") return true;
+    if (word == "off") return false;
+    if (word == "default") return std::nullopt;
+    throw std::runtime_error("expected on, off or default, not " + pk::serde::debug_str(word));
+}
+
+const char* describe_proxy(mods::ServerStatus::Proxy p) {
+    switch (p) {
+    case mods::ServerStatus::NoDll: return "MISSING: no libcrypto-1_1_tg.dll here; is this the game's cloud folder?";
+    case mods::ServerStatus::Stock: return "not installed: the game's own libcrypto-1_1_tg.dll, so no patches apply";
+    case mods::ServerStatus::Installed: return "installed (the original is kept as libcrypto-1_1_tg_orig.dll)";
+    case mods::ServerStatus::Restored:
+        return "NOT ACTIVE: libcrypto-1_1_tg.dll is the original again (Steam \"verify files\"?); install the proxy again";
+    case mods::ServerStatus::Broken: return "BROKEN: libcrypto-1_1_tg_orig.dll is missing or unreadable";
+    }
+    return "";
+}
+
+// sc-launch server status: what the server will do at startup. Returns 1 if it wouldn't start
+// patched as configured.
+int server_status(const fs::path& cloud) {
+    const mods::ServerStatus st = mods::server_status(cloud);
+    const mods::List list = mods::server(cloud);
+    bool bad = st.proxy != mods::ServerStatus::Installed;
+    std::printf("server:  %s\n", ustr(cloud).c_str());
+    std::printf("proxy:   %s\n", describe_proxy(st.proxy));
+    if (st.config)
+        std::printf("config:  %s/%s (on_error = %s)\n", mods::kServerDir, mods::kServerConfig,
+                    st.config->exit_on_error ? "exit" : "continue");
+    for (const std::string& e : st.errors) std::printf("problem: %s\n", e.c_str());
+    bad = bad || !st.errors.empty();
+    if (st.exes.empty()) std::printf("no patchsets in %s/%s\n", mods::kServerDir, mods::kServerPatchsets);
+    for (const mods::ExeCheck& c : st.exes) {
+        std::printf("\n");
+        print_toggles(list, c.module);
+        if (c.report.errors.empty())
+            std::printf("  check: OK, %zu patch(es) would apply to this %s (sha1 %s)\n", c.report.ok.size(),
+                        c.module.c_str(), c.sha1->c_str());
+        for (const auto& s : c.report.skipped) std::printf("  note: optional patch skipped: %s\n", s.c_str());
+        for (const auto& w : c.report.warnings) std::printf("  warning: %s\n", w.c_str());
+        for (const auto& e : c.report.errors) std::printf("  problem: %s\n", e.c_str());
+        bad = bad || !c.report.errors.empty();
+    }
+    if (!list.toggles.empty()) std::printf("\n* = switched in patcher.toml; the rest follow each patch's default\n");
+    std::printf("%s\n", bad ? "server has problems" : "server OK");
+    return bad ? 1 : 0;
+}
+
 void check_profile_name(const std::string& name) {
     if (!profiles::valid_name(name)) throw std::runtime_error(pk::serde::debug_str(name) + " is not a valid profile name");
 }
@@ -348,6 +434,35 @@ int run(const std::vector<std::string>& args) {
         src.kind = packs::Source::Url;
         src.url = a->url;
         return install_reviewed(packs::stage(src, profiles_dir), profiles_dir, cli.yes);
+    }
+    if (is({"patches", nullptr})) {
+        check_profile_name(c[1]);
+        const fs::path dir = profiles_dir / upath(c[1]);
+        const mods::List list = mods::client(dir, profiles::load(dir));
+        print_toggles(list);
+        for (const std::string& e : list.errors) std::printf("problem: %s\n", e.c_str());
+        for (const std::string& w : list.warnings) std::printf("warning: %s\n", w.c_str());
+        std::printf("* = your switch; the rest follow the pack\n");
+        return list.errors.empty() ? 0 : 1;
+    }
+    if (is({"patches", nullptr, nullptr, nullptr, nullptr})) {
+        check_profile_name(c[1]);
+        const std::optional<bool> on = switch_value(c[2]);
+        const fs::path dir = profiles_dir / upath(c[1]);
+        mods::set_client(dir, c[3], c[4], on);
+        std::printf("%s: %s %s is %s\n", c[1].c_str(), c[3].c_str(), c[4].c_str(),
+                    on ? (*on ? "on" : "off") : "back to the pack's default");
+        warn_clashes(mods::client(dir, profiles::load(dir)), c[3], c[4]);
+        return 0;
+    }
+    if (is({"server", "status", nullptr})) return server_status(upath(c[2]));
+    if (is({"server", nullptr, nullptr, nullptr, nullptr}) && c[1] != "status") {
+        const std::optional<bool> on = switch_value(c[1]);
+        mods::set_server(upath(c[2]), c[3], c[4], on);
+        std::printf("%s %s is %s; restart the server for it to take effect\n", c[3].c_str(), c[4].c_str(),
+                    on ? (*on ? "on" : "off") : "back to its default");
+        warn_clashes(mods::server(upath(c[2])), c[3], c[4]);
+        return 0;
     }
     if (is({"pack", "check", nullptr})) {
         const packs::Staged staged = packs::stage(packs::Source::parse(c[2]), profiles_dir);
