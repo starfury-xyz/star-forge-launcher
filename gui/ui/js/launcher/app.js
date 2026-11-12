@@ -5,6 +5,7 @@ import { loadPreferences } from './preferences.js';
 import { bindShell } from './shell.js';
 import { bindSettings } from './settings.js';
 import { bindProfiles } from './profiles.js';
+import { bindMods } from './mods.js';
 import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
@@ -76,8 +77,19 @@ async function start() {
     control('add-profile', HTMLButtonElement).disabled = locked;
     control('summary-edit', HTMLButtonElement).disabled = locked || !profiles.current();
   };
-  bindShell(() => render());
-  store.subscribe(render);
+  const gameLocked = () => {
+    const phase = store.getSnapshot()?.phase;
+    return phase === 'launching' || phase === 'running';
+  };
+  const mods = bindMods(profiles, gameLocked);
+  bindShell((page) => {
+    render();
+    if (page === 'mods') mods.show();
+  });
+  store.subscribe(() => {
+    render();
+    mods.update();
+  });
   required('play-button').addEventListener('click', () => {
     const action = store.getSnapshot()?.primaryAction;
     if (action) run(() => store.performAction(action));

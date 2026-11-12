@@ -276,6 +276,7 @@ export function bindProfiles(preferences, onChange) {
 
   return {
     refresh,
+    list: () => profiles,
     ready: () => loaded && Boolean(current()) && !current()?.error,
     current,
     /** @param {Map<string, { version: string, url: string }>} found */

@@ -6,13 +6,13 @@ export function bindShell(onPage) {
   const root = required('launcher');
   /** @param {string} page */
   const navigate = (page) => {
-    if (!['home', 'overview'].includes(page)) return;
+    if (!['home', 'overview', 'servers', 'mods'].includes(page)) return;
     root.dataset.page = page;
     document.querySelectorAll('.content-area > section').forEach((section) => {
       if (section instanceof HTMLElement) section.hidden = section.id !== `${page}-page`;
     });
     document.querySelectorAll('.launch-dock').forEach((item) => {
-      if (item instanceof HTMLElement) item.hidden = page === 'home';
+      if (item instanceof HTMLElement) item.hidden = page !== 'overview';  // Play is the game page's
     });
     document.querySelectorAll('.rail-button[data-page]').forEach((button) => {
       if (button.getAttribute('data-page') === page) button.setAttribute('aria-current', 'page');

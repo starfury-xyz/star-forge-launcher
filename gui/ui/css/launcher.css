@@ -270,7 +270,9 @@ select:focus-visible {
   transition: right 0.28s ease;
 }
 /* Home has no play dock, so its content can use the bottom of the window. */
-#launcher[data-page='home'] .content-area {
+#launcher[data-page='home'] .content-area,
+#launcher[data-page='servers'] .content-area,
+#launcher[data-page='mods'] .content-area {
   bottom: 36px;
 }
 .content-area > section:not([hidden]) {
@@ -1560,4 +1562,133 @@ dialog footer {
 .setup-step .folder-field input {
   flex: 1;
   min-width: 0;
+}
+
+/* Mods page: one row per patch, grouped by module and where the patches come from. */
+.mods-page,
+.servers-page {
+  padding-top: 10px;
+  max-width: 720px;
+}
+.mods-target-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.mods-target-row select {
+  min-width: 260px;
+}
+.mods-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mods-problem,
+.mods-warning {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #ff8a7a;
+}
+.mods-warning {
+  color: var(--accent);
+}
+.mods-list {
+  padding-bottom: 30px;
+}
+.mods-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.mods-module {
+  color: #ece8e3;
+  font-family: ui-monospace, monospace;
+}
+.mods-group small {
+  margin-left: auto;
+  font-weight: 400;
+}
+.mod-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #1c1916cc;
+  margin-bottom: 8px;
+}
+.mod-row[data-on='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.mod-row input[type='checkbox'] {
+  margin-top: 2px;
+  flex: none;
+}
+input[type='checkbox']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.mod-text {
+  min-width: 0;
+  flex: 1;
+}
+.mod-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.mod-title code {
+  color: var(--muted);
+  font-size: 12px;
+}
+.mod-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.mod-badge-chosen {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mod-description,
+.mod-text details {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mod-text details summary {
+  cursor: pointer;
+}
+.mod-text details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+}
+.mod-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.link-button:hover:not(:disabled) {
+  text-decoration: underline;
 }

@@ -147,7 +147,7 @@ private:
     void catch_up_settings(const launch::Setup& setup);
     void announce_update(const std::string& id, const launch::packs::Available& found);
 
-    // The commands, by module (prefs.cpp, game.cpp, profiles.cpp, setup.cpp).
+    // The commands, by module (prefs.cpp, game.cpp, profiles.cpp, setup.cpp, mods.cpp).
     json update_preferences(const json& args);
     json perform_action(const std::string& action);
     json detect_compat_tools();
@@ -172,6 +172,9 @@ private:
     json get_setup_info();
     void finish_setup(const std::string& game_dir, const std::string& profiles_dir, bool move_profiles);
     void install_appimage(const std::string& dir);
+    json list_mods(const std::string& kind, const std::string& id);  // mods.cpp
+    json set_mod(const std::string& kind, const std::string& id, const std::string& module, const std::string& patch,
+                 std::optional<bool> on);
     json check_launcher_update();
     void install_launcher_update();
     void open_launcher_release();

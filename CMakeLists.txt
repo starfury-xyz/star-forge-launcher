@@ -126,6 +126,7 @@ configure_file(src/gui/samples.hpp.in ${CMAKE_BINARY_DIR}/generated/gui/samples.
 add_library(sf_gui STATIC
     src/gui/backend.cpp
     src/gui/game.cpp
+    src/gui/mods.cpp
     src/gui/prefs.cpp
     src/gui/profiles.cpp
     src/gui/setup.cpp

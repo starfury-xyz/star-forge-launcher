@@ -283,6 +283,25 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     check(local.name == std::string("Mine") && !local.server && !local.local_server && profiles::read_pack(profiles / "gui-pack").name == "GUI Pack",
           "managed: name in local.json, the pack's server not copied");
 
+    // The Mods page: every core patch listed, switched on and back to default through local.json.
+    {
+        json mods = call("list_mods", {{"kind", "profile"}, {"id", "gui-pack"}});
+        const json& core = mods["toggles"][0];
+        check(core["id"] == "loose-before-packed" && core["source"] == "core" && core["on"] == false &&
+                  core["chosen"].is_null() && mods["errors"].empty() && mods["warnings"].empty(),
+              "list_mods: " + mods.dump());
+        mods = call("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "loose-before-packed"}, {"on", true}});
+        check(mods["toggles"][0]["on"] == true && mods["toggles"][0]["chosen"] == true, "set_mod on: the new list comes back");
+        check(call("list_profiles")[0]["patches"] == 1, "set_mod: the profile's patch count follows");
+        mods = call("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "loose-before-packed"}, {"on", nullptr}});
+        check(mods["toggles"][0]["on"] == false && mods["toggles"][0]["chosen"].is_null(), "set_mod null: back to default");
+        check(contains(error_of("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "x"}, {"on", true}}),
+                       "has no patch \"x\""),
+              "set_mod: unknown patch");
+        check(contains(error_of("list_mods", {{"kind", "server"}, {"id", "gui-pack"}}), "unknown mod target"), "list_mods: unknown kind");
+        check(contains(error_of("list_mods", {{"kind", "profile"}, {"id", "nope"}}), "does not exist"), "list_mods: unknown profile");
+    }
+
     // Updates.
     srv.put("/pack.json", R"({"format":1,"id":"org.example.gui","name":"GUI Pack","version":"1.1.0"})");
     check(call("check_pack_update", {{"id", "gui-pack"}}).dump() ==
