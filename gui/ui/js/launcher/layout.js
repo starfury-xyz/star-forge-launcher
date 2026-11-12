@@ -51,7 +51,16 @@ export function mountLayout() {
         <section id="servers-page" class="servers-page" hidden>
           <span class="eyebrow">Server hosting</span>
           <div class="summary-title"><h1>Servers</h1></div>
-          <p class="mods-note">Host your own Star Conflict server: add the game's <code>cloud</code> folder here to check it and switch its server patches. Coming next.</p>
+          <p class="mods-note">Host your own Star Conflict server: add the game's <code>cloud</code> folder to check it and switch its server patches.</p>
+          <div class="setting-buttons"><button class="button" id="add-server"><span data-icon="plus"></span>Add server install</button></div>
+          <div id="servers-list" class="servers-list"></div>
+          <div id="server-detail" class="server-detail" hidden>
+            <div class="summary-title"><h2 id="server-name">–</h2></div>
+            <dl class="profile-facts"><dt>Folder</dt><dd id="server-cloud">–</dd><dt>Patcher</dt><dd id="server-proxy">–</dd><dt>On a mismatch</dt><dd id="server-on-error">–</dd><dt>Patches</dt><dd id="server-patches">–</dd></dl>
+            <div id="server-problems"></div>
+            <div id="server-exes" class="server-exes"></div>
+            <div class="setting-buttons"><button class="button primary" id="server-mods">Switch patches</button><button class="button" id="server-recheck">Check again</button><button class="button" id="server-folder">Open folder</button><button class="button" id="server-logs">Open logs</button><button class="button danger" id="server-remove">Remove from list</button></div>
+          </div>
         </section>
         <div id="launcher-update" class="update-row" hidden><span id="launcher-update-text"></span><span class="spacer"></span><button class="button" id="launcher-update-notes" hidden>Release notes</button><button class="button primary" id="launcher-update-install">Update and restart</button></div>
       </div>
@@ -81,6 +90,15 @@ export function mountLayout() {
         <p id="profile-error" class="form-error" hidden></p>
         <div class="dialog-actions"><button type="button" class="button danger" id="delete-profile" hidden>Delete</button><button type="button" class="button" id="profile-folder" hidden>Open folder</button><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-profile">Save</button></div>
       </form></div></dialog>
+    <dialog id="server-dialog" class="profile-dialog framed" aria-labelledby="server-dialog-title"><header><h1 id="server-dialog-title">Add server install</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header><div class="dialog-body">
+      <form id="server-form" method="dialog">
+        <label class="field">Name<input id="server-name-input" type="text" maxlength="64" placeholder="My server" /></label>
+        <label class="field">Cloud folder<span class="pack-import-row"><input id="server-cloud-input" type="text" spellcheck="false" autocomplete="off" required placeholder="…/Star Conflict/cloud" /><button type="button" class="button" id="server-browse">Browse…</button></span><small>The <code>cloud</code> folder of a Star Conflict install, where Hub.exe, Shard.exe and the other server programs are.</small></label>
+        <button type="button" class="link-button" id="server-use-game" hidden>Use this game's cloud folder</button>
+        <p id="server-error" class="form-error" hidden></p>
+        <div class="dialog-actions"><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-server">Add</button></div>
+      </form></div></dialog>
+    <dialog id="server-confirm" aria-labelledby="server-confirm-title"><h2 id="server-confirm-title">Remove server install?</h2><p id="server-confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="server-confirm-remove">Remove</button></div></dialog>
     <dialog id="pack-dialog" class="pack-dialog framed" aria-labelledby="pack-title"><header><h1 id="pack-title">Install server pack</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
       <div id="pack-body" class="pack-body dialog-body"></div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button primary" id="pack-install">Install</button></div></dialog>

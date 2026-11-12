@@ -92,6 +92,7 @@ add_library(sf_launch STATIC
     src/launch/process.cpp
     src/launch/profiles.cpp
     src/launch/remote.cpp
+    src/launch/servers.cpp
     src/launch/signing.cpp
     src/launch/trust.cpp
     src/launch/steam.cpp
@@ -129,6 +130,7 @@ add_library(sf_gui STATIC
     src/gui/mods.cpp
     src/gui/prefs.cpp
     src/gui/profiles.cpp
+    src/gui/servers.cpp
     src/gui/setup.cpp
     src/gui/updater.cpp
 )

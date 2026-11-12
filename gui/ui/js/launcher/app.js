@@ -6,6 +6,7 @@ import { bindShell } from './shell.js';
 import { bindSettings } from './settings.js';
 import { bindProfiles } from './profiles.js';
 import { bindMods } from './mods.js';
+import { bindServers } from './servers.js';
 import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
@@ -82,9 +83,14 @@ async function start() {
     return phase === 'launching' || phase === 'running';
   };
   const mods = bindMods(profiles, gameLocked);
-  bindShell((page) => {
+  const shell = bindShell((page) => {
     render();
     if (page === 'mods') mods.show();
+    if (page === 'servers') servers.show();
+  });
+  const servers = bindServers((id) => {
+    mods.pickServer(id);
+    shell.navigate('mods');
   });
   store.subscribe(() => {
     render();

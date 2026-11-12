@@ -263,6 +263,13 @@ json Backend::invoke(const std::string& command, const json& args) {
         return set_mod(arg_str(c, args, "kind"), arg_str(c, args, "id"), arg_str(c, args, "module"),
                        arg_str(c, args, "patch"), on.is_null() ? std::nullopt : std::optional<bool>(arg_bool(c, args, "on")));
     }
+    // servers.cpp (no Rust counterpart)
+    if (command == "list_servers") return list_servers();
+    if (command == "add_server") return add_server(arg_str(c, args, "name"), arg_str(c, args, "cloud"));
+    if (command == "remove_server") return remove_server(arg_str(c, args, "id")), nullptr;
+    if (command == "server_status") return server_status(arg_str(c, args, "id"));
+    if (command == "open_server_folder") return open_server_folder(arg_str(c, args, "id"), arg_str(c, args, "which")), nullptr;
+    if (command == "suggest_server_cloud") return suggest_server_cloud();
     if (command == "check_launcher_update") return check_launcher_update();
     if (command == "install_launcher_update") return install_launcher_update(), nullptr;
     if (command == "open_launcher_release") return open_launcher_release(), nullptr;

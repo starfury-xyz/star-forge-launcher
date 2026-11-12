@@ -1,6 +1,7 @@
 import { invoke } from './bridge.js';
 import { array, boolean, object, string } from './contracts.js';
 import { brand, control, el, errorMessage, notice, required, run } from './ui.js';
+import { parseServer } from './servers.js';
 
 /** @param {unknown} item */
 function parseToggle(item) {
@@ -35,7 +36,11 @@ function parseList(value) {
 
 /** Where a patch comes from, for a group heading. @param {Toggle} t */
 const sourceLabel = (t) =>
-  t.source === 'core' ? 'Core patches (ship with STAR FORGE)' : `From the pack (${t.source})`;
+  t.source === 'core'
+    ? 'Core patches (ship with STAR FORGE)'
+    : t.source.startsWith('starforge/')
+      ? `Server patchset (${t.source})`
+      : `From the pack (${t.source})`;
 
 /**
  * The Mods page: every patch of the chosen profile with an on/off switch.
@@ -51,20 +56,27 @@ export function bindMods(profiles, locked) {
   /** The list on screen, redrawn when the game starts or stops. @type {ReturnType<typeof parseList> | null} */
   let shown = null;
   let wasLocked = false;
+  let server = false;  // the list on screen is a server install's
+  /** A target to pick when the page is next shown, e.g. "server:testbed". @type {string | null} */
+  let pending = null;
 
   /** @param {ReturnType<typeof parseList>} list */
   const render = (list) => {
     shown = list;
-    wasLocked = locked();
+    server = selected()?.kind === 'server';
+    wasLocked = !server && locked();
     problems.replaceChildren();
     for (const e of list.errors) problems.append(el('p', 'mods-problem', brand(e)));
     for (const w of list.warnings) problems.append(el('p', 'mods-warning', brand(w)));
     const on = list.toggles.filter((t) => t.on).length;
     note.textContent = list.toggles.length
-      ? `${on} of ${list.toggles.length} patch${list.toggles.length === 1 ? '' : 'es'} on. Changes apply the next time you press Play.`
-      : 'This profile has no patches.';
-    if (!on && list.toggles.length) note.textContent += ' No patches will be applied to the game.';
-    if (wasLocked) note.textContent = 'The game is running: switches can change again once it exits.';
+      ? `${on} of ${list.toggles.length} patch${list.toggles.length === 1 ? '' : 'es'} on. ` +
+        (server ? 'Changes apply when the server restarts.' : 'Changes apply the next time you press Play.')
+      : server
+        ? 'This server install has no patchsets (starforge/patchsets is empty).'
+        : 'This profile has no patches.';
+    if (!on && list.toggles.length) note.textContent += ` No patches will be applied to the ${server ? 'server' : 'game'}.`;
+    if (wasLocked && !server) note.textContent = 'The game is running: switches can change again once it exits.';
 
     listNode.replaceChildren();
     let group = '';
@@ -88,7 +100,7 @@ export function bindMods(profiles, locked) {
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.checked = t.on;
-    box.disabled = locked();
+    box.disabled = wasLocked;
     box.setAttribute('aria-label', `${t.title || t.id}: ${t.on ? 'on' : 'off'}`);
     box.addEventListener('change', () => change(t, box.checked));
     const text = el('div', 'mod-text');
@@ -122,7 +134,7 @@ export function bindMods(profiles, locked) {
     if (t.chosen !== null) {
       const reset = el('button', 'link-button', 'Back to default');
       reset.type = 'button';
-      reset.disabled = locked();
+      reset.disabled = wasLocked;
       reset.addEventListener('click', () => change(t, null));
       meta.append(' · ', reset);
     }
@@ -137,17 +149,30 @@ export function bindMods(profiles, locked) {
     return node;
   };
 
-  const fill = () => {
+  const fill = async () => {
     const all = profiles.list();
-    const keep = target.value || profiles.current()?.id || '';
+    const keep = pending ?? (target.value || `profile:${profiles.current()?.id ?? ''}`);
+    pending = null;
+    /** @type {import('./servers.js').ServerInfo[]} */
+    let hosted = [];
+    try {
+      hosted = array(await invoke('list_servers'), parseServer);
+    } catch (error) {
+      notice(brand(errorMessage(error)), 'error');
+    }
     target.replaceChildren();
     const group = document.createElement('optgroup');
     group.label = 'Profiles';
     for (const p of all) group.append(new Option(brand(p.name), `profile:${p.id}`));
     target.append(group);
-    const wanted = keep.includes(':') ? keep : `profile:${keep}`;
-    if ([...target.options].some((o) => o.value === wanted)) target.value = wanted;
-    target.disabled = !all.length;
+    if (hosted.length) {
+      const servers = document.createElement('optgroup');
+      servers.label = 'Server installs';
+      for (const h of hosted) servers.append(new Option(h.name, `server:${h.id}`));
+      target.append(servers);
+    }
+    if ([...target.options].some((o) => o.value === keep)) target.value = keep;
+    target.disabled = !target.options.length;
   };
 
   /** The selected target as the backend's kind and id. */
@@ -161,7 +186,7 @@ export function bindMods(profiles, locked) {
     if (!t) {
       listNode.replaceChildren();
       problems.replaceChildren();
-      note.textContent = 'Add a server profile first.';
+      note.textContent = 'Add a server profile or a server install first.';
       return;
     }
     try {
@@ -198,10 +223,13 @@ export function bindMods(profiles, locked) {
       if (shown && locked() !== wasLocked) render(shown);
     },
     /** Called when the page is shown: follows the profile picked on the play page. */
-    show: () => {
-      target.value = '';
-      fill();
-      run(load);
-    },
+    show: () =>
+      run(async () => {
+        target.value = '';
+        await fill();
+        await load();
+      }),
+    /** Opens the page on a server install's patches next time it's shown. @param {string} id */
+    pickServer: (id) => (pending = `server:${id}`),
   };
 }

@@ -298,8 +298,45 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         check(contains(error_of("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "x"}, {"on", true}}),
                        "has no patch \"x\""),
               "set_mod: unknown patch");
-        check(contains(error_of("list_mods", {{"kind", "server"}, {"id", "gui-pack"}}), "unknown mod target"), "list_mods: unknown kind");
+        check(contains(error_of("list_mods", {{"kind", "bogus"}, {"id", "gui-pack"}}), "unknown mod target"), "list_mods: unknown kind");
         check(contains(error_of("list_mods", {{"kind", "profile"}, {"id", "nope"}}), "does not exist"), "list_mods: unknown profile");
+    }
+
+    // The Servers page: a server install in the list, checked, its patches switched in patcher.toml.
+    {
+        const fs::path cloud = base / "cloud";
+        test::write_file(cloud / "libcrypto-1_1_tg.dll", "proxy");
+        test::write_file(cloud / "libcrypto-1_1_tg_orig.dll", "orig");
+        test::write_file(cloud / "Hub.exe", "MZ");
+        test::write_file(cloud / "starforge/patchsets/Hub.exe.patchset.toml",
+                         "format = 1\nexe = \"Hub.exe\"\nsha1 = \"" + std::string(40, '0') +
+                             "\"\nimage_base = 0x400000\n[[patch]]\nid = \"a\"\n[[patch.write]]\nva = 0x401000\norig = \"74\"\nbytes = \"eb\"\n");
+        check(call("list_servers").empty(), "list_servers: none yet");
+        const json added = call("add_server", {{"name", " Test Box "}, {"cloud", ustr(cloud)}});
+        check(added["id"] == "test-box" && added["name"] == "Test Box", "add_server: " + added.dump());
+        check(contains(error_of("add_server", {{"name", "Again"}, {"cloud", ustr(cloud)}}), "already in the list, as Test Box"),
+              "add_server: the same folder twice");
+        check(contains(error_of("add_server", {{"name", "X"}, {"cloud", ustr(base / "nope")}}), "is not a folder"),
+              "add_server: not a folder");
+        check(call("list_servers").size() == 1, "list_servers: one");
+        json st = call("server_status", {{"id", "test-box"}});
+        check(st["proxy"] == "installed" && st["onError"] == "exit" && st["patches"] == 1 && st["patchesOn"] == 1 &&
+                  st["exes"].size() == 1 && contains(st["exes"][0]["errors"][0].get<std::string>(), "different build"),
+              "server_status: " + st.dump());
+        json mods = call("list_mods", {{"kind", "server"}, {"id", "test-box"}});
+        check(mods["toggles"].size() == 1 && mods["toggles"][0]["source"] == "starforge/patchsets/Hub.exe.patchset.toml",
+              "list_mods server: " + mods.dump());
+        mods = call("set_mod", {{"kind", "server"}, {"id", "test-box"}, {"module", "Hub.exe"}, {"patch", "a"}, {"on", false}});
+        check(mods["toggles"][0]["on"] == false && call("server_status", {{"id", "test-box"}})["patchesOn"] == 0,
+              "set_mod server: switched off");
+        check(contains(test::read_file(cloud / "starforge/patcher.toml"), "\"a\" = false"), "set_mod server: in patcher.toml");
+        call("open_server_folder", {{"id", "test-box"}, {"which", "cloud"}});
+        check(host.last_opened() == ustr(cloud), "open_server_folder: cloud");
+        check(contains(error_of("open_server_folder", {{"id", "test-box"}, {"which", "logs"}}), "doesn't exist yet"),
+              "open_server_folder: no logs yet");
+        call("remove_server", {{"id", "test-box"}});
+        check(call("list_servers").empty() && fs::exists(cloud / "Hub.exe"), "remove_server: off the list, files kept");
+        check(contains(error_of("server_status", {{"id", "test-box"}}), "no server install"), "server_status: unknown id");
     }
 
     // Updates.

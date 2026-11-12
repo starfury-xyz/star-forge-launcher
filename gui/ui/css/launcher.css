@@ -1692,3 +1692,55 @@ input[type='checkbox']:disabled {
 .link-button:hover:not(:disabled) {
   text-decoration: underline;
 }
+/* Servers page: a card per server install, then the selected one's check. */
+.servers-list {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.server-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #1c1916cc;
+}
+.server-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.server-card[aria-current='true'] {
+  border-color: var(--accent);
+}
+.server-detail {
+  margin-top: 22px;
+  padding-bottom: 30px;
+}
+.server-detail h2 {
+  margin: 0;
+  font-size: 24px;
+}
+#server-proxy[data-bad='true'] {
+  color: #ff8a7a;
+}
+.server-exes {
+  margin: 8px 0 18px;
+}
+.server-exe {
+  padding: 12px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #1c1916cc;
+}
+.mod-badge-bad {
+  border-color: #ff8a7a;
+  color: #ff8a7a;
+}
+#add-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
