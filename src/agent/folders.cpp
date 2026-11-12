@@ -17,7 +17,7 @@
 #include <system_error>
 
 #include "agent/agent.hpp"
-#include "agent/hook.hpp"
+#include "hook/hook.hpp"
 #include "common/text.hpp"
 
 namespace sf::agent::folders {

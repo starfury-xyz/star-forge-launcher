@@ -247,6 +247,27 @@ int main() {
         check(contains(error_of([] { mods::ServerConfig::parse("[patches.\"a.exe\"]\nx = 1", "p"); }), "true or false"),
               "config: non-bool switch");
         check(mods::read_server_config(tmp / "nowhere").exit_on_error, "config: missing file is the default");
+
+        // [files]: the overlay and state folders.
+        check(c.overlay == "overlay" && c.state == "state", "config: default overlay and state folders");
+        check(!contains(c.to_toml(), "[files]"), "config: default folders aren't written out");
+        auto f = mods::ServerConfig::parse("[files]\noverlay = 'Z:\\src\\game'\n[patches.\"Hub.exe\"]\nx = false\n", "p");
+        check(f.overlay == "Z:\\src\\game" && f.state == "state", "config: [files] overlay");
+        auto back = mods::ServerConfig::parse(f.to_toml(), "p");
+        check(back.overlay == f.overlay && back.state == "state" && back.patches == f.patches, "config: [files] round-trips");
+        check(contains(error_of([] { mods::ServerConfig::parse("[files]\nstate = ''", "p"); }), "folder name or path"),
+              "config: empty [files] state");
+        check(contains(error_of([] { mods::ServerConfig::parse("files = 1", "p"); }), "files must be a table"),
+              "config: files not a table");
+
+        // [stack]: main thread stack per exe.
+        auto s = mods::ServerConfig::parse("[stack]\n\"Shard.exe\" = 16\n", "p");
+        check(s.stack_mb == std::map<std::string, int>{{"Shard.exe", 16}}, "config: [stack]");
+        check(mods::ServerConfig::parse(s.to_toml(), "p").stack_mb == s.stack_mb, "config: [stack] round-trips");
+        check(contains(error_of([] { mods::ServerConfig::parse("[stack]\n\"a.exe\" = 0", "p"); }), "1 to 1024"),
+              "config: [stack] 0 MB");
+        check(contains(error_of([] { mods::ServerConfig::parse("[stack]\n\"a.exe\" = '16M'", "p"); }), "1 to 1024"),
+              "config: [stack] not a number");
     }
 
     std::printf("%s\n", test::failures ? "SOME CHECKS FAILED" : "all checks passed");

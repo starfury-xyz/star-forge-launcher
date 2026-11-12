@@ -23,6 +23,7 @@
 #include "launch/paths.hpp"
 #include "pack/pack.hpp"
 #include "patch/patchset.hpp"
+#include "patch/server_config.hpp"
 
 namespace sf::launch::mods {
 
@@ -66,15 +67,8 @@ inline constexpr const char* kServerDir = "starforge";          // under cloud/
 inline constexpr const char* kServerConfig = "patcher.toml";    // in starforge/
 inline constexpr const char* kServerPatchsets = "patchsets";    // in starforge/
 
-// cloud/starforge/patcher.toml. Unknown keys are ignored, like the proxy DLL does.
-struct ServerConfig {
-    bool exit_on_error = true;  // on_error = "exit" (default) or "continue"
-    std::map<std::string, patch::Choices> patches;  // module -> patch id -> on
-
-    // Throws std::runtime_error naming `name`.
-    static ServerConfig parse(const std::string& text, const std::string& name);
-    std::string to_toml() const;  // with the explanatory comments `sfp install` writes
-};
+// cloud/starforge/patcher.toml, shared with the proxy DLL.
+using ServerConfig = patch::ServerConfig;
 
 fs::path server_root(const fs::path& cloud_dir);  // cloud/starforge
 ServerConfig read_server_config(const fs::path& cloud_dir);  // a missing file is the default

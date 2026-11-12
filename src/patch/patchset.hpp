@@ -11,6 +11,7 @@
 // patches the running game's memory, the launcher can check the file on disk (FileImage).
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -94,9 +95,11 @@ struct State {
 };
 
 State check(Target& t, const Patch& p);
+// Installs one midhook write (w.midhook at w.va, w.orig the stolen bytes). Returns "" or the error.
+using MidhookInstaller = std::function<std::string(const Write& w)>;
 // Applies a patch whose state is Pristine, reading every write back. Returns "" or the error.
-// Midhooks aren't supported by any method yet (the Rust code takes an installer; no caller has one).
-std::string apply(Target& t, const Patch& p);
+// Midhook writes need `midhook` (only the server proxy has one); without it they fail.
+std::string apply(Target& t, const Patch& p, const MidhookInstaller& midhook = {});
 
 // A PE file in memory (e.g. game.exe read from disk), addressed by virtual address. For checking
 // a patchset before launch, or writing a patched copy.

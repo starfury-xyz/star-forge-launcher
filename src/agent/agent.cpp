@@ -15,9 +15,9 @@
 
 #include "agent/folders.hpp"
 #include "agent/patches.hpp"
-#include "agent/file_hooks.hpp"
 #include "common/text.hpp"
 #include "profile/profile.hpp"
+#include "redirect/redirect.hpp"
 
 namespace sf::agent {
 namespace {
@@ -84,7 +84,12 @@ bool init() {
         log("could not work out the game root; file redirects disabled");
         return true;
     }
-    file_hooks::install(game_root, profile_dir, prof.trace_files);
+    redirect::Config files;
+    files.game_root = game_root;
+    files.layers = {profile_dir + L"\\" + profile::kFilesDir};
+    files.trace = prof.trace_files;
+    files.log = [](const char* line) { log("%s", line); };
+    if (std::string err = redirect::install(std::move(files)); !err.empty()) log("%s, file redirects disabled", err.c_str());
     return true;
 }
 

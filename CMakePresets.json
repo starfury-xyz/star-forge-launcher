@@ -14,6 +14,18 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
     },
     {
+      "name": "win32",
+      "displayName": "Windows x86, server proxy only (Linux: clang-cl + xwin)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win32",
+      "toolchainFile": "${sourceDir}/cmake/clang-cl-xwin.cmake",
+      "cacheVariables": {
+        "SF_ARCH": "x86",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
       "name": "win64-msvc",
       "displayName": "Windows x64 (Windows: MSVC)",
       "generator": "Ninja",
@@ -37,11 +49,13 @@
   ],
   "buildPresets": [
     { "name": "win64", "configurePreset": "win64" },
+    { "name": "win32", "configurePreset": "win32" },
     { "name": "win64-msvc", "configurePreset": "win64-msvc" },
     { "name": "linux", "configurePreset": "linux" }
   ],
   "testPresets": [
     { "name": "win64", "configurePreset": "win64", "output": { "outputOnFailure": true } },
+    { "name": "win32", "configurePreset": "win32", "output": { "outputOnFailure": true } },
     { "name": "win64-msvc", "configurePreset": "win64-msvc", "output": { "outputOnFailure": true } },
     { "name": "linux", "configurePreset": "linux", "output": { "outputOnFailure": true } }
   ]
