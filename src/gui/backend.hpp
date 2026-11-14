@@ -179,6 +179,8 @@ private:
     json add_server(const std::string& name, const std::string& cloud);
     void remove_server(const std::string& id);
     json server_status(const std::string& id);
+    json install_server_proxy(const std::string& id);  // returns server_status
+    json uninstall_server_proxy(const std::string& id);
     void open_server_folder(const std::string& id, const std::string& which);
     json suggest_server_cloud();
     json check_launcher_update();

@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "gui/internal.hpp"
+#include "launch/env.hpp"
 #include "launch/mods.hpp"
 #include "launch/profiles.hpp"
 #include "launch/servers.hpp"
@@ -68,15 +69,32 @@ json Backend::server_status(const std::string& id) {
         }));
     size_t on = 0;
     for (const mods::Toggle& t : list.toggles) on += t.on;
+    const auto build = mods::find_proxy(tools_dir());
     return json(ojson{
         {"server", to_json(s)},
         {"proxy", proxy_name(st.proxy)},
+        {"proxyBuild", build ? json(ustr(*build)) : json(nullptr)},
         {"onError", st.config ? json(st.config->exit_on_error ? "exit" : "continue") : json(nullptr)},
         {"exes", exes},
         {"errors", st.errors},
         {"patches", list.toggles.size()},
         {"patchesOn", on},
     });
+}
+
+json Backend::install_server_proxy(const std::string& id) {
+    const servers::Server s = servers::get(data_dir(), id);
+    const auto build = mods::find_proxy(tools_dir());
+    if (!build)
+        throw std::runtime_error("no server proxy build found: it goes in server/ beside the launcher's tools, or set " +
+                                 std::string(launch::env::kServerProxy));
+    mods::install_proxy(s.cloud, *build);
+    return server_status(id);
+}
+
+json Backend::uninstall_server_proxy(const std::string& id) {
+    mods::uninstall_proxy(servers::get(data_dir(), id).cloud);
+    return server_status(id);
 }
 
 void Backend::open_server_folder(const std::string& id, const std::string& which) {

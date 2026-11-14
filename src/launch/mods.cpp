@@ -6,6 +6,7 @@
 
 #include <toml.hpp>
 
+#include "launch/env.hpp"
 #include "launch/profiles.hpp"
 #include "patch/core.hpp"
 #include "patch/sha1.hpp"
@@ -222,15 +223,24 @@ List server(const fs::path& cloud_dir) {
     return b.finish(config.patches, [](size_t, const patch::Patch& p) { return p.default_on; });
 }
 
+// The DLL and its original as they are in a server install, and what that means.
+struct ProxyFiles {
+    std::optional<fs::path> dll, orig;
+    ServerStatus::Proxy state = ServerStatus::NoDll;
+};
+
+ProxyFiles proxy_files(const fs::path& cloud_dir) {
+    ProxyFiles f{find_file(cloud_dir, kProxyDll), find_file(cloud_dir, kProxyOrig)};
+    if (!f.dll) f.state = f.orig ? ServerStatus::Broken : ServerStatus::NoDll;
+    else if (auto text = read_text(*f.dll); !text) f.state = ServerStatus::Broken;
+    else if (is_proxy(*text)) f.state = f.orig ? ServerStatus::Installed : ServerStatus::Broken;
+    else f.state = f.orig ? ServerStatus::Restored : ServerStatus::Stock;
+    return f;
+}
+
 ServerStatus server_status(const fs::path& cloud_dir) {
     ServerStatus st;
-    const auto dll = find_file(cloud_dir, kProxyDll), orig = find_file(cloud_dir, kProxyOrig);
-    if (!dll) st.proxy = orig ? ServerStatus::Broken : ServerStatus::NoDll;
-    else if (!orig) st.proxy = ServerStatus::Stock;
-    else {
-        auto a = read_text(*dll), o = read_text(*orig);
-        st.proxy = !a || !o ? ServerStatus::Broken : *a == *o ? ServerStatus::Restored : ServerStatus::Installed;
-    }
+    st.proxy = proxy_files(cloud_dir).state;
     try {
         st.config = read_server_config(cloud_dir);
     } catch (const std::exception& e) {
@@ -263,6 +273,73 @@ void set_server(const fs::path& cloud_dir, const std::string& module, const std:
     ServerConfig config = read_server_config(cloud_dir);
     set_switch(config.patches, t, on);
     write_server_config(cloud_dir, config);
+}
+
+bool is_proxy(const std::string& dll) {
+    static const std::string marker("sfp_version", sizeof "sfp_version");  // the export's name, with its NUL
+    return dll.find(marker) != std::string::npos;
+}
+
+std::optional<fs::path> find_proxy(const std::optional<fs::path>& tools_dir) {
+    std::error_code ec;
+    if (auto file = env::path(env::kServerProxy)) return fs::is_regular_file(*file, ec) ? file : std::nullopt;
+    if (!tools_dir) return std::nullopt;
+    const fs::path file = *tools_dir / "server" / kProxyDll;
+    if (fs::is_regular_file(file, ec)) return file;
+    return std::nullopt;
+}
+
+ServerStatus::Proxy install_proxy(const fs::path& cloud_dir, const fs::path& proxy) {
+    const std::string build = read_or_throw(proxy);
+    if (!is_proxy(build)) throw std::runtime_error(ustr(proxy) + " is not a STAR FORGE server proxy build");
+    const ProxyFiles f = proxy_files(cloud_dir);
+    switch (f.state) {
+    case ServerStatus::NoDll:
+        throw std::runtime_error("no " + std::string(kProxyDll) + " in " + ustr(cloud_dir) + ": is this the game's cloud folder?");
+    case ServerStatus::Broken:
+        throw std::runtime_error(ustr(cloud_dir) + " has the proxy without the original " + kProxyDll +
+                                 " (or the other way round); verify the game files in Steam, then install again");
+    case ServerStatus::Stock:
+    case ServerStatus::Restored: {
+        // The game's DLL becomes the original; on a failure below it goes back.
+        const fs::path orig = cloud_dir / kProxyOrig;
+        std::error_code ec;
+        if (f.orig && *f.orig != orig) fs::remove(*f.orig, ec);  // another spelling of the stale copy
+        fs::rename(*f.dll, orig, ec);
+        if (ec) throw std::runtime_error(io_error(*f.dll, ec));
+        try {
+            profiles::write_atomic(*f.dll, build);
+        } catch (...) {
+            fs::rename(orig, *f.dll, ec);
+            throw;
+        }
+        break;
+    }
+    case ServerStatus::Installed: profiles::write_atomic(*f.dll, build); break;
+    }
+    const fs::path root = server_root(cloud_dir);
+    for (const fs::path& dir : {root / kServerPatchsets, root / "logs"}) {
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        if (ec) throw std::runtime_error(io_error(dir, ec));
+    }
+    std::error_code ec;
+    if (!fs::exists(root / kServerConfig, ec)) write_server_config(cloud_dir, ServerConfig{});
+    return f.state;
+}
+
+void uninstall_proxy(const fs::path& cloud_dir) {
+    const ProxyFiles f = proxy_files(cloud_dir);
+    std::error_code ec;
+    switch (f.state) {
+    case ServerStatus::Installed: fs::rename(*f.orig, *f.dll, ec); break;
+    case ServerStatus::Restored: fs::remove(*f.orig, ec); break;
+    case ServerStatus::Stock: throw std::runtime_error("the proxy isn't installed in " + ustr(cloud_dir));
+    case ServerStatus::NoDll: throw std::runtime_error("no " + std::string(kProxyDll) + " in " + ustr(cloud_dir));
+    case ServerStatus::Broken:
+        throw std::runtime_error(ustr(cloud_dir) + " has the proxy without the original " + kProxyDll + "; verify the game files in Steam");
+    }
+    if (ec) throw std::runtime_error(io_error(*f.orig, ec));
 }
 
 }  // namespace sf::launch::mods

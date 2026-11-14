@@ -15,6 +15,7 @@ namespace sf::launch::env {
 
 inline constexpr const char* kGameDir = "STAR_FORGE_GAME_DIR";        // Star Conflict install (win64\, data\)
 inline constexpr const char* kToolsDir = "STAR_FORGE_TOOLS_DIR";      // sc-inject.exe + sc_agent.dll
+inline constexpr const char* kServerProxy = "STAR_FORGE_SERVER_PROXY";  // the x86 server proxy's libcrypto-1_1_tg.dll
 inline constexpr const char* kProton = "STAR_FORGE_PROTON";           // Proton build folder (Linux)
 inline constexpr const char* kDataDir = "STAR_FORGE_DATA_DIR";        // preferences, profiles, launch log
 inline constexpr const char* kProfilesDir = "STAR_FORGE_PROFILES_DIR";  // if not the one chosen in setup

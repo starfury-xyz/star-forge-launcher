@@ -16,6 +16,7 @@ function parseStatus(value) {
   return {
     server: parseServer(s.server),
     proxy: string(s.proxy),
+    proxyBuild: s.proxyBuild === null ? null : string(s.proxyBuild),
     onError: s.onError === null ? null : string(s.onError),
     exes: array(s.exes, (item) => {
       const e = object(item);
@@ -39,8 +40,8 @@ function parseStatus(value) {
 const proxyText = {
   installed: ['Installed', false],
   stock: ['Not installed: the game’s own libcrypto-1_1_tg.dll, so no server patches apply', true],
-  restored: ['Not active: Steam put the original libcrypto-1_1_tg.dll back (“verify files”?); install the patcher again', true],
-  broken: ['Broken: libcrypto-1_1_tg_orig.dll is missing or unreadable', true],
+  restored: ['Not active: Steam put the game’s libcrypto-1_1_tg.dll back (“verify files” or an update); install the patcher again', true],
+  broken: ['Broken: the patcher without the game’s original libcrypto-1_1_tg.dll; verify the game files in Steam', true],
   missing: ['No libcrypto-1_1_tg.dll here: is this the game’s cloud folder?', true],
 };
 
@@ -86,6 +87,14 @@ export function bindServers(openMods) {
     const proxyNode = required('server-proxy');
     proxyNode.textContent = proxy;
     proxyNode.dataset.bad = String(proxyBad);
+    const install = control('server-install', HTMLButtonElement);
+    install.hidden = !['stock', 'restored', 'installed'].includes(st.proxy);
+    install.textContent = st.proxy === 'installed' ? 'Update patcher' : 'Install patcher';
+    install.disabled = !st.proxyBuild;
+    install.title = st.proxyBuild
+      ? `Copies in ${st.proxyBuild}; the game’s own DLL is kept. Restart the server afterwards.`
+      : 'No patcher build found: it goes in server/ beside the launcher’s tools, or set STAR_FORGE_SERVER_PROXY';
+    required('server-uninstall').hidden = !['installed', 'restored'].includes(st.proxy);
     required('server-on-error').textContent =
       st.onError === 'continue' ? 'Start anyway, with whatever patches match' : 'Refuse to start (recommended)';
     required('server-patches').textContent = st.patches
@@ -177,6 +186,25 @@ export function bindServers(openMods) {
   required('server-mods').addEventListener('click', () => {
     if (selected) openMods(selected);
   });
+  /** @param {string} command @param {string} done */
+  const proxyAction = (command, done) => {
+    const id = selected;
+    if (!id) return;
+    run(async () => {
+      try {
+        renderStatus(parseStatus(await invoke(command, { id })));
+        notice(done, 'success');
+      } catch (error) {
+        notice(errorMessage(error), 'error');
+      }
+    });
+  };
+  required('server-install').addEventListener('click', () =>
+    proxyAction('install_server_proxy', 'Patcher installed. Restart the server for it to take effect.'),
+  );
+  required('server-uninstall').addEventListener('click', () =>
+    proxyAction('uninstall_server_proxy', 'The game’s own DLL is back. starforge/ is left in place.'),
+  );
   required('server-recheck').addEventListener('click', () => {
     if (selected) select(selected);
   });

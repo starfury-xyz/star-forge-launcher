@@ -57,6 +57,11 @@ const char* kUsage =
     "FOR SERVER HOSTS:\n"
     "  sc-launch server status <cloud-dir>   Check a server install the way its processes\n"
     "                                        will at startup: proxy DLL, exe builds, patches\n"
+    "  sc-launch [OPTIONS] server install <cloud-dir> [<proxy dll>]\n"
+    "                                        Put the server proxy in (the game's DLL is\n"
+    "                                        kept); run again after a Steam verify/update\n"
+    "  sc-launch server uninstall <cloud-dir>\n"
+    "                                        Put the game's own DLL back\n"
     "  sc-launch server on|off|default <cloud-dir> <exe> <id>\n"
     "                                        Switch a server patch (saved in\n"
     "                                        starforge/patcher.toml; applies on restart)\n"
@@ -284,8 +289,9 @@ const char* describe_proxy(mods::ServerStatus::Proxy p) {
     case mods::ServerStatus::Stock: return "not installed: the game's own libcrypto-1_1_tg.dll, so no patches apply";
     case mods::ServerStatus::Installed: return "installed (the original is kept as libcrypto-1_1_tg_orig.dll)";
     case mods::ServerStatus::Restored:
-        return "NOT ACTIVE: libcrypto-1_1_tg.dll is the original again (Steam \"verify files\"?); install the proxy again";
-    case mods::ServerStatus::Broken: return "BROKEN: libcrypto-1_1_tg_orig.dll is missing or unreadable";
+        return "NOT ACTIVE: libcrypto-1_1_tg.dll is the game's again (Steam \"verify files\" or an update?); install the proxy again";
+    case mods::ServerStatus::Broken:
+        return "BROKEN: the proxy without libcrypto-1_1_tg_orig.dll, or the other way round; verify the game files in Steam";
     }
     return "";
 }
@@ -456,6 +462,28 @@ int run(const std::vector<std::string>& args) {
         return 0;
     }
     if (is({"server", "status", nullptr})) return server_status(upath(c[2]));
+    if (is({"server", "install", nullptr}) || is({"server", "install", nullptr, nullptr})) {
+        std::optional<fs::path> proxy;
+        if (c.size() == 4) proxy = upath(c[3]);
+        else {
+            std::optional<fs::path> tools = cli.opts.tools_dir ? cli.opts.tools_dir : env::path(env::kToolsDir);
+            if (!tools && current_exe().has_parent_path()) tools = current_exe().parent_path();
+            proxy = mods::find_proxy(tools);
+            if (!proxy)
+                throw std::runtime_error("no server proxy build found (pass it, or set " + std::string(env::kServerProxy) + ")");
+        }
+        const auto before = mods::install_proxy(upath(c[2]), *proxy);
+        std::printf("%s %s\n", before == mods::ServerStatus::Installed ? "updated the proxy from" : "installed the proxy from",
+                    ustr(*proxy).c_str());
+        if (before == mods::ServerStatus::Restored) std::printf("the game's DLL (put back by Steam) is the new original\n");
+        std::printf("restart the server for it to take effect\n");
+        return 0;
+    }
+    if (is({"server", "uninstall", nullptr})) {
+        mods::uninstall_proxy(upath(c[2]));
+        std::printf("the game's own %s is back (starforge/ is left in place)\n", mods::kProxyDll);
+        return 0;
+    }
     if (is({"server", nullptr, nullptr, nullptr, nullptr}) && c[1] != "status") {
         const std::optional<bool> on = switch_value(c[1]);
         mods::set_server(upath(c[2]), c[3], c[4], on);

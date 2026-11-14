@@ -117,8 +117,10 @@ int main(int argc, char** argv) {
 
     // A server install: proxy in place, one exe whose build doesn't match, so status fails.
     const fs::path cloud = g_dir / "cloud";
-    test::write_file(cloud / "libcrypto-1_1_tg.dll", "proxy");
-    test::write_file(cloud / "libcrypto-1_1_tg_orig.dll", "orig");
+    test::write_file(cloud / "libcrypto-1_1_tg.dll", "orig");
+    test::write_file(g_dir / "proxy.dll", std::string("MZ sfp_version\0", 15));
+    std::tie(code, out) = sc({"server", "install", ustr(cloud), ustr(g_dir / "proxy.dll")});
+    check(code == 0 && contains(out, "installed the proxy from"), "server install: " + out);
     test::write_file(cloud / "Hub.exe", "MZ");
     test::write_file(cloud / "starforge/patchsets/Hub.exe.patchset.toml", R"(format = 1
 exe = "Hub.exe"
@@ -141,6 +143,10 @@ bytes = "eb"
           "server off: written to patcher.toml");
     std::tie(code, out) = sc({"server", "status", ustr(cloud)});
     check(contains(out, "  off* a "), "server status: the switch is shown");
+    std::tie(code, out) = sc({"server", "uninstall", ustr(cloud)});
+    check(code == 0 && test::read_file(cloud / "libcrypto-1_1_tg.dll") == "orig", "server uninstall: " + out);
+    std::tie(code, out) = sc({"server", "status", ustr(cloud)});
+    check(contains(out, "proxy:   not installed"), "server status after uninstall: " + out);
 
     std::printf("%s (%d failed)\n", test::failures ? "FAILED" : "ok", test::failures);
     return test::failures ? 1 : 0;

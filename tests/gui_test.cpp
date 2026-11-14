@@ -305,8 +305,7 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     // The Servers page: a server install in the list, checked, its patches switched in patcher.toml.
     {
         const fs::path cloud = base / "cloud";
-        test::write_file(cloud / "libcrypto-1_1_tg.dll", "proxy");
-        test::write_file(cloud / "libcrypto-1_1_tg_orig.dll", "orig");
+        test::write_file(cloud / "libcrypto-1_1_tg.dll", "orig");
         test::write_file(cloud / "Hub.exe", "MZ");
         test::write_file(cloud / "starforge/patchsets/Hub.exe.patchset.toml",
                          "format = 1\nexe = \"Hub.exe\"\nsha1 = \"" + std::string(40, '0') +
@@ -320,6 +319,16 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
               "add_server: not a folder");
         check(call("list_servers").size() == 1, "list_servers: one");
         json st = call("server_status", {{"id", "test-box"}});
+        check(st["proxy"] == "stock" && st["proxyBuild"].is_null(), "server_status: not installed, no build: " + st.dump());
+        check(contains(error_of("install_server_proxy", {{"id", "test-box"}}), "no server proxy build"),
+              "install_server_proxy: no build");
+        test::write_file(base / "proxy.dll", std::string("MZ sfp_version\0", 15));
+        set_env(env::kServerProxy, ustr(base / "proxy.dll"));
+        st = call("install_server_proxy", {{"id", "test-box"}});
+        check(st["proxy"] == "installed" && st["proxyBuild"] == ustr(base / "proxy.dll") &&
+                  test::read_file(cloud / "libcrypto-1_1_tg_orig.dll") == "orig",
+              "install_server_proxy: " + st.dump());
+        st = call("server_status", {{"id", "test-box"}});
         check(st["proxy"] == "installed" && st["onError"] == "exit" && st["patches"] == 1 && st["patchesOn"] == 1 &&
                   st["exes"].size() == 1 && contains(st["exes"][0]["errors"][0].get<std::string>(), "different build"),
               "server_status: " + st.dump());
@@ -332,8 +341,12 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         check(contains(test::read_file(cloud / "starforge/patcher.toml"), "\"a\" = false"), "set_mod server: in patcher.toml");
         call("open_server_folder", {{"id", "test-box"}, {"which", "cloud"}});
         check(host.last_opened() == ustr(cloud), "open_server_folder: cloud");
-        check(contains(error_of("open_server_folder", {{"id", "test-box"}, {"which", "logs"}}), "doesn't exist yet"),
-              "open_server_folder: no logs yet");
+        call("open_server_folder", {{"id", "test-box"}, {"which", "logs"}});
+        check(host.last_opened() == ustr(cloud / "starforge" / "logs"), "open_server_folder: logs (made by the install)");
+        check(call("uninstall_server_proxy", {{"id", "test-box"}})["proxy"] == "stock" &&
+                  test::read_file(cloud / "libcrypto-1_1_tg.dll") == "orig",
+              "uninstall_server_proxy: the game's DLL back");
+        set_env(env::kServerProxy, std::nullopt);
         call("remove_server", {{"id", "test-box"}});
         check(call("list_servers").empty() && fs::exists(cloud / "Hub.exe"), "remove_server: off the list, files kept");
         check(contains(error_of("server_status", {{"id", "test-box"}}), "no server install"), "server_status: unknown id");

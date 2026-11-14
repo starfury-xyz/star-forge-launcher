@@ -18,6 +18,8 @@ using test::contains;
 namespace {
 
 const char* kCore = "loose-before-packed";  // the one core patch today
+// A stand-in proxy build: what install_proxy looks for is the sfp_version export's name.
+const std::string kProxyBuild("MZ proxy sfp_version\0 v1", 24);
 
 template <class F>
 std::string error_of(F f) {
@@ -215,9 +217,14 @@ int main() {
         check(proxy() == mods::ServerStatus::Stock, "status: the game's own DLL only");
         test::write_file(s / "LIBCRYPTO-1_1_TG_ORIG.DLL", "stock");
         check(proxy() == mods::ServerStatus::Restored, "status: proxy overwritten by the original (name ignoring case)");
-        test::write_file(s / "libcrypto-1_1_tg.dll", "proxy");
+        test::write_file(s / "libcrypto-1_1_tg.dll", kProxyBuild);
         check(proxy() == mods::ServerStatus::Installed, "status: proxy installed");
+        test::write_file(s / "libcrypto-1_1_tg.dll", "stock v2");
+        check(proxy() == mods::ServerStatus::Restored, "status: a game update's DLL over the proxy");
+        test::write_file(s / "libcrypto-1_1_tg.dll", kProxyBuild);
         fs::remove(s / "LIBCRYPTO-1_1_TG_ORIG.DLL");
+        check(proxy() == mods::ServerStatus::Broken, "status: the proxy without the original");
+        test::write_file(s / "libcrypto-1_1_tg.dll", "some other dll");
         check(proxy() == mods::ServerStatus::Stock, "status: without the original it's just some DLL");
 
         test::write_file(s / "starforge" / "patchsets" / "Shard.exe.patchset.toml", kShardSet);
@@ -233,6 +240,55 @@ int main() {
         test::write_file(s / "starforge" / "patcher.toml", "on_error = 3");
         st = mods::server_status(s);
         check(!st.config && st.errors.size() == 1 && contains(st.errors[0], "on_error"), "status: broken config is an error");
+    }
+
+    // install_proxy / uninstall_proxy: the game's DLL kept as the original, put back on uninstall.
+    {
+        const fs::path s = tmp / "install", build = tmp / "proxy.dll";
+        auto proxy = [&] { return mods::server_status(s).proxy; };
+        auto dll = [&] { return test::read_file(s / "libcrypto-1_1_tg.dll"); };
+        test::write_file(build, kProxyBuild);
+        fs::create_directories(s);
+        check(contains(error_of([&] { mods::install_proxy(s, build); }), "is this the game's cloud folder"),
+              "install: no DLL is refused");
+        test::write_file(s / "libcrypto-1_1_tg.dll", "stock");
+        test::write_file(tmp / "not-proxy.dll", "MZ something else");
+        check(contains(error_of([&] { mods::install_proxy(s, tmp / "not-proxy.dll"); }), "not a STAR FORGE server proxy"),
+              "install: only a proxy build");
+        check(dll() == "stock" && proxy() == mods::ServerStatus::Stock, "install: a refused install changes nothing");
+
+        check(mods::install_proxy(s, build) == mods::ServerStatus::Stock, "install: from stock");
+        check(proxy() == mods::ServerStatus::Installed && dll() == kProxyBuild &&
+                  test::read_file(s / "libcrypto-1_1_tg_orig.dll") == "stock",
+              "install: proxy in, original kept");
+        check(fs::is_directory(s / "starforge" / "patchsets") && fs::is_directory(s / "starforge" / "logs") &&
+                  mods::read_server_config(s).exit_on_error,
+              "install: starforge/ folders and a default patcher.toml");
+        test::write_file(s / "starforge" / "patcher.toml", "on_error = \"continue\"\n");
+        const std::string v2 = kProxyBuild + " v2";
+        test::write_file(build, v2);
+        check(mods::install_proxy(s, build) == mods::ServerStatus::Installed && dll() == v2 &&
+                  test::read_file(s / "libcrypto-1_1_tg_orig.dll") == "stock",
+              "install: again updates the proxy only");
+        check(!mods::read_server_config(s).exit_on_error, "install: an existing patcher.toml is kept");
+
+        test::write_file(s / "libcrypto-1_1_tg.dll", "stock v2");  // Steam updated the game
+        check(mods::install_proxy(s, build) == mods::ServerStatus::Restored && dll() == v2 &&
+                  test::read_file(s / "libcrypto-1_1_tg_orig.dll") == "stock v2",
+              "install: after a Steam verify/update, the new DLL becomes the original");
+
+        mods::uninstall_proxy(s);
+        check(proxy() == mods::ServerStatus::Stock && dll() == "stock v2" && !fs::exists(s / "libcrypto-1_1_tg_orig.dll") &&
+                  fs::exists(s / "starforge" / "patcher.toml"),
+              "uninstall: the original back, starforge/ kept");
+        check(contains(error_of([&] { mods::uninstall_proxy(s); }), "isn't installed"), "uninstall: twice is refused");
+        test::write_file(s / "libcrypto-1_1_tg_orig.dll", "stock");
+        mods::uninstall_proxy(s);
+        check(proxy() == mods::ServerStatus::Stock && dll() == "stock v2", "uninstall: restored just drops the stale original");
+
+        test::write_file(s / "libcrypto-1_1_tg.dll", kProxyBuild);  // proxy, original lost
+        check(contains(error_of([&] { mods::install_proxy(s, build); }), "verify the game files"), "install: broken is refused");
+        check(contains(error_of([&] { mods::uninstall_proxy(s); }), "verify the game files"), "uninstall: broken is refused");
     }
 
     // patcher.toml parsing, as the proxy DLL reads it.

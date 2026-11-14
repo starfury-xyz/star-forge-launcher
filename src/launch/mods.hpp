@@ -92,8 +92,8 @@ struct ServerStatus {
         NoDll,      // no libcrypto-1_1_tg.dll at all: probably not a cloud/ folder
         Stock,      // the game's own DLL, no proxy
         Installed,  // proxy in place, original kept
-        Restored,   // both files the same: Steam "verify files" put the original back
-        Broken,     // the original's copy is gone, or the like
+        Restored,   // the game's DLL back over the proxy (Steam "verify files" or an update)
+        Broken,     // the proxy without the original, or the original without a DLL
     } proxy = NoDll;
     std::optional<ServerConfig> config;  // nullopt if patcher.toml is unreadable (then in errors)
     std::vector<ExeCheck> exes;          // one per patchset
@@ -103,5 +103,20 @@ struct ServerStatus {
 ServerStatus server_status(const fs::path& cloud_dir);
 // Like set_client, in patcher.toml.
 void set_server(const fs::path& cloud_dir, const std::string& module, const std::string& id, std::optional<bool> on);
+
+// A STAR FORGE proxy build, by its sfp_version export (the old patcher's builds have it too).
+bool is_proxy(const std::string& dll);
+// The proxy build to install: STAR_FORGE_SERVER_PROXY, else <tools_dir>/server/libcrypto-1_1_tg.dll,
+// if the file is there.
+std::optional<fs::path> find_proxy(const std::optional<fs::path>& tools_dir);
+// Puts the proxy build `proxy` into a server install: the game's own DLL is kept as
+// ..._orig.dll (replacing the old copy if Steam put a DLL back), and starforge/ gets its
+// folders and a default patcher.toml. Run again to update the proxy. Throws
+// std::runtime_error, changing nothing, if `proxy` isn't a proxy build or the install is
+// NoDll or Broken. Returns the state it found.
+ServerStatus::Proxy install_proxy(const fs::path& cloud_dir, const fs::path& proxy);
+// Puts the game's own DLL back; starforge/ is left alone. Restored just drops the stale
+// ..._orig.dll. Throws std::runtime_error for Stock, NoDll and Broken.
+void uninstall_proxy(const fs::path& cloud_dir);
 
 }  // namespace sf::launch::mods
