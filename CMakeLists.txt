@@ -35,17 +35,25 @@ endif()
 
 # The core patchsets (core-patches/*.patchset.toml), embedded as text in sf_core like Rust's
 # include_str!. Re-generated whenever one of them changes.
-file(GLOB CORE_PATCHSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/core-patches/*.patchset.toml")
-set(CORE_INC "")
-foreach(f IN LISTS CORE_PATCHSETS)
-    get_filename_component(name "${f}" NAME)
-    file(READ "${f}" text)
-    string(APPEND CORE_INC "{\"core/${name}\", R\"sfcore(${text})sfcore\"},\n")
-endforeach()
-# Written via a temp file and copied only when different, so core.cpp only rebuilds on a real change.
-file(WRITE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CORE_INC}")
-file(COPY_FILE "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc.tmp" "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
-     ONLY_IF_DIFFERENT)
+file(GLOB CORE_PATCHSETS "${CMAKE_SOURCE_DIR}/core-patches/*.patchset.toml")
+
+# Create custom command that runs at build time
+add_custom_command(
+    OUTPUT "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND ${CMAKE_COMMAND}
+        -D "CORE_PATCHSETS=${CORE_PATCHSETS}"
+        -D "OUTPUT_FILE=${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
+        -P "${CMAKE_SOURCE_DIR}/cmake/generate_core_patchsets.cmake"
+    DEPENDS ${CORE_PATCHSETS}
+    COMMENT "Generating core_patchsets.inc"
+    VERBATIM
+)
+
+# Create a custom target
+add_custom_target(generate_core_patchsets ALL
+    DEPENDS "${CMAKE_BINARY_DIR}/generated/core_patchsets.inc"
+)
 
 # Patchsets (port of crates/sc-patch): portable, shared by the agent and the launcher. Static
 # libraries, so each binary gets its own copy compiled in.
@@ -56,6 +64,7 @@ add_library(sf_patch STATIC
     src/patch/toml_impl.cpp
 )
 target_include_directories(sf_patch PUBLIC src PRIVATE "${CMAKE_BINARY_DIR}/generated")
+add_dependencies(sf_patch generate_core_patchsets)
 # SYSTEM: vendored headers' own warnings aren't ours to fix.
 target_include_directories(sf_patch SYSTEM PUBLIC third_party third_party/tomlplusplus)
 target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
