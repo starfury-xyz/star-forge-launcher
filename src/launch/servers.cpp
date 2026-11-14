@@ -85,4 +85,21 @@ std::optional<fs::path> game_cloud(const fs::path& game_dir) {
     return std::nullopt;
 }
 
+RunState run_state(const fs::path& cloud, int64_t now) {
+    RunState st;
+    auto text = read_text(cloud / "starforge" / "server.json");
+    if (!text) return st;
+    st.state = RunState::Stale;  // unless it reads as fresh
+    try {
+        const json j = json::parse(*text);
+        st.started = j.at("started").get<int64_t>();
+        st.mongo_port = j.at("mongoPort").get<unsigned>();
+        st.own_mongo = j.at("mongod").get<int64_t>() != 0;
+        if (now - j.at("heartbeat").get<int64_t>() <= kStaleAfter) st.state = RunState::Running;
+    } catch (const std::exception&) {
+        // half-written or foreign: stale
+    }
+    return st;
+}
+
 }  // namespace sf::launch::servers

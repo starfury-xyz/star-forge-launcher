@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <ctime>
 #include <thread>
 
 #include <monocypher-ed25519.h>
@@ -328,6 +329,16 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         check(st["proxy"] == "installed" && st["proxyBuild"] == ustr(base / "proxy.dll") &&
                   test::read_file(cloud / "libcrypto-1_1_tg_orig.dll") == "orig",
               "install_server_proxy: " + st.dump());
+        st = call("server_status", {{"id", "test-box"}});
+        check(st["run"]["state"] == "stopped", "server_status: not running: " + st["run"].dump());
+        test::write_file(cloud / "starforge/server.json",
+                         R"({"supervisor": 1, "hub": 2, "mongod": 0, "mongoPort": 27017, "started": 5, "heartbeat": )" +
+                             std::to_string(std::time(nullptr)) + "}");
+        st = call("server_status", {{"id", "test-box"}});
+        check(st["run"]["state"] == "running" && st["run"]["started"] == 5 && st["run"]["ownMongo"] == false,
+              "server_status: running from server.json: " + st["run"].dump());
+        check(contains(error_of("start_server", {{"id", "test-box"}}), "already running"), "start_server: refused while running");
+        fs::remove(cloud / "starforge/server.json");
         st = call("server_status", {{"id", "test-box"}});
         check(st["proxy"] == "installed" && st["onError"] == "exit" && st["patches"] == 1 && st["patchesOn"] == 1 &&
                   st["exes"].size() == 1 && contains(st["exes"][0]["errors"][0].get<std::string>(), "different build"),

@@ -1722,7 +1722,8 @@ input[type='checkbox']:disabled {
   margin: 0;
   font-size: 24px;
 }
-#server-proxy[data-bad='true'] {
+#server-proxy[data-bad='true'],
+#server-run[data-bad='true'] {
   color: #ff8a7a;
 }
 .server-exes {

@@ -23,6 +23,7 @@ namespace sf::launch {
 
 inline constexpr const char* kInjectExe = "sc-inject.exe";
 inline constexpr const char* kAgentDll = "sc_agent.dll";
+inline constexpr const char* kServerExe = "sc-server.exe";  // starts and stops a server stack
 
 // Something the player fixes in Steam, offered as a button next to the error.
 struct SteamFix {
@@ -93,5 +94,9 @@ std::optional<std::string> inject_error(const fs::path& profile_dir);
 std::string tool_path(const fs::path& path);
 // The command that runs sc-inject.exe for the profile in `profile_dir`. Throws std::runtime_error.
 Command command(const Setup& setup, const fs::path& profile_dir, const std::vector<std::string>& game_args);
+// The command that runs `sc-server.exe <verb> <cloud>` (verb "run" or "stop") for a server
+// install: in the game's Proton prefix on Linux, so the servers share the client's local
+// database and AppData. Throws std::runtime_error.
+Command server_command(const Setup& setup, const fs::path& cloud_dir, const std::string& verb);
 
 }  // namespace sf::launch

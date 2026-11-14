@@ -141,6 +141,7 @@ Section Install
   SetOutPath "$INSTDIR\tools"
   File "${TOOLS}\sc-inject.exe"
   File "${TOOLS}\sc_agent.dll"
+  File "${TOOLS}\sc-server.exe"
   SetOutPath $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -218,6 +219,7 @@ Section Uninstall
   Delete "$INSTDIR\${MAINBINARY}"
   Delete "$INSTDIR\tools\sc-inject.exe"
   Delete "$INSTDIR\tools\sc_agent.dll"
+  Delete "$INSTDIR\tools\sc-server.exe"
   RMDir "$INSTDIR\tools"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"

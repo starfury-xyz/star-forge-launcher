@@ -1,7 +1,10 @@
 // sc-launch: the command-line launcher (port of crates/sc-launch/src/main.rs). Portable: on Linux
 // it starts the game through Proton, on Windows directly. A thin layer over sf_launch.
 
+#include <chrono>
 #include <cstdio>
+#include <ctime>
+#include <thread>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -26,6 +29,7 @@
 #include "launch/process.hpp"
 #include "launch/profiles.hpp"
 #include "launch/remote.hpp"
+#include "launch/servers.hpp"
 #include "launch/signing.hpp"
 #include "pack/serde.hpp"
 
@@ -62,6 +66,11 @@ const char* kUsage =
     "                                        kept); run again after a Steam verify/update\n"
     "  sc-launch server uninstall <cloud-dir>\n"
     "                                        Put the game's own DLL back\n"
+    "  sc-launch [OPTIONS] server start <cloud-dir>\n"
+    "                                        Start the server: MongoDB, then Hub and its\n"
+    "                                        services (on Linux in the game's Proton prefix)\n"
+    "  sc-launch [OPTIONS] server stop <cloud-dir>\n"
+    "                                        Stop it (Ctrl+C to Hub, then MongoDB)\n"
     "  sc-launch server on|off|default <cloud-dir> <exe> <id>\n"
     "                                        Switch a server patch (saved in\n"
     "                                        starforge/patcher.toml; applies on restart)\n"
@@ -478,6 +487,33 @@ int run(const std::vector<std::string>& args) {
         if (before == mods::ServerStatus::Restored) std::printf("the game's DLL (put back by Steam) is the new original\n");
         std::printf("restart the server for it to take effect\n");
         return 0;
+    }
+    if (is({"server", "start", nullptr})) {
+        const fs::path cloud = upath(c[2]);
+        if (servers::run_state(cloud, std::time(nullptr)).state == servers::RunState::Running)
+            throw std::runtime_error("the server in " + c[2] + " is already running");
+        const Command cmd = server_command(resolve(cli.opts), cloud, "run");
+        const fs::path out = mods::server_root(cloud) / "logs" / "sc-server.stdout";
+        std::error_code ec;
+        fs::create_directories(out.parent_path(), ec);
+        spawn(cmd, Output{Output::Kind::File, out}, true);
+        std::printf("starting the server in %s ...\n", c[2].c_str());
+        for (int i = 0; i < 240; ++i) {  // a minute
+            if (servers::run_state(cloud, std::time(nullptr)).state == servers::RunState::Running) {
+                std::printf("server running; Hub is starting its services (log: %s)\n",
+                            ustr(mods::server_root(cloud) / "logs" / "sc-server.log").c_str());
+                return 0;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+        throw std::runtime_error("the server did not start; see " + ustr(mods::server_root(cloud) / "logs" / "sc-server.log") +
+                                 " and " + ustr(out));
+    }
+    if (is({"server", "stop", nullptr})) {
+        const fs::path cloud = upath(c[2]);
+        const Command cmd = server_command(resolve(cli.opts), cloud, "stop");
+        const std::optional<int> code = spawn(cmd, Output{Output::Kind::Inherit, {}}, true).wait();
+        return code.value_or(1);
     }
     if (is({"server", "uninstall", nullptr})) {
         mods::uninstall_proxy(upath(c[2]));

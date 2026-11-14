@@ -2,10 +2,13 @@
 // will check themselves at startup. New in the C++ launcher; no Rust counterpart. A thin layer
 // over launch::servers and launch::mods.
 
+#include <ctime>
+#include <memory>
 #include <stdexcept>
 
 #include "gui/internal.hpp"
 #include "launch/env.hpp"
+#include "launch/launch.hpp"
 #include "launch/mods.hpp"
 #include "launch/profiles.hpp"
 #include "launch/servers.hpp"
@@ -26,6 +29,15 @@ fs::path data_dir() {
 namespace {
 
 json to_json(const servers::Server& s) { return json(ojson{{"id", s.id}, {"name", s.name}, {"cloud", ustr(s.cloud)}}); }
+
+const char* run_name(servers::RunState::State s) {
+    switch (s) {
+    case servers::RunState::Stopped: return "stopped";
+    case servers::RunState::Running: return "running";
+    case servers::RunState::Stale: return "stale";
+    }
+    return "";
+}
 
 const char* proxy_name(mods::ServerStatus::Proxy p) {
     switch (p) {
@@ -70,8 +82,10 @@ json Backend::server_status(const std::string& id) {
     size_t on = 0;
     for (const mods::Toggle& t : list.toggles) on += t.on;
     const auto build = mods::find_proxy(tools_dir());
+    const servers::RunState run = servers::run_state(s.cloud, std::time(nullptr));
     return json(ojson{
         {"server", to_json(s)},
+        {"run", ojson{{"state", run_name(run.state)}, {"started", run.started}, {"mongoPort", run.mongo_port}, {"ownMongo", run.own_mongo}}},
         {"proxy", proxy_name(st.proxy)},
         {"proxyBuild", build ? json(ustr(*build)) : json(nullptr)},
         {"onError", st.config ? json(st.config->exit_on_error ? "exit" : "continue") : json(nullptr)},
@@ -95,6 +109,40 @@ json Backend::install_server_proxy(const std::string& id) {
 json Backend::uninstall_server_proxy(const std::string& id) {
     mods::uninstall_proxy(servers::get(data_dir(), id).cloud);
     return server_status(id);
+}
+
+// sc-server.exe runs as long as the server does; a background task waits for it (so it's reaped)
+// and reports a quick failure. Starting or stopping takes a while; the page polls server_status.
+void Backend::start_server(const std::string& id) {
+    const servers::Server s = servers::get(data_dir(), id);
+    if (servers::run_state(s.cloud, std::time(nullptr)).state == servers::RunState::Running)
+        throw std::runtime_error(s.name + " is already running");
+    const launch::Command cmd = launch::server_command(launch::resolve(options()), s.cloud, "run");
+    const fs::path out = mods::server_root(s.cloud) / "logs" / "sc-server.stdout";
+    std::error_code ec;
+    fs::create_directories(out.parent_path(), ec);
+    auto child = std::make_shared<launch::Process>(launch::spawn(cmd, {launch::Output::Kind::File, out}, true));
+    const std::string name = s.name;
+    background(
+        [this, child, name] {
+            const std::optional<int> code = child->wait();
+            if (code != 0)
+                notify(name + " stopped with a problem; see its starforge/logs/sc-server.log", NotificationLevel::Error);
+        },
+        true);
+}
+
+void Backend::stop_server(const std::string& id) {
+    const servers::Server s = servers::get(data_dir(), id);
+    const launch::Command cmd = launch::server_command(launch::resolve(options()), s.cloud, "stop");
+    auto child = std::make_shared<launch::Process>(launch::spawn(cmd, {launch::Output::Kind::Null, {}}, true));
+    const std::string name = s.name;
+    background(
+        [this, child, name] {
+            if (child->wait() != 0)
+                notify(name + " is taking long to stop; see its starforge/logs/sc-server.log", NotificationLevel::Error);
+        },
+        true);
 }
 
 void Backend::open_server_folder(const std::string& id, const std::string& which) {

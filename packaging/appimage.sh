@@ -30,7 +30,7 @@ chmod +x "$tools"/linuxdeploy-x86_64.AppImage "$tools"/linuxdeploy-plugin-*
 cmake --build --preset linux --target star_forge
 win_tools="${WIN_TOOLS:-}"
 if [ -z "$win_tools" ]; then
-    cmake --build --preset win64 --target sc_inject sc_agent
+    cmake --build --preset win64 --target sc_inject sc_agent sc_server
     win_tools="$root/build/win64"
 fi
 
@@ -38,7 +38,7 @@ rm -rf "$appdir"
 mkdir -p "$appdir/usr/bin/tools" "$appdir/usr/bin/icons" "$appdir/usr/share/applications"
 install -m755 "$root/build/linux/star-forge" "$appdir/usr/bin/star-forge"
 strip "$appdir/usr/bin/star-forge"
-install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$appdir/usr/bin/tools/"
+install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$appdir/usr/bin/tools/"
 # For "Add to applications menu" (Backend::resources is the program's folder).
 cp "$root"/gui/icons/*.png "$appdir/usr/bin/icons/"
 for size in 32x32 128x128; do

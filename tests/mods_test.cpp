@@ -3,6 +3,7 @@
 // which core patches the agent and launcher load.
 
 #include "launch/mods.hpp"
+#include "launch/servers.hpp"
 #include "launch/patching.hpp"
 #include "launch/profiles.hpp"
 #include "patch/core.hpp"
@@ -289,6 +290,21 @@ int main() {
         test::write_file(s / "libcrypto-1_1_tg.dll", kProxyBuild);  // proxy, original lost
         check(contains(error_of([&] { mods::install_proxy(s, build); }), "verify the game files"), "install: broken is refused");
         check(contains(error_of([&] { mods::uninstall_proxy(s); }), "verify the game files"), "uninstall: broken is refused");
+    }
+
+    // run_state: server.json as sc-server.exe keeps it.
+    {
+        const fs::path s = tmp / "runstate";
+        fs::create_directories(s);
+        check(servers::run_state(s, 1000).state == servers::RunState::Stopped, "run_state: no server.json is stopped");
+        test::write_file(s / "starforge" / "server.json",
+                         R"({"supervisor": 5, "hub": 6, "mongod": 7, "mongoPort": 27017, "started": 900, "heartbeat": 990})");
+        auto r = servers::run_state(s, 1000);
+        check(r.state == servers::RunState::Running && r.started == 900 && r.mongo_port == 27017 && r.own_mongo,
+              "run_state: a fresh heartbeat is running");
+        check(servers::run_state(s, 990 + servers::kStaleAfter + 1).state == servers::RunState::Stale, "run_state: an old heartbeat is stale");
+        test::write_file(s / "starforge" / "server.json", R"({"supervisor": 5, "hub": 6, "mongod": 0, "mongoPort": 27217, "st)");
+        check(servers::run_state(s, 1000).state == servers::RunState::Stale, "run_state: an unreadable server.json is stale");
     }
 
     // patcher.toml parsing, as the proxy DLL reads it.

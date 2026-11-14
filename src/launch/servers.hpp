@@ -6,6 +6,7 @@
 //
 // servers.json: {"servers": [{"id": "testbed", "name": "Testbed", "cloud": "/path/to/cloud"}]}
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,5 +36,20 @@ Server get(const fs::path& data_dir, const std::string& id);
 
 // The cloud/ folder of a game install, if it has one.
 std::optional<fs::path> game_cloud(const fs::path& game_dir);
+
+// Whether a server install's stack is up, from the starforge/server.json that sc-server.exe keeps
+// while it runs (rewritten every few seconds).
+struct RunState {
+    enum State {
+        Stopped,  // no server.json
+        Running,  // a fresh heartbeat
+        Stale,    // server.json left behind: its supervisor was killed (or hangs)
+    } state = Stopped;
+    int64_t started = 0;      // unix time
+    unsigned mongo_port = 0;  // the port its MongoDB is on
+    bool own_mongo = false;   // sc-server started that MongoDB (and stops it)
+};
+inline constexpr int64_t kStaleAfter = 15;  // seconds without a heartbeat
+RunState run_state(const fs::path& cloud, int64_t now);
 
 }  // namespace sf::launch::servers

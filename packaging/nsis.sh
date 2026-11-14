@@ -4,7 +4,7 @@
 #   packaging/nsis.sh   -> build/packages/STAR_FORGE_Launcher_<version>_x64-setup.exe
 #
 # Needs makensis (Ubuntu: apt install nsis); the Windows star-forge.exe, sc-inject.exe and
-# sc_agent.dll, from the win64 build or from WIN_BUILD=<folder>; and Microsoft's WebView2
+# sc_agent.dll and sc-server.exe, from the win64 build or from WIN_BUILD=<folder>; and Microsoft's WebView2
 # bootstrapper, downloaded once to build/MicrosoftEdgeWebview2Setup.exe (or WEBVIEW2=<file>).
 set -euo pipefail
 
@@ -15,7 +15,7 @@ version="$(sed -n 's/^project(starforge VERSION \([0-9.]*\).*/\1/p' "$root/CMake
 command -v makensis >/dev/null || { echo "missing makensis" >&2; exit 1; }
 win="${WIN_BUILD:-}"
 if [ -z "$win" ]; then
-    cmake --build --preset win64 --target star_forge sc_inject sc_agent
+    cmake --build --preset win64 --target star_forge sc_inject sc_agent sc_server
     win="$root/build/win64"
 fi
 webview2="${WEBVIEW2:-$root/build/MicrosoftEdgeWebview2Setup.exe}"

@@ -270,6 +270,8 @@ json Backend::invoke(const std::string& command, const json& args) {
     if (command == "server_status") return server_status(arg_str(c, args, "id"));
     if (command == "install_server_proxy") return install_server_proxy(arg_str(c, args, "id"));
     if (command == "uninstall_server_proxy") return uninstall_server_proxy(arg_str(c, args, "id"));
+    if (command == "start_server") return start_server(arg_str(c, args, "id")), nullptr;
+    if (command == "stop_server") return stop_server(arg_str(c, args, "id")), nullptr;
     if (command == "open_server_folder") return open_server_folder(arg_str(c, args, "id"), arg_str(c, args, "which")), nullptr;
     if (command == "suggest_server_cloud") return suggest_server_cloud();
     if (command == "check_launcher_update") return check_launcher_update();

@@ -41,7 +41,7 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           cmake --preset win64-msvc
-          cmake --build --preset win64-msvc --target star_forge sc_launch sc_inject sc_agent
+          cmake --build --preset win64-msvc --target star_forge sc_launch sc_inject sc_agent sc_server
       - name: Collect release files
         shell: bash
         run: |
@@ -49,12 +49,12 @@ jobs:
           version=$(sed -n 's/^project(starforge VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           b=build/win64
           mkdir -p out launcher/tools cli tools
-          # The launcher looks for the injector and agent in tools/ next to it.
+          # The launcher looks for the injector, agent and server supervisor in tools/ next to it.
           cp $b/star-forge.exe launcher/
-          cp $b/sc-inject.exe $b/sc_agent.dll launcher/tools/
-          cp $b/sc-launch.exe $b/sc-inject.exe $b/sc_agent.dll cli/
+          cp $b/sc-inject.exe $b/sc_agent.dll $b/sc-server.exe launcher/tools/
+          cp $b/sc-launch.exe $b/sc-inject.exe $b/sc_agent.dll $b/sc-server.exe cli/
           # For the Linux job: the tools go in its packages, and it builds the Windows installer.
-          cp $b/star-forge.exe $b/sc-inject.exe $b/sc_agent.dll tools/
+          cp $b/star-forge.exe $b/sc-inject.exe $b/sc_agent.dll $b/sc-server.exe tools/
           (cd launcher && 7z a "../out/STAR_FORGE_Launcher-${version}-windows-x64.zip" . >/dev/null)
           (cd cli && 7z a "../out/sc-launch_${version}_windows_x64.zip" . >/dev/null)
           ls -l out
@@ -121,7 +121,7 @@ jobs:
           version=$(sed -n 's/^project(starforge VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           mkdir -p out cli
           cp build/appimage/*.AppImage build/packages/*.deb build/packages/*.rpm build/packages/*-setup.exe out/
-          cp build/linux/sc-launch win-tools/sc-inject.exe win-tools/sc_agent.dll cli/
+          cp build/linux/sc-launch win-tools/sc-inject.exe win-tools/sc_agent.dll win-tools/sc-server.exe cli/
           strip cli/sc-launch
           tar -czf "out/sc-launch_${version}_linux_x64.tar.gz" -C cli .
           ls -l out

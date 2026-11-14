@@ -15,6 +15,10 @@ function parseStatus(value) {
   const strings = (/** @type {unknown} */ v) => array(v, string);
   return {
     server: parseServer(s.server),
+    run: (() => {
+      const r = object(s.run);
+      return { state: string(r.state), started: number(r.started, 0, 1e13), mongoPort: number(r.mongoPort, 0, 65535) };
+    })(),
     proxy: string(s.proxy),
     proxyBuild: s.proxyBuild === null ? null : string(s.proxyBuild),
     onError: s.onError === null ? null : string(s.onError),
@@ -43,6 +47,13 @@ const proxyText = {
   restored: ['Not active: Steam put the game’s libcrypto-1_1_tg.dll back (“verify files” or an update); install the patcher again', true],
   broken: ['Broken: the patcher without the game’s original libcrypto-1_1_tg.dll; verify the game files in Steam', true],
   missing: ['No libcrypto-1_1_tg.dll here: is this the game’s cloud folder?', true],
+};
+
+/** What the stack's state means, and whether it's a problem. @type {Record<string, [string, boolean]>} */
+const runText = {
+  running: ['Running', false],
+  stopped: ['Stopped', false],
+  stale: ['Not responding: its supervisor stopped without cleaning up (crashed or killed?); Stop clears it', true],
 };
 
 /**
@@ -79,6 +90,31 @@ export function bindServers(openMods) {
     }
   };
 
+  /** Set while a start or stop is under way: the state it should reach. @type {string | null} */
+  let pending = null;
+  /** @type {number | undefined} */
+  let pollTimer;
+
+  /** @param {ReturnType<typeof parseStatus>} st */
+  const renderRun = (st) => {
+    const runNode = required('server-run');
+    const [text, bad] = runText[st.run.state] ?? [st.run.state, true];
+    let line = text;
+    if (st.run.state === 'running' && st.run.started)
+      line += ` since ${new Date(st.run.started * 1000).toLocaleString()} (MongoDB on port ${st.run.mongoPort})`;
+    if (pending) line = pending === 'running' ? 'Starting…' : 'Stopping…';
+    runNode.textContent = line;
+    runNode.dataset.bad = String(bad && !pending);
+    const start = control('server-start', HTMLButtonElement);
+    const stop = control('server-stop', HTMLButtonElement);
+    start.hidden = st.run.state === 'running';
+    stop.hidden = st.run.state === 'stopped';
+    start.disabled = stop.disabled = pending !== null;
+    // Changing the patcher or patches while the stack runs only applies on the next start.
+    control('server-install', HTMLButtonElement).disabled ||= st.run.state === 'running';
+    control('server-uninstall', HTMLButtonElement).disabled = st.run.state === 'running';
+  };
+
   /** @param {ReturnType<typeof parseStatus>} st */
   const renderStatus = (st) => {
     required('server-name').textContent = st.server.name;
@@ -95,6 +131,7 @@ export function bindServers(openMods) {
       ? `Copies in ${st.proxyBuild}; the game’s own DLL is kept. Restart the server afterwards.`
       : 'No patcher build found: it goes in server/ beside the launcher’s tools, or set STAR_FORGE_SERVER_PROXY';
     required('server-uninstall').hidden = !['installed', 'restored'].includes(st.proxy);
+    renderRun(st);
     required('server-on-error').textContent =
       st.onError === 'continue' ? 'Start anyway, with whatever patches match' : 'Refuse to start (recommended)';
     required('server-patches').textContent = st.patches
@@ -205,6 +242,57 @@ export function bindServers(openMods) {
   required('server-uninstall').addEventListener('click', () =>
     proxyAction('uninstall_server_proxy', 'The game’s own DLL is back. starforge/ is left in place.'),
   );
+  // Polls until the stack reaches `want` (or a minute and a half passes).
+  /** @param {string} id @param {string} want */
+  const follow = (id, want) => {
+    pending = want;
+    window.clearTimeout(pollTimer);
+    const started = Date.now();
+    const tick = async () => {
+      if (selected !== id) {
+        pending = null;
+        return;
+      }
+      try {
+        const st = parseStatus(await invoke('server_status', { id }));
+        if (st.run.state === want || Date.now() - started > 90000) {
+          if (st.run.state !== want) notice('The server is taking long; see its logs.', 'error');
+          pending = null;
+        }
+        renderStatus(st);
+      } catch (error) {
+        pending = null;
+        notice(errorMessage(error), 'error');
+        return;
+      }
+      if (pending) pollTimer = window.setTimeout(tick, 1500);
+    };
+    pollTimer = window.setTimeout(tick, 500);
+  };
+  required('server-start').addEventListener('click', () => {
+    const id = selected;
+    if (!id) return;
+    run(async () => {
+      try {
+        await invoke('start_server', { id });
+        follow(id, 'running');
+      } catch (error) {
+        notice(errorMessage(error), 'error');
+      }
+    });
+  });
+  required('server-stop').addEventListener('click', () => {
+    const id = selected;
+    if (!id) return;
+    run(async () => {
+      try {
+        await invoke('stop_server', { id });
+        follow(id, 'stopped');
+      } catch (error) {
+        notice(errorMessage(error), 'error');
+      }
+    });
+  });
   required('server-recheck').addEventListener('click', () => {
     if (selected) select(selected);
   });

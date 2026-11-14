@@ -15,6 +15,17 @@ namespace {
 
 void touch(const fs::path& p, const std::string& text = "") { test::write_file(p, text); }
 
+// The message of the std::exception `f` throws ("" if it doesn't).
+template <class F>
+std::string error_of(F f) {
+    try {
+        f();
+    } catch (const std::exception& e) {
+        return e.what();
+    }
+    return "";
+}
+
 // The message of the SetupError `f` throws ("" if it doesn't), and its fix.
 template <class F>
 std::string setup_error(F f, std::optional<SteamFix>* fix = nullptr) {
@@ -258,6 +269,33 @@ int main() {
             missing = true;
         }
         check(missing, "command: a missing profile folder is an error");
+    }
+
+    // server_command(): sc-server.exe for a server install, with `proton run` on Linux.
+    {
+        const Setup s = resolve(opts(game, tools));
+        const fs::path cloud = tmp / "server/cloud";
+        fs::create_directories(cloud);
+        check(contains(error_of([&] { server_command(s, cloud, "run"); }), "sc-server.exe is missing"),
+              "server_command: needs sc-server.exe");
+        touch(tools / "sc-server.exe");
+        const Command c = server_command(s, cloud, "stop");
+        check(c.cwd == cloud, "server_command: runs in the cloud folder");
+#ifdef _WIN32
+        check(c.program == tools / "sc-server.exe" && c.args == std::vector<std::string>{"stop", tool_path(fs::absolute(cloud))},
+              "server_command: sc-server.exe stop <cloud>");
+#else
+        std::string z = "Z:" + ustr(cloud);
+        std::replace(z.begin(), z.end(), '/', '\\');
+        check(c.program == s.proton->runtime &&
+                  c.args == std::vector<std::string>{"--", ustr(proton / "proton"), "run", ustr(tools / "sc-server.exe"), "stop", z},
+              "server_command: runtime -- proton run sc-server.exe stop Z:<cloud>");
+        check(c.env_value("PRESSURE_VESSEL_FILESYSTEMS_RW") ==
+                  ustr(s.proton->compat_data) + ":" + ustr(game) + ":" + ustr(cloud) + ":" + ustr(tools),
+              "server_command: the prefix, game, cloud folder and tools are shared");
+        check(c.env_value("STEAM_COMPAT_DATA_PATH") == ustr(s.proton->compat_data) && !c.env_value("ENABLE_VK_LAYER_VALVE_steam_overlay_1"),
+              "server_command: the game's prefix, no overlay");
+#endif
     }
 
     return test::failures ? 1 : 0;
