@@ -107,9 +107,18 @@ async function start() {
     render();
     mods.update();
   });
+  /** @type {Awaited<ReturnType<typeof bindPacks>> | null} */
+  let packs = null;
   required('play-button').addEventListener('click', () => {
     const action = store.getSnapshot()?.primaryAction;
-    if (action) run(() => store.performAction(action));
+    if (!action) return;
+    // A community server not installed yet: review and install its pack, then play.
+    const sample = action === 'launch' ? profiles.pendingSample() : null;
+    if (sample) {
+      packs?.installSample(sample, () => run(() => store.performAction('launch')));
+      return;
+    }
+    run(() => store.performAction(action));
   });
   await startupStep(
     listen('notification', (payload) => {
@@ -127,12 +136,12 @@ async function start() {
     await startupStep(invoke('main_ready'), 'Showing launcher');
     run(() => bindSetup(preferences, profiles));
     run(() => bindSettings(preferences, store));
-    run(() =>
-      bindPacks(profiles, () => {
+    run(async () => {
+      packs = await bindPacks(profiles, () => {
         const phase = store.getSnapshot()?.phase;
         return phase === 'launching' || phase === 'running';
-      }),
-    );
+      });
+    });
     run(() => bindArtwork(preferences));
     run(() =>
       bindUpdater(

@@ -447,9 +447,14 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     }
 
     // Samples.
-    check(call("list_sample_packs").dump() ==
-              R"([{"key":"starfury","name":"STARFURY"},{"key":"sc-classic-europe","name":"Star Conflict Classic Europe"}])",
-          "sample packs");
+    {
+        const json list = call("list_sample_packs");
+        check(list.size() == 2 && list[0]["key"] == "starfury" && list[0]["packId"] == "xyz.starfury" &&
+                  list[0]["server"] == "STARFURY.XYZ:3801" && list[1]["key"] == "sc-classic-europe" &&
+                  list[1]["packId"] == "org.starforge.samples.sc-classic-europe" && list[1]["name"] == "Star Conflict Classic Europe" &&
+                  list[1]["server"] == "57.131.200.242:3801" && !list[1]["description"].get<std::string>().empty(),
+              "sample packs: " + list.dump());
+    }
     check(call("sample_pack_source", {{"key", "starfury"}}) == "https://starfury.web.garage.cosmosim.dev/pack.json", "a linked sample");
     const fs::path sample = upath(call("sample_pack_source", {{"key", "sc-classic-europe"}}).get<std::string>());
     check(sample == base / "data/staging/samples/sc-classic-europe" &&

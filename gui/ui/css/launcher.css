@@ -1092,34 +1092,47 @@ dialog footer {
   display: flex;
   gap: 8px;
 }
-.sample-packs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.sample-packs span {
-  color: var(--muted);
-  font-size: 12px;
-  margin-right: 4px;
-}
 .pack-import-row input {
   flex: 1;
   min-width: 0;
 }
-.divider {
+.profile-manual {
+  margin-top: 16px;
+}
+.profile-manual > summary {
   display: flex;
   align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 11px;
-  margin-top: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
 }
-.divider::before,
-.divider::after {
+.profile-manual > summary::-webkit-details-marker {
+  display: none;
+}
+.profile-manual > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.profile-manual[open] > summary::before {
+  transform: rotate(45deg);
+}
+.profile-manual > summary:hover {
+  color: var(--silver);
+}
+.profile-manual > summary::after {
   content: '';
   flex: 1;
   border-top: 1px solid var(--line);
+}
+.profile-manual[open] > summary {
+  margin-bottom: 14px;
 }
 .pack-dialog {
   width: min(600px, 92vw);

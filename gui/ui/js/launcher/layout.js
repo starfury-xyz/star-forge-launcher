@@ -78,10 +78,10 @@ export function mountLayout() {
       <section id="pack-import" class="pack-import" aria-labelledby="pack-import-title">
         <h2 id="pack-import-title">Import a server pack</h2>
         <p>Got a pack link or zip from a server? It brings the server address, files and look in one go.</p>
+        <p>The community servers that come with STAR FORGE are already in the profile list; pick one and press Play.</p>
         <div class="pack-import-row"><input id="pack-link" type="text" placeholder="https://… or starforge://…" spellcheck="false" autocomplete="off" aria-label="Pack link" /><button type="button" class="button" id="pack-link-import">Import</button><button type="button" class="button" id="pack-file-import">Choose zip…</button></div>
-        <div id="sample-packs" class="sample-packs" hidden><span>Community servers</span></div>
-        <div class="divider"><span>or set one up yourself</span></div>
       </section>
+      <details id="profile-manual" class="profile-manual"><summary id="profile-manual-summary">Set up a server yourself</summary>
       <form id="profile-form" method="dialog">
         <p id="profile-managed-note" class="field-note" hidden>This profile comes from a server pack. Changes you make here are kept when the pack updates.</p>
         <label class="field">Name<input id="profile-name" type="text" maxlength="64" required placeholder="STARFURY community server" /></label>
@@ -90,7 +90,7 @@ export function mountLayout() {
         <label class="check-field"><input id="profile-own-data" type="checkbox" /><span>Keep this server's game data separate<small>The game's store cache, notes and local server database stay with this profile, so other servers never see them. Graphics settings and key bindings are shared by all profiles. Turn off to use the game's normal data folder, where any existing local server data is.</small></span></label>
         <p id="profile-error" class="form-error" hidden></p>
         <div class="dialog-actions"><button type="button" class="button danger" id="delete-profile" hidden>Delete</button><button type="button" class="button" id="profile-folder" hidden>Open folder</button><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-profile">Save</button></div>
-      </form></div></dialog>
+      </form></details></div></dialog>
     <dialog id="server-dialog" class="profile-dialog framed" aria-labelledby="server-dialog-title"><header><h1 id="server-dialog-title">Add server install</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header><div class="dialog-body">
       <form id="server-form" method="dialog">
         <label class="field">Name<input id="server-name-input" type="text" maxlength="64" placeholder="My server" /></label>
