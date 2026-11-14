@@ -145,10 +145,48 @@ void Backend::stop_server(const std::string& id) {
         true);
 }
 
+// The game's LocalAppData (in the Proton prefix on Linux), where Hub writes the services' logs.
+// Throws std::runtime_error if the game or its prefix can't be found.
+fs::path Backend::server_local_appdata() const {
+    auto dir = launch::profiles::shared_local_appdata(launch::resolve(options()));
+    if (!dir) throw std::runtime_error("cannot work out the game's AppData folder");
+    return *dir;
+}
+
+json Backend::server_logs(const std::string& id) {
+    const servers::Server s = servers::get(data_dir(), id);
+    std::optional<fs::path> local;
+    json note = nullptr;
+    try {
+        local = server_local_appdata();
+    } catch (const std::exception& e) {
+        note = std::string("The game's own logs can't be shown: ") + e.what();
+    }
+    json out = json::array();
+    for (const servers::LogFile& f : servers::logs(s.cloud, local))
+        out.push_back(json(ojson{{"group", f.group}, {"label", f.label}, {"name", f.name}, {"size", f.size}, {"modified", f.modified}}));
+    return json(ojson{{"logs", out}, {"note", note}});
+}
+
+json Backend::server_log(const std::string& id, const std::string& group, const std::string& name) {
+    const servers::Server s = servers::get(data_dir(), id);
+    std::optional<fs::path> local;
+    if (group == "game") local = server_local_appdata();
+    // Only a file the listing has: the name never becomes a path by itself.
+    for (const servers::LogFile& f : servers::logs(s.cloud, local)) {
+        if (f.group != group || f.name != name) continue;
+        bool cut = false;
+        std::string text = servers::log_tail(f.path, 256 * 1024, &cut);
+        return json(ojson{{"text", text}, {"cut", cut}, {"size", f.size}, {"modified", f.modified}});
+    }
+    throw std::runtime_error("no log " + name + " for " + s.name);
+}
+
 void Backend::open_server_folder(const std::string& id, const std::string& which) {
     const servers::Server s = servers::get(data_dir(), id);
     fs::path dir = s.cloud;
     if (which == "logs") dir = mods::server_root(s.cloud) / "logs";
+    else if (which == "game-logs") dir = server_local_appdata() / servers::kGameLogs;
     else if (which != "cloud") throw std::runtime_error("unknown folder " + which);
     std::error_code ec;
     if (!fs::is_directory(dir, ec)) throw std::runtime_error(ustr(dir) + " doesn't exist yet");

@@ -1729,6 +1729,36 @@ input[type='checkbox']:disabled {
 .server-exes {
   margin: 8px 0 18px;
 }
+.server-logs {
+  margin: 0 0 18px;
+}
+.server-logs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.server-logs-bar select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.server-follow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.server-log-text {
+  margin: 10px 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #00000040;
+  font: 11px/1.5 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .server-exe {
   padding: 12px 16px;
   border: 1px solid #ffffff14;

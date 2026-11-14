@@ -352,6 +352,15 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         check(contains(test::read_file(cloud / "starforge/patcher.toml"), "\"a\" = false"), "set_mod server: in patcher.toml");
         call("open_server_folder", {{"id", "test-box"}, {"which", "cloud"}});
         check(host.last_opened() == ustr(cloud), "open_server_folder: cloud");
+        test::write_file(cloud / "starforge/logs/sc-server.log", "first\nsecond\n");
+        json logs = call("server_logs", {{"id", "test-box"}});
+        bool listed = false;
+        for (const json& f : logs["logs"]) listed |= f["group"] == "starforge" && f["name"] == "sc-server.log" && f["size"] == 13;
+        check(listed, "server_logs: ours listed: " + logs.dump());
+        json one = call("server_log", {{"id", "test-box"}, {"group", "starforge"}, {"name", "sc-server.log"}});
+        check(one["text"] == "first\nsecond\n" && one["cut"] == false, "server_log: " + one.dump());
+        check(contains(error_of("server_log", {{"id", "test-box"}, {"group", "starforge"}, {"name", "../patcher.toml"}}), "no log"),
+              "server_log: only a listed file");
         call("open_server_folder", {{"id", "test-box"}, {"which", "logs"}});
         check(host.last_opened() == ustr(cloud / "starforge" / "logs"), "open_server_folder: logs (made by the install)");
         check(call("uninstall_server_proxy", {{"id", "test-box"}})["proxy"] == "stock" &&

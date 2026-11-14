@@ -183,6 +183,9 @@ private:
     json uninstall_server_proxy(const std::string& id);
     void start_server(const std::string& id);  // in the background; server_status shows the result
     void stop_server(const std::string& id);
+    json server_logs(const std::string& id);
+    json server_log(const std::string& id, const std::string& group, const std::string& name);  // its tail
+    fs::path server_local_appdata() const;
     void open_server_folder(const std::string& id, const std::string& which);
     json suggest_server_cloud();
     json check_launcher_update();

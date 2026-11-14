@@ -52,4 +52,24 @@ struct RunState {
 inline constexpr int64_t kStaleAfter = 15;  // seconds without a heartbeat
 RunState run_state(const fs::path& cloud, int64_t now);
 
+// A server's logs: STAR FORGE's own in starforge/logs (the proxy's, one per exe; sc-server's;
+// MongoDB's) and the game's in Hub's output folder, <LocalAppData>/Targem/StarConflict/cloud/
+// Hub/logs. The game keeps a file a day per service there, for every server the machine (or
+// Proton prefix) ever ran; only the newest per service is listed.
+struct LogFile {
+    std::string group;  // "starforge" or "game"
+    std::string label;  // "Shard", "sc-server", "shard (console)", ...
+    std::string name;   // the file's name, which picks it in log_tail
+    fs::path path;
+    uint64_t size = 0;
+    int64_t modified = 0;  // unix time
+};
+inline constexpr const char* kGameLogs = "Targem/StarConflict/cloud/Hub/logs";  // under LocalAppData
+// Game logs first, by label; `local_appdata` unset leaves them out.
+std::vector<LogFile> logs(const fs::path& cloud, const std::optional<fs::path>& local_appdata);
+// "1010000000000002_shard_2026_11_14.log" -> "shard"; ".conlog" -> "shard (console)".
+std::string game_log_label(const std::string& file_name);
+// The last `max_bytes` of a log, from the start of a line. Throws std::runtime_error.
+std::string log_tail(const fs::path& file, size_t max_bytes, bool* cut = nullptr);
+
 }  // namespace sf::launch::servers

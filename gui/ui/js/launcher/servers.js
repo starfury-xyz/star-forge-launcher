@@ -159,6 +159,78 @@ export function bindServers(openMods) {
     detail.hidden = false;
   };
 
+  // --- logs ---
+  const logSelect = control('server-log-select', HTMLSelectElement);
+  const logText = required('server-log-text');
+  const logNote = required('server-log-note');
+  const followLog = control('server-log-follow', HTMLInputElement);
+  /** @type {number | undefined} */
+  let logTimer;
+
+  /** Shows the chosen log's end, keeping the view at the bottom if it was there. */
+  const showLog = async () => {
+    const id = selected;
+    const [group, name] = (logSelect.value || '/').split('/', 2);
+    if (!id || !name) {
+      logText.textContent = '';
+      return;
+    }
+    const atBottom = logText.scrollTop + logText.clientHeight >= logText.scrollHeight - 4;
+    try {
+      const log = object(await invoke('server_log', { id, group, name }));
+      if (selected !== id) return;
+      const cut = log.cut === true ? '… (only the end of the log is shown)\n' : '';
+      logText.textContent = cut + string(log.text);
+    } catch (error) {
+      logText.textContent = errorMessage(error);
+    }
+    if (atBottom) logText.scrollTop = logText.scrollHeight;
+  };
+
+  /** Lists the server's logs, keeping the current choice. @param {string} id */
+  const loadLogs = async (id) => {
+    const keep = logSelect.value;
+    const list = object(await invoke('server_logs', { id }));
+    if (selected !== id) return;
+    logNote.hidden = list.note === null;
+    logNote.textContent = list.note === null ? '' : string(list.note);
+    logSelect.replaceChildren();
+    /** @type {Record<string, HTMLOptGroupElement>} */
+    const groups = {};
+    for (const item of array(list.logs, object)) {
+      const group = string(item.group);
+      groups[group] ??= Object.assign(document.createElement('optgroup'), {
+        label: group === 'game' ? 'Game services (newest each)' : 'STAR FORGE',
+      });
+      const when = new Date(number(item.modified, 0, 1e13) * 1000).toLocaleString();
+      const option = new Option(`${string(item.label)} — ${when}`, `${group}/${string(item.name)}`);
+      groups[group].append(option);
+    }
+    logSelect.append(...Object.values(groups));
+    if ([...logSelect.options].some((o) => o.value === keep)) logSelect.value = keep;
+    await showLog();
+  };
+
+  const scheduleLog = () => {
+    window.clearTimeout(logTimer);
+    if (!followLog.checked || detail.hidden) return;
+    logTimer = window.setTimeout(() => run(async () => {
+      await showLog();
+      scheduleLog();
+    }), 2000);
+  };
+
+  logSelect.addEventListener('change', () => run(showLog));
+  followLog.addEventListener('change', scheduleLog);
+  required('server-log-refresh').addEventListener('click', () => {
+    const id = selected;
+    if (id) run(() => loadLogs(id));
+  });
+  required('server-game-logs').addEventListener('click', () => {
+    const id = selected;
+    if (id) run(() => invoke('open_server_folder', { id, which: 'game-logs' }));
+  });
+
   /** @param {string} id */
   const select = (id) =>
     run(async () => {
@@ -167,6 +239,8 @@ export function bindServers(openMods) {
       detail.hidden = true;
       try {
         renderStatus(parseStatus(await invoke('server_status', { id })));
+        await loadLogs(id);
+        scheduleLog();
       } catch (error) {
         notice(errorMessage(error), 'error');
       }

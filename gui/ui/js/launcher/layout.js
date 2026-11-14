@@ -59,6 +59,7 @@ export function mountLayout() {
             <dl class="profile-facts"><dt>Folder</dt><dd id="server-cloud">–</dd><dt>Server</dt><dd id="server-run">–</dd><dt>Patcher</dt><dd id="server-proxy">–</dd><dt>On a mismatch</dt><dd id="server-on-error">–</dd><dt>Patches</dt><dd id="server-patches">–</dd></dl>
             <div id="server-problems"></div>
             <div id="server-exes" class="server-exes"></div>
+            <div class="server-logs"><div class="server-logs-bar"><select id="server-log-select" aria-label="Log"></select><label class="server-follow"><input type="checkbox" id="server-log-follow"> Follow</label><button class="button" id="server-log-refresh">Refresh</button><button class="button" id="server-game-logs">Open game logs</button></div><p id="server-log-note" class="mods-note" hidden></p><pre id="server-log-text" class="server-log-text"></pre></div>
             <div class="setting-buttons"><button class="button primary" id="server-start">Start server</button><button class="button danger" id="server-stop">Stop server</button><button class="button" id="server-mods">Switch patches</button><button class="button" id="server-install">Install patcher</button><button class="button" id="server-uninstall">Uninstall patcher</button><button class="button" id="server-recheck">Check again</button><button class="button" id="server-folder">Open folder</button><button class="button" id="server-logs">Open logs</button><button class="button danger" id="server-remove">Remove from list</button></div>
           </div>
         </section>

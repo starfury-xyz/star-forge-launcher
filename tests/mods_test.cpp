@@ -3,11 +3,13 @@
 // which core patches the agent and launcher load.
 
 #include "launch/mods.hpp"
-#include "launch/servers.hpp"
+
+#include <chrono>
+
 #include "launch/patching.hpp"
 #include "launch/profiles.hpp"
+#include "launch/servers.hpp"
 #include "patch/core.hpp"
-
 
 #include "check.hpp"
 
@@ -305,6 +307,40 @@ int main() {
         check(servers::run_state(s, 990 + servers::kStaleAfter + 1).state == servers::RunState::Stale, "run_state: an old heartbeat is stale");
         test::write_file(s / "starforge" / "server.json", R"({"supervisor": 5, "hub": 6, "mongod": 0, "mongoPort": 27217, "st)");
         check(servers::run_state(s, 1000).state == servers::RunState::Stale, "run_state: an unreadable server.json is stale");
+    }
+
+    // Server logs: ours, and the newest of the game's per service.
+    {
+        check(servers::game_log_label("1010000000000002_shard_2026_11_14.log") == "shard", "game_log_label: address and date dropped");
+        check(servers::game_log_label("1010000000000002_shard_2026_11_14.conlog") == "shard (console)", "game_log_label: console log");
+        check(servers::game_log_label("hub_2026_11_14.log") == "hub" && servers::game_log_label("hub.log") == "hub",
+              "game_log_label: hub, with and without a date");
+        check(servers::game_log_label("B010000000000011_scripts_server_2026_11_14.log") == "scripts_server",
+              "game_log_label: a hex address");
+        const fs::path cloud = tmp / "logs" / "cloud", local = tmp / "logs" / "local";
+        const fs::path game = local / servers::kGameLogs;
+        test::write_file(game / "1010000000000002_shard_2026_11_13.log", "old");
+        test::write_file(game / "1010000000000002_shard_2026_11_14.log", "new");
+        fs::last_write_time(game / "1010000000000002_shard_2026_11_13.log",
+                            fs::last_write_time(game / "1010000000000002_shard_2026_11_14.log") - std::chrono::hours(24));
+        test::write_file(game / "1010000000000002_shard_2026_11_14.conlog", "");
+        test::write_file(game / "hub_2026_11_14.log", "hub");
+        test::write_file(game / "notes.txt", "x");
+        test::write_file(cloud / "starforge" / "logs" / "Shard.log", "proxy");
+        test::write_file(cloud / "starforge" / "logs" / "sc-server.stdout", "out");
+        test::write_file(cloud / "starforge" / "logs" / "sc-server.log", "sup");
+        auto l = servers::logs(cloud, local);
+        std::string seen;
+        for (const auto& f : l) seen += f.group + ":" + f.label + "=" + f.name + " ";
+        check(seen == "game:hub=hub_2026_11_14.log game:shard=1010000000000002_shard_2026_11_14.log "
+                      "starforge:Shard=Shard.log starforge:sc-server=sc-server.log starforge:sc-server (output)=sc-server.stdout ",
+              "logs: newest game log per service (no empty console log, no .txt), then ours: " + seen);
+        check(servers::logs(cloud, std::nullopt).size() == 3, "logs: without LocalAppData only ours");
+        test::write_file(tmp / "logs" / "big.log", "line one\nline two\nline three\n");
+        bool cut = false;
+        check(servers::log_tail(tmp / "logs" / "big.log", 12, &cut) == "line three\n" && cut, "log_tail: from a line start");
+        check(servers::log_tail(tmp / "logs" / "big.log", 1000, &cut) == "line one\nline two\nline three\n" && !cut,
+              "log_tail: a small file whole");
     }
 
     // patcher.toml parsing, as the proxy DLL reads it.

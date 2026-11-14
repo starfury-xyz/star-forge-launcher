@@ -1,6 +1,7 @@
 // sc-launch: the command-line launcher (port of crates/sc-launch/src/main.rs). Portable: on Linux
 // it starts the game through Proton, on Windows directly. A thin layer over sf_launch.
 
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -71,6 +72,10 @@ const char* kUsage =
     "                                        services (on Linux in the game's Proton prefix)\n"
     "  sc-launch [OPTIONS] server stop <cloud-dir>\n"
     "                                        Stop it (Ctrl+C to Hub, then MongoDB)\n"
+    "  sc-launch [OPTIONS] server logs <cloud-dir> [<log>]\n"
+    "                                        List its logs (the game's newest per\n"
+    "                                        service, and STAR FORGE's), or show the end\n"
+    "                                        of one, by name or label\n"
     "  sc-launch server on|off|default <cloud-dir> <exe> <id>\n"
     "                                        Switch a server patch (saved in\n"
     "                                        starforge/patcher.toml; applies on restart)\n"
@@ -514,6 +519,40 @@ int run(const std::vector<std::string>& args) {
         const Command cmd = server_command(resolve(cli.opts), cloud, "stop");
         const std::optional<int> code = spawn(cmd, Output{Output::Kind::Inherit, {}}, true).wait();
         return code.value_or(1);
+    }
+    if (is({"server", "logs", nullptr}) || is({"server", "logs", nullptr, nullptr})) {
+        const fs::path cloud = upath(c[2]);
+        std::optional<fs::path> local;
+        try {
+            local = profiles::shared_local_appdata(resolve(cli.opts));
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "note: the game's own logs are left out: %s\n", e.what());
+        }
+        const std::vector<servers::LogFile> all = servers::logs(cloud, local);
+        if (c.size() == 3) {
+            for (const servers::LogFile& f : all) {
+                char when[32] = "";
+                const std::time_t t = std::time_t(f.modified);
+                std::strftime(when, sizeof when, "%Y-%m-%d %H:%M", std::localtime(&t));
+                std::printf("%-9s %-24s %9llu  %s  %s\n", f.group.c_str(), f.label.c_str(), static_cast<unsigned long long>(f.size),
+                            when, f.name.c_str());
+            }
+            if (all.empty()) std::printf("no logs yet\n");
+            return 0;
+        }
+        auto lower = [](std::string s) {
+            for (char& ch : s) ch = char(std::tolower(static_cast<unsigned char>(ch)));
+            return s;
+        };
+        for (const servers::LogFile& f : all)
+            if (lower(f.name) == lower(c[3]) || lower(f.label) == lower(c[3])) {
+                bool cut = false;
+                const std::string text = servers::log_tail(f.path, 64 * 1024, &cut);
+                if (cut) std::printf("... (the last 64 KB of %s)\n", ustr(f.path).c_str());
+                std::fwrite(text.data(), 1, text.size(), stdout);
+                return 0;
+            }
+        throw std::runtime_error("no log " + pk::serde::debug_str(c[3]) + " (run `sc-launch server logs " + c[2] + "` for the list)");
     }
     if (is({"server", "uninstall", nullptr})) {
         mods::uninstall_proxy(upath(c[2]));
