@@ -76,6 +76,7 @@ struct Preferences {
     std::string game_directory;     // empty = find through Steam
     std::string proton_path;        // Proton build folder (Linux); empty = the one that last ran the game
     bool check_updates = true;      // look for a new launcher version at startup
+    bool experimental = false;      // show unfinished features (the Mods and Servers pages)
     bool setup_done = false;        // the first-run setup was finished
 
     // As serde writes and reads it (camelCase, every field optional, unknown fields ignored).

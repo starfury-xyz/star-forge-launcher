@@ -135,7 +135,7 @@ void prefs(const fs::path& data) {
     b.load_prefs();
     const json defaults = call("get_launcher_preferences");
     check(defaults.dump() ==
-              R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","factionTheme":"starforge","gameDirectory":"",)"
+              R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","experimental":false,"factionTheme":"starforge","gameDirectory":"",)"
               R"("launchBehavior":"tray","packBranding":true,"protonPath":"","selectedProfile":"","setupDone":false})",
           "defaults: " + defaults.dump());
 
@@ -154,9 +154,14 @@ void prefs(const fs::path& data) {
     check(test::read_file(data / "launcher.json") ==
               "{\n  \"selectedProfile\": \"\",\n  \"launchBehavior\": \"keepOpen\",\n  \"closeBehavior\": \"exit\",\n"
               "  \"factionTheme\": \"starforge\",\n  \"packBranding\": true,\n  \"backgroundFolder\": \"\",\n"
-              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"checkUpdates\": true,\n  \"setupDone\": false\n}",
+              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"checkUpdates\": true,\n  \"experimental\": false,\n"
+              "  \"setupDone\": false\n}",
           "launcher.json laid out as serde_json's to_string_pretty");
     check(!fs::exists(data / "launcher.json.tmp"), "no temporary file left");
+    check(call("update_launcher_preferences", {{"update", {{"key", "experimental"}, {"value", true}}}})["experimental"] == true &&
+              b.prefs().experimental,
+          "update: experimental features on");
+    call("update_launcher_preferences", {{"update", {{"key", "experimental"}, {"value", false}}}});
     auto upd = [](const char* key, json value) { return json{{"update", {{"key", key}, {"value", value}}}}; };
     check(error_of("update_launcher_preferences", upd("nope", 1)) == "unknown preference nope", "an unknown preference");
     check(error_of("update_launcher_preferences", upd("launchBehavior", "x")) ==

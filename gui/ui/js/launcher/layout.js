@@ -7,8 +7,8 @@ export function mountLayout() {
       <button class="brand-button" data-page="home" aria-label="STAR FORGE Launcher home"><img src="assets/starforge-emblem.svg" alt="" /></button>
       <button class="rail-button" data-page="home" aria-current="page"><span data-icon="home"></span><span>Home</span></button>
       <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starforge-emblem.svg" alt="" /><span>Star Conflict</span></button>
-      <button class="rail-button" data-page="servers"><span data-icon="server"></span><span>Servers</span></button>
-      <button class="rail-button" data-page="mods"><span data-icon="mods"></span><span>Mods</span></button>
+      <button class="rail-button" data-page="servers" data-experimental hidden><span data-icon="server"></span><span>Servers</span></button>
+      <button class="rail-button" data-page="mods" data-experimental hidden><span data-icon="mods"></span><span>Mods</span></button>
       <span class="rail-spacer"></span>
       <button id="open-downloads" class="rail-button download-rail" aria-label="Show download progress" hidden><span class="download-ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle id="download-ring" class="ring-value" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/></svg><span data-icon="download"></span></span><span id="download-rail-label">0%</span></button>
       <button id="open-notices" class="rail-button notice-bell" aria-label="Notifications" title="Notifications"><span data-icon="bell"></span><span id="notice-badge" class="notice-badge" hidden></span><span>Notices</span></button>
@@ -73,7 +73,7 @@ export function mountLayout() {
       </footer>
     </main>`;
   const dialogs = document.createElement('div');
-  dialogs.innerHTML = `<dialog id="settings-dialog" class="settings-dialog framed"><header><h1>Settings</h1><button class="icon-button" data-close-dialog aria-label="Close settings"><span data-icon="close"></span></button></header><nav class="settings-tabs" aria-label="Settings"><button data-settings-tab="launcher" aria-current="page">Launcher</button><button data-settings-tab="game">Star Conflict</button></nav><div class="dialog-body"><div id="settings-content"></div><footer id="launcher-version"></footer></div></dialog>
+  dialogs.innerHTML = `<dialog id="settings-dialog" class="settings-dialog framed"><header><h1>Settings</h1><button class="icon-button" data-close-dialog aria-label="Close settings"><span data-icon="close"></span></button></header><nav class="settings-tabs" aria-label="Settings"><button data-settings-tab="launcher" aria-current="page">Launcher</button><button data-settings-tab="game">Star Conflict</button><button data-settings-tab="experimental">Experimental</button></nav><div class="dialog-body"><div id="settings-content"></div><footer id="launcher-version"></footer></div></dialog>
     <dialog id="profile-dialog" class="profile-dialog framed" aria-labelledby="profile-dialog-title"><header><h1 id="profile-dialog-title">Add server profile</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header><div class="dialog-body">
       <section id="pack-import" class="pack-import" aria-labelledby="pack-import-title">
         <h2 id="pack-import-title">Import a server pack</h2>

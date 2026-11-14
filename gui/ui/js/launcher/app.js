@@ -92,6 +92,17 @@ async function start() {
     mods.pickServer(id);
     shell.navigate('mods');
   });
+  // Mods and Servers only for players who opted in (Settings > Experimental).
+  const showExperimental = () => {
+    const on = preferences.get().experimental;
+    document.querySelectorAll('[data-experimental]').forEach((node) => {
+      if (node instanceof HTMLElement) node.hidden = !on;
+    });
+    const page = required('launcher').dataset.page;
+    if (!on && (page === 'mods' || page === 'servers')) shell.navigate('home');
+  };
+  preferences.subscribe(showExperimental);
+  showExperimental();
   store.subscribe(() => {
     render();
     mods.update();

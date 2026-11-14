@@ -16,6 +16,7 @@ export function parsePreferences(input) {
     gameDirectory: string(value.gameDirectory),
     protonPath: string(value.protonPath),
     checkUpdates: boolean(value.checkUpdates),
+    experimental: boolean(value.experimental),
   };
 }
 /** @typedef {ReturnType<typeof parsePreferences>} Preferences */
