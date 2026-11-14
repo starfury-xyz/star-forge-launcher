@@ -281,6 +281,15 @@ target_link_libraries(sf_inject PUBLIC sf_core)
 add_executable(sc_inject WIN32 src/inject/main.cpp)
 target_link_libraries(sc_inject PRIVATE sf_inject shell32)
 set_target_properties(sc_inject PROPERTIES OUTPUT_NAME sc-inject)  # the name sc-launch looks for
+
+# Server supervisor: starts and stops a server install's MongoDB and Hub (see server.hpp). A
+# console program, so it can reach the servers with Ctrl+C.
+add_library(sf_server STATIC src/server/server.cpp)
+target_include_directories(sf_server PUBLIC src)
+target_link_libraries(sf_server PUBLIC ws2_32)
+add_executable(sc_server src/server/main.cpp)
+target_link_libraries(sc_server PRIVATE sf_server)
+set_target_properties(sc_server PROPERTIES OUTPUT_NAME sc-server)
 endif()  # WIN32
 
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
@@ -391,6 +400,14 @@ if(WIN32)
     add_executable(text_test tests/text_test.cpp)
     target_link_libraries(text_test PRIVATE sf_core)
     add_test(NAME text COMMAND text_test)
+
+    add_executable(fake_server tests/fake_server.cpp)
+    target_link_libraries(fake_server PRIVATE ws2_32)
+    add_executable(server_test tests/server_test.cpp)
+    target_link_libraries(server_test PRIVATE sf_server)
+    add_dependencies(server_test sc_server fake_server)
+    add_test(NAME server COMMAND server_test $<TARGET_FILE:sc_server> $<TARGET_FILE:fake_server>)
+    set_tests_properties(server PROPERTIES TIMEOUT 120)
 
     add_executable(load_test tests/load_test.cpp)
     target_link_libraries(load_test PRIVATE sf_core shell32)
