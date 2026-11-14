@@ -38,7 +38,7 @@ std::optional<fs::path> module_file(const fs::path& win64, const std::string& ex
 std::vector<Loaded> all_sets(const fs::path& profile_dir, const pack::Profile& profile) {
     std::vector<Loaded> out;
     try {
-        for (auto& set : patch::core::sets(profile.patches.core)) out.push_back({std::move(set), ""});
+        for (auto& set : patch::core::sets(patch::core::requested(profile.patches.core, profile.patch_choices))) out.push_back({std::move(set), ""});
     } catch (const std::exception& e) {
         out.push_back({std::nullopt, e.what()});
     }
@@ -81,7 +81,12 @@ Summary summary(const fs::path& profile_dir, const pack::Profile& profile) {
 std::vector<std::string> preflight(const fs::path& profile_dir, const pack::Profile& profile, const fs::path& game_exe) {
     const fs::path win64 = game_exe.has_parent_path() ? game_exe.parent_path() : fs::path(".");
     std::vector<std::string> problems, warnings;
-    for (auto& l : all_sets(profile_dir, profile)) {
+    const std::vector<Loaded> sets = all_sets(profile_dir, profile);
+    std::vector<const patch::Patchset*> loaded;
+    for (const auto& l : sets)
+        if (l.set) loaded.push_back(&*l.set);
+    warnings = patch::core::unknown_choices(loaded, profile.patch_choices);
+    for (const auto& l : sets) {
         if (!l.set) {
             problems.push_back(l.error);
             continue;
@@ -100,7 +105,7 @@ std::vector<std::string> preflight(const fs::path& profile_dir, const pack::Prof
         }
         patch::Report r = patch::verify_file(set, patch::Bytes(data->begin(), data->end()), choices(profile, set.exe));
         problems.insert(problems.end(), r.errors.begin(), r.errors.end());
-        warnings.insert(warnings.end(), r.warnings.begin(), r.warnings.end());
+        // (r.warnings are unknown switches seen from this set alone: unknown_choices covers them.)
         for (const auto& s : r.skipped) warnings.push_back(set.exe + ": optional patch skipped: " + s);
     }
     for (const std::string& plugin : profile.patches.plugins) {

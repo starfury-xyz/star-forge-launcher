@@ -59,6 +59,7 @@ nlohmann::ordered_json Preferences::to_json() const {
             {"gameDirectory", game_directory},
             {"protonPath", proton_path},
             {"checkUpdates", check_updates},
+            {"experimental", experimental},
             {"setupDone", setup_done}};
 }
 
@@ -74,6 +75,7 @@ Preferences Preferences::from_json(const json& j) {
     if (auto v = o.get("gameDirectory")) p.game_directory = serde::str(*v);
     if (auto v = o.get("protonPath")) p.proton_path = serde::str(*v);
     if (auto v = o.get("checkUpdates")) p.check_updates = serde::boolean(*v);
+    if (auto v = o.get("experimental")) p.experimental = serde::boolean(*v);
     if (auto v = o.get("setupDone")) p.setup_done = serde::boolean(*v);
     return p;
 }

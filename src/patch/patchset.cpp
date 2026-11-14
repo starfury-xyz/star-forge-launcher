@@ -229,6 +229,13 @@ std::vector<std::string> overlaps(const std::vector<const Patch*>& patches) {
     return out;
 }
 
+bool overlap(const Patch& a, const Patch& b) {
+    for (const Write& x : a.writes)
+        for (const Write& y : b.writes)
+            if (x.va < y.va + y.orig.size() && y.va < x.va + x.orig.size()) return true;
+    return false;
+}
+
 // --- checking and applying --------------------------------------------------------------------------
 
 State check(Target& t, const Patch& p) {
@@ -249,9 +256,15 @@ State check(Target& t, const Patch& p) {
     return {State::Mismatch, "partly applied"};
 }
 
-std::string apply(Target& t, const Patch& p) {
+std::string apply(Target& t, const Patch& p, const MidhookInstaller& midhook) {
     for (const Write& w : p.writes) {
-        if (!w.midhook.empty()) return "midhook " + quoted(w.midhook) + " is not supported by this patch method";
+        if (!w.midhook.empty()) {
+            if (!midhook) return "midhook " + quoted(w.midhook) + " is not supported by this patch method";
+            if (std::string err = midhook(w); !err.empty()) return "midhook " + quoted(w.midhook) + ": " + err;
+            uint8_t jmp = 0;
+            if (!t.read(w.va, &jmp, 1) || jmp != 0xe9) return "midhook " + quoted(w.midhook) + " left no jmp at " + hex_va(w.va);
+            continue;
+        }
         if (!t.write(w.va, w.bytes.data(), w.bytes.size())) return "write failed at " + hex_va(w.va);
         Bytes back(w.bytes.size());
         if (!t.read(w.va, back.data(), back.size()) || back != w.bytes) return "readback mismatch at " + hex_va(w.va);

@@ -270,7 +270,9 @@ select:focus-visible {
   transition: right 0.28s ease;
 }
 /* Home has no play dock, so its content can use the bottom of the window. */
-#launcher[data-page='home'] .content-area {
+#launcher[data-page='home'] .content-area,
+#launcher[data-page='servers'] .content-area,
+#launcher[data-page='mods'] .content-area {
   bottom: 36px;
 }
 .content-area > section:not([hidden]) {
@@ -1090,34 +1092,47 @@ dialog footer {
   display: flex;
   gap: 8px;
 }
-.sample-packs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.sample-packs span {
-  color: var(--muted);
-  font-size: 12px;
-  margin-right: 4px;
-}
 .pack-import-row input {
   flex: 1;
   min-width: 0;
 }
-.divider {
+.profile-manual {
+  margin-top: 16px;
+}
+.profile-manual > summary {
   display: flex;
   align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 11px;
-  margin-top: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
 }
-.divider::before,
-.divider::after {
+.profile-manual > summary::-webkit-details-marker {
+  display: none;
+}
+.profile-manual > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.profile-manual[open] > summary::before {
+  transform: rotate(45deg);
+}
+.profile-manual > summary:hover {
+  color: var(--silver);
+}
+.profile-manual > summary::after {
   content: '';
   flex: 1;
   border-top: 1px solid var(--line);
+}
+.profile-manual[open] > summary {
+  margin-bottom: 14px;
 }
 .pack-dialog {
   width: min(600px, 92vw);
@@ -1560,4 +1575,216 @@ dialog footer {
 .setup-step .folder-field input {
   flex: 1;
   min-width: 0;
+}
+
+/* Mods page: one row per patch, grouped by module and where the patches come from. */
+.mods-page,
+.servers-page {
+  padding-top: 10px;
+  max-width: 720px;
+}
+.mods-target-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.mods-target-row select {
+  min-width: 260px;
+}
+.mods-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mods-problem,
+.mods-warning {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #ff8a7a;
+}
+.mods-warning {
+  color: var(--accent);
+}
+.mods-list {
+  padding-bottom: 30px;
+}
+.mods-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.mods-module {
+  color: #ece8e3;
+  font-family: ui-monospace, monospace;
+}
+.mods-group small {
+  margin-left: auto;
+  font-weight: 400;
+}
+.mod-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #1c1916cc;
+  margin-bottom: 8px;
+}
+.mod-row[data-on='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.mod-row input[type='checkbox'] {
+  margin-top: 2px;
+  flex: none;
+}
+input[type='checkbox']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.mod-text {
+  min-width: 0;
+  flex: 1;
+}
+.mod-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.mod-title code {
+  color: var(--muted);
+  font-size: 12px;
+}
+.mod-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.mod-badge-chosen {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mod-description,
+.mod-text details {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mod-text details summary {
+  cursor: pointer;
+}
+.mod-text details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+}
+.mod-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.link-button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+/* Servers page: a card per server install, then the selected one's check. */
+.servers-list {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.server-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #1c1916cc;
+}
+.server-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.server-card[aria-current='true'] {
+  border-color: var(--accent);
+}
+.server-detail {
+  margin-top: 22px;
+  padding-bottom: 30px;
+}
+.server-detail h2 {
+  margin: 0;
+  font-size: 24px;
+}
+#server-proxy[data-bad='true'],
+#server-run[data-bad='true'] {
+  color: #ff8a7a;
+}
+.server-exes {
+  margin: 8px 0 18px;
+}
+.server-logs {
+  margin: 0 0 18px;
+}
+.server-logs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.server-logs-bar select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.server-follow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.server-log-text {
+  margin: 10px 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #00000040;
+  font: 11px/1.5 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.server-exe {
+  padding: 12px 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #1c1916cc;
+}
+.mod-badge-bad {
+  border-color: #ff8a7a;
+  color: #ff8a7a;
+}
+#add-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }

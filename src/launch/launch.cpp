@@ -254,6 +254,52 @@ std::string tool_path(const fs::path& path) {
 #endif
 }
 
+namespace {
+
+// `exe args`, one of our Windows tools: as it is on Windows; on Linux in the game's Proton prefix,
+// with Proton inside the Steam Linux Runtime it asks for, as under Steam (detect_proton refuses
+// builds without one). `verb` is Proton's (run, waitforexitandrun); `shared` are folders the
+// tool needs besides the prefix, the game and the tools.
+Command tool_command(const Setup& setup, const char* verb, const fs::path& exe, const std::vector<std::string>& args,
+                     std::initializer_list<const fs::path*> shared) {
+    Command cmd;
+#ifdef _WIN32
+    (void)verb;
+    (void)shared;
+    cmd.program = exe;
+    cmd.args = args;
+#else
+    if (!setup.proton) throw std::runtime_error("no Proton setup");
+    const Proton& pr = *setup.proton;
+    cmd.program = pr.runtime;
+    cmd.arg("--").arg(ustr(pr.dir / "proton"));
+    // pressure-vessel (the runtime's container) only shares a fixed set of host paths read-write.
+    std::string value = get_env("PRESSURE_VESSEL_FILESYSTEMS_RW").value_or("");
+    std::vector<const fs::path*> dirs{&pr.compat_data, &setup.game_dir};
+    dirs.insert(dirs.end(), shared.begin(), shared.end());
+    dirs.push_back(&setup.tools_dir);
+    for (const fs::path* d : dirs) {
+        const std::string s = ustr(*d);
+        if (s.find(':') != std::string::npos) throw std::runtime_error(s + ": paths shared with Proton cannot contain ':'");
+        if (!value.empty()) value += ':';
+        value += s;
+    }
+    cmd.set_env("PRESSURE_VESSEL_FILESYSTEMS_RW", value);
+    cmd.arg(verb).arg(ustr(exe));
+    for (const auto& a : args) cmd.arg(a);
+    cmd.set_env("STEAM_COMPAT_DATA_PATH", ustr(pr.compat_data))
+        .set_env("STEAM_COMPAT_CLIENT_INSTALL_PATH", ustr(pr.steam_root))
+        .set_env("STEAM_COMPAT_APP_ID", steam::kGameAppid)
+        .set_env("SteamAppId", steam::kGameAppid)
+        .set_env("SteamGameId", steam::kGameAppid);
+#endif
+    // Applied last, like Rust's use_host_env: an AppImage's paths never reach the game.
+    for (auto& change : env::host_env()) cmd.env.push_back(change);
+    return cmd;
+}
+
+}  // namespace
+
 Command command(const Setup& setup, const fs::path& profile_dir_in, const std::vector<std::string>& game_args) {
     std::error_code ec;
     fs::path profile_dir = fs::canonical(profile_dir_in, ec);
@@ -272,38 +318,23 @@ Command command(const Setup& setup, const fs::path& profile_dir_in, const std::v
         args.insert(args.end(), game_args.begin(), game_args.end());
     }
 
-    Command cmd;
-#ifdef _WIN32
-    cmd.program = inject;
-    cmd.args = args;
-#else
-    if (!setup.proton) throw std::runtime_error("no Proton setup");
-    const Proton& pr = *setup.proton;
-    // Proton always runs inside the Steam Linux Runtime it asks for, as under Steam;
-    // detect_proton refuses builds without one.
-    cmd.program = pr.runtime;
-    cmd.arg("--").arg(ustr(pr.dir / "proton"));
-    // pressure-vessel (the runtime's container) only shares a fixed set of host paths read-write.
-    std::string value = get_env("PRESSURE_VESSEL_FILESYSTEMS_RW").value_or("");
-    for (const fs::path* d : std::initializer_list<const fs::path*>{&pr.compat_data, &setup.game_dir, &profile_dir, &setup.tools_dir}) {
-        const std::string s = ustr(*d);
-        if (s.find(':') != std::string::npos) throw std::runtime_error(s + ": paths shared with Proton cannot contain ':'");
-        if (!value.empty()) value += ':';
-        value += s;
-    }
-    cmd.set_env("PRESSURE_VESSEL_FILESYSTEMS_RW", value);
-    cmd.arg("waitforexitandrun").arg(ustr(inject));
-    for (const auto& a : args) cmd.arg(a);
-    cmd.set_env("STEAM_COMPAT_DATA_PATH", ustr(pr.compat_data))
-        .set_env("STEAM_COMPAT_CLIENT_INSTALL_PATH", ustr(pr.steam_root))
-        .set_env("STEAM_COMPAT_APP_ID", steam::kGameAppid)
-        .set_env("SteamAppId", steam::kGameAppid)
-        .set_env("SteamGameId", steam::kGameAppid);
-    add_overlay(cmd, pr.steam_root);
+    Command cmd = tool_command(setup, "waitforexitandrun", inject, args, {&profile_dir});
+#ifndef _WIN32
+    add_overlay(cmd, setup.proton->steam_root);
 #endif
-    // Applied last, like Rust's use_host_env: an AppImage's paths never reach the game.
-    for (auto& change : env::host_env()) cmd.env.push_back(change);
     cmd.cwd = setup.game_dir / "win64";
+    return cmd;
+}
+
+Command server_command(const Setup& setup, const fs::path& cloud_dir, const std::string& verb) {
+    const fs::path exe = setup.tools_dir / kServerExe;
+    if (!is_file(exe)) throw std::runtime_error(std::string(kServerExe) + " is missing from " + ustr(setup.tools_dir));
+    std::error_code ec;
+    const fs::path cloud = fs::absolute(cloud_dir, ec);
+    if (ec) throw std::runtime_error(ustr(cloud_dir) + ": " + ec.message());
+    // `run`, not waitforexitandrun: the server can share the prefix with a game that's running.
+    Command cmd = tool_command(setup, "run", exe, {verb, tool_path(cloud)}, {&cloud});
+    cmd.cwd = cloud;
     return cmd;
 }
 

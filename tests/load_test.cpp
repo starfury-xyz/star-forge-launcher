@@ -434,6 +434,19 @@ std::string core_patch() {
     return text;
 }
 
+// A core patch the pack doesn't ask for, switched on by the player in local.json, loads too; a
+// switch for a patch nobody has warns once, and the core one doesn't warn at all.
+std::string core_by_player() {
+    write_pack("{}");
+    test::write_file(g_profile + L"\\local.json",
+                     R"({ "patches": { "GAME.EXE": { "loose-before-packed": true, "gone": true } } })");
+    std::string text = load_agent();
+    check(contains(text, "game.exe: not loaded yet; patching when it loads\n"), "core patch switched on in local.json loads");
+    check(contains(text, "warning: GAME.EXE: no patch called \"gone\"\n"), "agent.log: the stale switch warns");
+    check(text.find("no patch called") == text.rfind("no patch called"), "... once, and not for the core patch");
+    return text;
+}
+
 std::string core_unknown() {
     write_pack(R"({ "core": ["no-such-patch"] })");
     std::string text = load_agent(false);
@@ -504,6 +517,7 @@ int main(int argc, char** argv) {
     else if (scenario == "patch_dll_fail_exit") text = patch_dll_fail_exit();
     else if (scenario == "patch_dll_fail_exit_child") text = patch_dll_fail_exit_child();
     else if (scenario == "core_patch") text = core_patch();
+    else if (scenario == "core_by_player") text = core_by_player();
     else if (scenario == "core_unknown") text = core_unknown();
     else if (scenario == "plugin") text = plugin();
     else if (scenario == "plugin_fail") text = plugin_fail();

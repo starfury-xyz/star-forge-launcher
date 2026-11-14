@@ -5,6 +5,8 @@ import { loadPreferences } from './preferences.js';
 import { bindShell } from './shell.js';
 import { bindSettings } from './settings.js';
 import { bindProfiles } from './profiles.js';
+import { bindMods } from './mods.js';
+import { bindServers } from './servers.js';
 import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
@@ -76,11 +78,47 @@ async function start() {
     control('add-profile', HTMLButtonElement).disabled = locked;
     control('summary-edit', HTMLButtonElement).disabled = locked || !profiles.current();
   };
-  bindShell(() => render());
-  store.subscribe(render);
+  const gameLocked = () => {
+    const phase = store.getSnapshot()?.phase;
+    return phase === 'launching' || phase === 'running';
+  };
+  const mods = bindMods(profiles, gameLocked);
+  const shell = bindShell((page) => {
+    render();
+    if (page === 'mods') mods.show();
+    if (page === 'servers') servers.show();
+  });
+  const servers = bindServers((id) => {
+    mods.pickServer(id);
+    shell.navigate('mods');
+  });
+  // Mods and Servers only for players who opted in (Settings > Experimental).
+  const showExperimental = () => {
+    const on = preferences.get().experimental;
+    document.querySelectorAll('[data-experimental]').forEach((node) => {
+      if (node instanceof HTMLElement) node.hidden = !on;
+    });
+    const page = required('launcher').dataset.page;
+    if (!on && (page === 'mods' || page === 'servers')) shell.navigate('home');
+  };
+  preferences.subscribe(showExperimental);
+  showExperimental();
+  store.subscribe(() => {
+    render();
+    mods.update();
+  });
+  /** @type {Awaited<ReturnType<typeof bindPacks>> | null} */
+  let packs = null;
   required('play-button').addEventListener('click', () => {
     const action = store.getSnapshot()?.primaryAction;
-    if (action) run(() => store.performAction(action));
+    if (!action) return;
+    // A community server not installed yet: review and install its pack, then play.
+    const sample = action === 'launch' ? profiles.pendingSample() : null;
+    if (sample) {
+      packs?.installSample(sample, () => run(() => store.performAction('launch')));
+      return;
+    }
+    run(() => store.performAction(action));
   });
   await startupStep(
     listen('notification', (payload) => {
@@ -98,12 +136,12 @@ async function start() {
     await startupStep(invoke('main_ready'), 'Showing launcher');
     run(() => bindSetup(preferences, profiles));
     run(() => bindSettings(preferences, store));
-    run(() =>
-      bindPacks(profiles, () => {
+    run(async () => {
+      packs = await bindPacks(profiles, () => {
         const phase = store.getSnapshot()?.phase;
         return phase === 'launching' || phase === 'running';
-      }),
-    );
+      });
+    });
     run(() => bindArtwork(preferences));
     run(() =>
       bindUpdater(

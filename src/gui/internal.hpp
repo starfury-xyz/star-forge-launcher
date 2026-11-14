@@ -53,5 +53,7 @@ const json& arg(const char* command, const json& args, const char* key);
 fs::path profiles_dir();
 // An existing profile's folder. Throws std::runtime_error.
 fs::path profile_dir(const std::string& id);
+// The launcher's data folder (servers.json). Throws std::runtime_error if it can't be worked out.
+fs::path data_dir();
 
 }  // namespace sf::gui

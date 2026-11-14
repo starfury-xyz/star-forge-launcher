@@ -97,17 +97,21 @@ std::optional<std::string> resource_image(const fs::path& dir, const std::option
 
 constexpr size_t kFilesShown = 50;
 
-// Where a community-server button installs from: the server's own published pack, or a pack.json
-// kept with STAR FORGE (samples/).
+// The community servers listed from the start, installed when first played: from the server's
+// own published pack, or a pack.json kept with STAR FORGE (samples/).
 struct Sample {
     const char* key;
-    const char* name;  // Link: the button's name
-    const char* url;   // Link
-    const char* json;  // Bundled
+    const char* url;   // Link; what the list shows comes from the fields below
+    const char* json;  // Bundled; what the list shows comes from the pack
+    const char* id;
+    const char* name;
+    const char* server;
+    const char* description;
 };
 const Sample kSamples[] = {
-    {"starfury", "STARFURY", "https://starfury.web.garage.cosmosim.dev/pack.json", nullptr},
-    {"sc-classic-europe", nullptr, nullptr, samples::kScClassicEurope},
+    {"starfury", "https://starfury.web.garage.cosmosim.dev/pack.json", nullptr, "xyz.starfury", "STARFURY",
+     "STARFURY.XYZ:3801", "STARFURY.XYZ community server."},
+    {"sc-classic-europe", nullptr, samples::kScClassicEurope, nullptr, nullptr, nullptr, nullptr},
 };
 
 json update_available(const std::string& id, const packs::Available& a) {
@@ -445,17 +449,19 @@ void Backend::discard_pack(uint64_t token) {
 json Backend::list_sample_packs() {
     json out = json::array();
     for (const auto& s : kSamples) {
-        std::string name;
+        std::string id, name, description;
+        json server = nullptr;
         if (s.url) {
-            name = s.name;
+            id = s.id, name = s.name, server = s.server, description = s.description;
         } else {
             try {
-                name = pack::Pack::from_json(s.json).name;
+                const pack::Pack pk = pack::Pack::from_json(s.json);
+                id = pk.id, name = pk.name, server = opt_str(pk.server.address), description = pk.description;
             } catch (const std::exception&) {
                 continue;
             }
         }
-        out.push_back(json(ojson{{"key", s.key}, {"name", name}}));
+        out.push_back(json(ojson{{"key", s.key}, {"packId", id}, {"name", name}, {"server", server}, {"description", description}}));
     }
     return out;
 }

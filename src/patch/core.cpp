@@ -53,4 +53,38 @@ std::vector<Patchset> sets(const std::vector<std::string>& requested) {
     return out;
 }
 
+std::vector<std::string> requested(const std::vector<std::string>& pack_core,
+                                   const std::map<std::string, Choices>& choices) {
+    std::vector<std::string> out = pack_core;
+    for (const Patchset& set : all())
+        for (const auto& [module, c] : choices) {
+            if (!set.targets(module)) continue;
+            for (const Patch& p : set.patches) {
+                auto it = c.find(p.id);
+                if (it != c.end() && it->second && std::find(out.begin(), out.end(), p.id) == out.end())
+                    out.push_back(p.id);
+            }
+        }
+    return out;
+}
+
+std::vector<std::string> unknown_choices(const std::vector<const Patchset*>& sets,
+                                         const std::map<std::string, Choices>& choices) {
+    const std::vector<Patchset> core = all();
+    std::vector<const Patchset*> known = sets;
+    for (const Patchset& set : core) known.push_back(&set);
+    std::vector<std::string> out;
+    for (const auto& [module, c] : choices)
+        for (const auto& choice : c) {
+            const std::string& id = choice.first;  // (a lambda can't capture a structured binding in C++17)
+            bool found = false;
+            for (const Patchset* set : known)
+                if (set->targets(module))
+                    found = found || std::any_of(set->patches.begin(), set->patches.end(),
+                                                 [&](const Patch& p) { return p.id == id; });
+            if (!found) out.push_back(module + ": no patch called \"" + id + "\"");
+        }
+    return out;
+}
+
 }  // namespace sf::patch::core

@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <ctime>
 #include <thread>
 
 #include <monocypher-ed25519.h>
@@ -134,7 +135,7 @@ void prefs(const fs::path& data) {
     b.load_prefs();
     const json defaults = call("get_launcher_preferences");
     check(defaults.dump() ==
-              R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","factionTheme":"starforge","gameDirectory":"",)"
+              R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","experimental":false,"factionTheme":"starforge","gameDirectory":"",)"
               R"("launchBehavior":"tray","packBranding":true,"protonPath":"","selectedProfile":"","setupDone":false})",
           "defaults: " + defaults.dump());
 
@@ -153,9 +154,14 @@ void prefs(const fs::path& data) {
     check(test::read_file(data / "launcher.json") ==
               "{\n  \"selectedProfile\": \"\",\n  \"launchBehavior\": \"keepOpen\",\n  \"closeBehavior\": \"exit\",\n"
               "  \"factionTheme\": \"starforge\",\n  \"packBranding\": true,\n  \"backgroundFolder\": \"\",\n"
-              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"checkUpdates\": true,\n  \"setupDone\": false\n}",
+              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"checkUpdates\": true,\n  \"experimental\": false,\n"
+              "  \"setupDone\": false\n}",
           "launcher.json laid out as serde_json's to_string_pretty");
     check(!fs::exists(data / "launcher.json.tmp"), "no temporary file left");
+    check(call("update_launcher_preferences", {{"update", {{"key", "experimental"}, {"value", true}}}})["experimental"] == true &&
+              b.prefs().experimental,
+          "update: experimental features on");
+    call("update_launcher_preferences", {{"update", {{"key", "experimental"}, {"value", false}}}});
     auto upd = [](const char* key, json value) { return json{{"update", {{"key", key}, {"value", value}}}}; };
     check(error_of("update_launcher_preferences", upd("nope", 1)) == "unknown preference nope", "an unknown preference");
     check(error_of("update_launcher_preferences", upd("launchBehavior", "x")) ==
@@ -283,6 +289,94 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     check(local.name == std::string("Mine") && !local.server && !local.local_server && profiles::read_pack(profiles / "gui-pack").name == "GUI Pack",
           "managed: name in local.json, the pack's server not copied");
 
+    // The Mods page: every core patch listed, switched on and back to default through local.json.
+    {
+        json mods = call("list_mods", {{"kind", "profile"}, {"id", "gui-pack"}});
+        const json& core = mods["toggles"][0];
+        check(core["id"] == "loose-before-packed" && core["source"] == "core" && core["on"] == false &&
+                  core["chosen"].is_null() && mods["errors"].empty() && mods["warnings"].empty(),
+              "list_mods: " + mods.dump());
+        mods = call("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "loose-before-packed"}, {"on", true}});
+        check(mods["toggles"][0]["on"] == true && mods["toggles"][0]["chosen"] == true, "set_mod on: the new list comes back");
+        check(call("list_profiles")[0]["patches"] == 1, "set_mod: the profile's patch count follows");
+        mods = call("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "loose-before-packed"}, {"on", nullptr}});
+        check(mods["toggles"][0]["on"] == false && mods["toggles"][0]["chosen"].is_null(), "set_mod null: back to default");
+        check(contains(error_of("set_mod", {{"kind", "profile"}, {"id", "gui-pack"}, {"module", "game.exe"}, {"patch", "x"}, {"on", true}}),
+                       "has no patch \"x\""),
+              "set_mod: unknown patch");
+        check(contains(error_of("list_mods", {{"kind", "bogus"}, {"id", "gui-pack"}}), "unknown mod target"), "list_mods: unknown kind");
+        check(contains(error_of("list_mods", {{"kind", "profile"}, {"id", "nope"}}), "does not exist"), "list_mods: unknown profile");
+    }
+
+    // The Servers page: a server install in the list, checked, its patches switched in patcher.toml.
+    {
+        const fs::path cloud = base / "cloud";
+        test::write_file(cloud / "libcrypto-1_1_tg.dll", "orig");
+        test::write_file(cloud / "Hub.exe", "MZ");
+        test::write_file(cloud / "starforge/patchsets/Hub.exe.patchset.toml",
+                         "format = 1\nexe = \"Hub.exe\"\nsha1 = \"" + std::string(40, '0') +
+                             "\"\nimage_base = 0x400000\n[[patch]]\nid = \"a\"\n[[patch.write]]\nva = 0x401000\norig = \"74\"\nbytes = \"eb\"\n");
+        check(call("list_servers").empty(), "list_servers: none yet");
+        const json added = call("add_server", {{"name", " Test Box "}, {"cloud", ustr(cloud)}});
+        check(added["id"] == "test-box" && added["name"] == "Test Box", "add_server: " + added.dump());
+        check(contains(error_of("add_server", {{"name", "Again"}, {"cloud", ustr(cloud)}}), "already in the list, as Test Box"),
+              "add_server: the same folder twice");
+        check(contains(error_of("add_server", {{"name", "X"}, {"cloud", ustr(base / "nope")}}), "is not a folder"),
+              "add_server: not a folder");
+        check(call("list_servers").size() == 1, "list_servers: one");
+        json st = call("server_status", {{"id", "test-box"}});
+        check(st["proxy"] == "stock" && st["proxyBuild"].is_null(), "server_status: not installed, no build: " + st.dump());
+        check(contains(error_of("install_server_proxy", {{"id", "test-box"}}), "no server proxy build"),
+              "install_server_proxy: no build");
+        test::write_file(base / "proxy.dll", std::string("MZ sfp_version\0", 15));
+        set_env(env::kServerProxy, ustr(base / "proxy.dll"));
+        st = call("install_server_proxy", {{"id", "test-box"}});
+        check(st["proxy"] == "installed" && st["proxyBuild"] == ustr(base / "proxy.dll") &&
+                  test::read_file(cloud / "libcrypto-1_1_tg_orig.dll") == "orig",
+              "install_server_proxy: " + st.dump());
+        st = call("server_status", {{"id", "test-box"}});
+        check(st["run"]["state"] == "stopped", "server_status: not running: " + st["run"].dump());
+        test::write_file(cloud / "starforge/server.json",
+                         R"({"supervisor": 1, "hub": 2, "mongod": 0, "mongoPort": 27017, "started": 5, "heartbeat": )" +
+                             std::to_string(std::time(nullptr)) + "}");
+        st = call("server_status", {{"id", "test-box"}});
+        check(st["run"]["state"] == "running" && st["run"]["started"] == 5 && st["run"]["ownMongo"] == false,
+              "server_status: running from server.json: " + st["run"].dump());
+        check(contains(error_of("start_server", {{"id", "test-box"}}), "already running"), "start_server: refused while running");
+        fs::remove(cloud / "starforge/server.json");
+        st = call("server_status", {{"id", "test-box"}});
+        check(st["proxy"] == "installed" && st["onError"] == "exit" && st["patches"] == 1 && st["patchesOn"] == 1 &&
+                  st["exes"].size() == 1 && contains(st["exes"][0]["errors"][0].get<std::string>(), "different build"),
+              "server_status: " + st.dump());
+        json mods = call("list_mods", {{"kind", "server"}, {"id", "test-box"}});
+        check(mods["toggles"].size() == 1 && mods["toggles"][0]["source"] == "starforge/patchsets/Hub.exe.patchset.toml",
+              "list_mods server: " + mods.dump());
+        mods = call("set_mod", {{"kind", "server"}, {"id", "test-box"}, {"module", "Hub.exe"}, {"patch", "a"}, {"on", false}});
+        check(mods["toggles"][0]["on"] == false && call("server_status", {{"id", "test-box"}})["patchesOn"] == 0,
+              "set_mod server: switched off");
+        check(contains(test::read_file(cloud / "starforge/patcher.toml"), "\"a\" = false"), "set_mod server: in patcher.toml");
+        call("open_server_folder", {{"id", "test-box"}, {"which", "cloud"}});
+        check(host.last_opened() == ustr(cloud), "open_server_folder: cloud");
+        test::write_file(cloud / "starforge/logs/sc-server.log", "first\nsecond\n");
+        json logs = call("server_logs", {{"id", "test-box"}});
+        bool listed = false;
+        for (const json& f : logs["logs"]) listed |= f["group"] == "starforge" && f["name"] == "sc-server.log" && f["size"] == 13;
+        check(listed, "server_logs: ours listed: " + logs.dump());
+        json one = call("server_log", {{"id", "test-box"}, {"group", "starforge"}, {"name", "sc-server.log"}});
+        check(one["text"] == "first\nsecond\n" && one["cut"] == false, "server_log: " + one.dump());
+        check(contains(error_of("server_log", {{"id", "test-box"}, {"group", "starforge"}, {"name", "../patcher.toml"}}), "no log"),
+              "server_log: only a listed file");
+        call("open_server_folder", {{"id", "test-box"}, {"which", "logs"}});
+        check(host.last_opened() == ustr(cloud / "starforge" / "logs"), "open_server_folder: logs (made by the install)");
+        check(call("uninstall_server_proxy", {{"id", "test-box"}})["proxy"] == "stock" &&
+                  test::read_file(cloud / "libcrypto-1_1_tg.dll") == "orig",
+              "uninstall_server_proxy: the game's DLL back");
+        set_env(env::kServerProxy, std::nullopt);
+        call("remove_server", {{"id", "test-box"}});
+        check(call("list_servers").empty() && fs::exists(cloud / "Hub.exe"), "remove_server: off the list, files kept");
+        check(contains(error_of("server_status", {{"id", "test-box"}}), "no server install"), "server_status: unknown id");
+    }
+
     // Updates.
     srv.put("/pack.json", R"({"format":1,"id":"org.example.gui","name":"GUI Pack","version":"1.1.0"})");
     check(call("check_pack_update", {{"id", "gui-pack"}}).dump() ==
@@ -353,9 +447,14 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     }
 
     // Samples.
-    check(call("list_sample_packs").dump() ==
-              R"([{"key":"starfury","name":"STARFURY"},{"key":"sc-classic-europe","name":"Star Conflict Classic Europe"}])",
-          "sample packs");
+    {
+        const json list = call("list_sample_packs");
+        check(list.size() == 2 && list[0]["key"] == "starfury" && list[0]["packId"] == "xyz.starfury" &&
+                  list[0]["server"] == "STARFURY.XYZ:3801" && list[1]["key"] == "sc-classic-europe" &&
+                  list[1]["packId"] == "org.starforge.samples.sc-classic-europe" && list[1]["name"] == "Star Conflict Classic Europe" &&
+                  list[1]["server"] == "57.131.200.242:3801" && !list[1]["description"].get<std::string>().empty(),
+              "sample packs: " + list.dump());
+    }
     check(call("sample_pack_source", {{"key", "starfury"}}) == "https://starfury.web.garage.cosmosim.dev/pack.json", "a linked sample");
     const fs::path sample = upath(call("sample_pack_source", {{"key", "sc-classic-europe"}}).get<std::string>());
     check(sample == base / "data/staging/samples/sc-classic-europe" &&

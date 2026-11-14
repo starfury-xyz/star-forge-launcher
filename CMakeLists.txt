@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 if(POLICY CMP0141)
     cmake_policy(SET CMP0141 NEW)
 endif()
-project(starforge VERSION 0.2.6 LANGUAGES C CXX)
+project(starforge VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +60,7 @@ add_custom_target(generate_core_patchsets ALL
 add_library(sf_patch STATIC
     src/patch/core.cpp
     src/patch/patchset.cpp
+    src/patch/server_config.cpp
     src/patch/sha1.cpp
     src/patch/toml_impl.cpp
 )
@@ -68,6 +69,89 @@ add_dependencies(sf_patch generate_core_patchsets)
 # SYSTEM: vendored headers' own warnings aren't ours to fix.
 target_include_directories(sf_patch SYSTEM PUBLIC third_party third_party/tomlplusplus)
 target_compile_definitions(sf_patch PUBLIC TOML_HEADER_ONLY=0)
+
+if(WIN32)
+# Windows code shared by the agent, the injector and their tests: profile files as the agent
+# reads them (port of crates/sc-profile) and Win32 string/file helpers.
+add_library(sf_core STATIC
+    src/common/file.cpp
+    src/common/text.cpp
+    src/profile/profile.cpp
+)
+target_link_libraries(sf_core PUBLIC sf_patch)
+
+# MinHook (C): function hooking for the agent and the proxy. Same sources the Rust minhook crate builds.
+# hde is its instruction decoder, one per CPU architecture.
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(MINHOOK_HDE third_party/minhook/src/hde/hde64.c)
+else()
+    set(MINHOOK_HDE third_party/minhook/src/hde/hde32.c)
+endif()
+add_library(minhook STATIC
+    third_party/minhook/src/buffer.c
+    third_party/minhook/src/hook.c
+    third_party/minhook/src/trampoline.c
+    ${MINHOOK_HDE}
+)
+target_include_directories(minhook SYSTEM PUBLIC third_party/minhook/include)
+
+# Hooking (MinHook wrapper) and file redirects, shared by the agent (x64) and the server proxy (x86).
+add_library(sf_redirect STATIC
+    src/hook/hook.cpp
+    src/redirect/redirect.cpp
+)
+target_link_libraries(sf_redirect PUBLIC sf_core minhook)
+
+endif()  # WIN32
+
+# The x86 build (win32 preset) is the server side only: the proxy DLL every cloud\*.exe loads
+# (the servers are 32-bit) and its test. Everything else is built x64 or for Linux.
+if(SF_ARCH STREQUAL "x86")
+    include(CTest)
+    # Midhooks (C++ patches, see src/proxy/sfp_hook.hpp) are compiled into the proxy: every .cpp in
+    # this folder, e.g. a patch repo's src/dll/hooks.
+    set(SF_PROXY_HOOKS "" CACHE PATH "Folder of midhook .cpp files to build into the server proxy")
+    set(proxy_hooks "")
+    if(SF_PROXY_HOOKS)
+        file(GLOB proxy_hooks CONFIGURE_DEPENDS "${SF_PROXY_HOOKS}/*.cpp")
+    endif()
+    if(BUILD_TESTING)
+        list(APPEND proxy_hooks tests/proxy_test_hooks.cpp)  # for proxy_test's midhook_run
+    endif()
+
+    # Stand-in for the servers' libcrypto-1_1_tg.dll; the .def forwards every export to the original.
+    add_library(sc_proxy SHARED src/proxy/proxy.cpp src/proxy/midhook.cpp src/proxy/libcrypto-1_1_tg.def ${proxy_hooks})
+    target_link_libraries(sc_proxy PRIVATE sf_redirect kernel32)
+    # Hook files include "sfp_hook.hpp" (and their own headers, beside them).
+    target_include_directories(sc_proxy PRIVATE src/proxy ${SF_PROXY_HOOKS})
+    set_target_properties(sc_proxy PROPERTIES OUTPUT_NAME libcrypto-1_1_tg)
+
+    if(BUILD_TESTING)
+        # The test sits in <build>/fakeserver/cloud/ with the proxy, like a server exe.
+        set(FAKESERVER "${CMAKE_BINARY_DIR}/fakeserver/cloud")
+        add_executable(proxy_test tests/proxy_test.cpp)
+        target_link_libraries(proxy_test PRIVATE sf_core)
+        set_target_properties(proxy_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKESERVER}")
+        add_custom_command(OUTPUT "${FAKESERVER}/libcrypto-1_1_tg.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:sc_proxy> "${FAKESERVER}/libcrypto-1_1_tg.dll"
+            DEPENDS sc_proxy)
+        add_custom_target(fakeserver_proxy ALL DEPENDS "${FAKESERVER}/libcrypto-1_1_tg.dll")
+        # A stand-in server exe that imports the proxy, for the [stack] scenarios.
+        add_executable(stack_test tests/stack_test.cpp)
+        target_link_libraries(stack_test PRIVATE sc_proxy)
+        set_target_properties(stack_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKESERVER}")
+        add_dependencies(proxy_test fakeserver_proxy stack_test)
+        set(PROXY_SCENARIOS plain patch patch_off wrong_build wrong_build_continue bad_config midhook midhook_run files files_elsewhere
+            stack stack_off)
+        foreach(scenario IN LISTS PROXY_SCENARIOS)
+            add_test(NAME proxy_${scenario} COMMAND proxy_test ${scenario})
+            list(APPEND PROXY_TESTS proxy_${scenario})
+        endforeach()
+        # RUN_SERIAL: the scenarios share fakeserver/cloud/starforge/.
+        set_tests_properties(${PROXY_TESTS} PROPERTIES ENVIRONMENT "WINEDEBUG=-all" TIMEOUT 60 RUN_SERIAL TRUE)
+    endif()
+    return()
+endif()
 
 # The launcher's machinery (port of crates/sc-launch), portable: finding Steam, Proton and the
 # game, profiles, downloads, packs. The sc-launch CLI and the GUI are thin layers over it.
@@ -92,6 +176,7 @@ add_library(sf_launch STATIC
     src/crypto/sha256.cpp
     src/launch/env.cpp
     src/launch/launch.cpp
+    src/launch/mods.cpp
     src/launch/net.cpp
     src/launch/packs.cpp
     src/launch/patching.cpp
@@ -100,6 +185,7 @@ add_library(sf_launch STATIC
     src/launch/process.cpp
     src/launch/profiles.cpp
     src/launch/remote.cpp
+    src/launch/servers.cpp
     src/launch/signing.cpp
     src/launch/trust.cpp
     src/launch/steam.cpp
@@ -134,8 +220,10 @@ configure_file(src/gui/samples.hpp.in ${CMAKE_BINARY_DIR}/generated/gui/samples.
 add_library(sf_gui STATIC
     src/gui/backend.cpp
     src/gui/game.cpp
+    src/gui/mods.cpp
     src/gui/prefs.cpp
     src/gui/profiles.cpp
+    src/gui/servers.cpp
     src/gui/setup.cpp
     src/gui/updater.cpp
 )
@@ -186,40 +274,14 @@ if(SF_HAVE_GUI)
 endif()
 
 if(WIN32)
-# Windows code shared by the agent, the injector and their tests: profile files as the agent
-# reads them (port of crates/sc-profile) and Win32 string/file helpers.
-add_library(sf_core STATIC
-    src/common/file.cpp
-    src/common/text.cpp
-    src/profile/profile.cpp
-)
-target_link_libraries(sf_core PUBLIC sf_patch)
-
-# MinHook (C): function hooking for the agent. Same sources the Rust minhook crate builds.
-# hde is its instruction decoder, one per CPU architecture.
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(MINHOOK_HDE third_party/minhook/src/hde/hde64.c)
-else()
-    set(MINHOOK_HDE third_party/minhook/src/hde/hde32.c)
-endif()
-add_library(minhook STATIC
-    third_party/minhook/src/buffer.c
-    third_party/minhook/src/hook.c
-    third_party/minhook/src/trampoline.c
-    ${MINHOOK_HDE}
-)
-target_include_directories(minhook SYSTEM PUBLIC third_party/minhook/include)
-
 # Agent DLL injected into game.exe (port of crates/sc-agent).
 add_library(sc_agent SHARED
     src/agent/dllmain.cpp
     src/agent/agent.cpp
     src/agent/folders.cpp
-    src/agent/hook.cpp
-    src/agent/file_hooks.cpp
     src/agent/patches.cpp
 )
-target_link_libraries(sc_agent PRIVATE sf_core minhook kernel32)
+target_link_libraries(sc_agent PRIVATE sf_redirect kernel32)
 
 # Injector (port of crates/sc-inject): starts game.exe suspended with the agent in it. The logic
 # is a library so tests can call quote() directly; WIN32 = a windowed program (no console window).
@@ -228,6 +290,15 @@ target_link_libraries(sf_inject PUBLIC sf_core)
 add_executable(sc_inject WIN32 src/inject/main.cpp)
 target_link_libraries(sc_inject PRIVATE sf_inject shell32)
 set_target_properties(sc_inject PROPERTIES OUTPUT_NAME sc-inject)  # the name sc-launch looks for
+
+# Server supervisor: starts and stops a server install's MongoDB and Hub (see server.hpp). A
+# console program, so it can reach the servers with Ctrl+C.
+add_library(sf_server STATIC src/server/server.cpp)
+target_include_directories(sf_server PUBLIC src)
+target_link_libraries(sf_server PUBLIC ws2_32)
+add_executable(sc_server src/server/main.cpp)
+target_link_libraries(sc_server PRIVATE sf_server)
+set_target_properties(sc_server PROPERTIES OUTPUT_NAME sc-server)
 endif()  # WIN32
 
 # Tests run natively on Windows, and under wine when cross-compiling (CMAKE_CROSSCOMPILING_EMULATOR,
@@ -310,6 +381,9 @@ if(BUILD_TESTING)
         target_link_libraries(prepare_test PRIVATE ws2_32)
     endif()
     add_test(NAME prepare COMMAND prepare_test)
+    add_executable(mods_test tests/mods_test.cpp)
+    target_link_libraries(mods_test PRIVATE sf_launch)
+    add_test(NAME mods COMMAND mods_test)
     add_executable(gui_test tests/gui_test.cpp)
     target_link_libraries(gui_test PRIVATE sf_gui monocypher)
     if(WIN32)
@@ -336,6 +410,14 @@ if(WIN32)
     target_link_libraries(text_test PRIVATE sf_core)
     add_test(NAME text COMMAND text_test)
 
+    add_executable(fake_server tests/fake_server.cpp)
+    target_link_libraries(fake_server PRIVATE ws2_32)
+    add_executable(server_test tests/server_test.cpp)
+    target_link_libraries(server_test PRIVATE sf_server)
+    add_dependencies(server_test sc_server fake_server)
+    add_test(NAME server COMMAND server_test $<TARGET_FILE:sc_server> $<TARGET_FILE:fake_server>)
+    set_tests_properties(server PROPERTIES TIMEOUT 120)
+
     add_executable(load_test tests/load_test.cpp)
     target_link_libraries(load_test PRIVATE sf_core shell32)
     set_target_properties(load_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FAKEGAME}")
@@ -356,7 +438,7 @@ if(WIN32)
     # One process per scenario (see load_test.cpp).
     set(AGENT_SCENARIOS no_profile broken_profile shared_data own_data redirect listing
         patch_exe patch_fail_exit patch_fail_continue patch_wrong_build patch_dll patch_dll_fail_exit
-        core_patch core_unknown plugin plugin_fail plugin_missing)
+        core_patch core_by_player core_unknown plugin plugin_fail plugin_missing)
     foreach(scenario IN LISTS AGENT_SCENARIOS)
         add_test(NAME agent_${scenario} COMMAND load_test ${scenario})
         list(APPEND AGENT_TESTS agent_${scenario})

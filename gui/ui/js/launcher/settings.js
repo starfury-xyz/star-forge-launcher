@@ -26,7 +26,12 @@ export async function bindSettings(preferences, store) {
       ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', '<span class="folder-field"><input id="background-folder" data-preference="backgroundFolder" type="text" spellcheck="false" placeholder="Steam banner"><button class="button" id="pick-background-folder">Browse…</button></span>')}</section>
       <section class="setting-group"><h2>Updates</h2>${row('Check for launcher updates', 'Look for a new STAR FORGE Launcher version each time it starts.', 'check-updates', '<input id="check-updates" data-preference="checkUpdates" type="checkbox">')}
       <div class="setting-buttons"><button class="button" id="check-launcher-update">Check now</button></div></section>`
-        : `
+        : tab === 'experimental'
+          ? `
+      <section class="setting-group"><h2>Experimental features</h2>
+      <p class="settings-path">Unfinished features for testers. They may change or break, and can change your game and server files.</p>
+      ${row('Mods and server hosting', 'Show the Mods page (switch a profile’s or server’s patches) and the Servers page (install the server patcher, start and stop servers, read their logs).', 'experimental', '<input id="experimental" data-preference="experimental" type="checkbox">')}</section>`
+          : `
       <section class="setting-group"><h2>Installation</h2>
       ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', '<input id="game-directory" data-preference="gameDirectory" type="text" spellcheck="false" placeholder="Found through Steam">')}
       <p class="settings-path" id="detected-game"></p></section>
@@ -159,7 +164,7 @@ export async function bindSettings(preferences, store) {
       run(() => preferences.update(key, choice(input.value, ['tray', 'keepOpen', 'exit'])));
     else if (key === 'closeBehavior')
       run(() => preferences.update(key, choice(input.value, ['tray', 'exit'])));
-    else if ((key === 'packBranding' || key === 'checkUpdates') && input instanceof HTMLInputElement)
+    else if ((key === 'packBranding' || key === 'checkUpdates' || key === 'experimental') && input instanceof HTMLInputElement)
       run(() => preferences.update(key, input.checked));
     else if (key === 'gameDirectory' || key === 'protonPath' || key === 'backgroundFolder')
       run(() => preferences.update(key, input.value.trim()));

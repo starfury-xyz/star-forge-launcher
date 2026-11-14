@@ -76,6 +76,7 @@ struct Preferences {
     std::string game_directory;     // empty = find through Steam
     std::string proton_path;        // Proton build folder (Linux); empty = the one that last ran the game
     bool check_updates = true;      // look for a new launcher version at startup
+    bool experimental = false;      // show unfinished features (the Mods and Servers pages)
     bool setup_done = false;        // the first-run setup was finished
 
     // As serde writes and reads it (camelCase, every field optional, unknown fields ignored).
@@ -147,7 +148,7 @@ private:
     void catch_up_settings(const launch::Setup& setup);
     void announce_update(const std::string& id, const launch::packs::Available& found);
 
-    // The commands, by module (prefs.cpp, game.cpp, profiles.cpp, setup.cpp).
+    // The commands, by module (prefs.cpp, game.cpp, profiles.cpp, setup.cpp, mods.cpp, servers.cpp).
     json update_preferences(const json& args);
     json perform_action(const std::string& action);
     json detect_compat_tools();
@@ -172,6 +173,22 @@ private:
     json get_setup_info();
     void finish_setup(const std::string& game_dir, const std::string& profiles_dir, bool move_profiles);
     void install_appimage(const std::string& dir);
+    json list_mods(const std::string& kind, const std::string& id);  // mods.cpp
+    json set_mod(const std::string& kind, const std::string& id, const std::string& module, const std::string& patch,
+                 std::optional<bool> on);
+    json list_servers();  // servers.cpp
+    json add_server(const std::string& name, const std::string& cloud);
+    void remove_server(const std::string& id);
+    json server_status(const std::string& id);
+    json install_server_proxy(const std::string& id);  // returns server_status
+    json uninstall_server_proxy(const std::string& id);
+    void start_server(const std::string& id);  // in the background; server_status shows the result
+    void stop_server(const std::string& id);
+    json server_logs(const std::string& id);
+    json server_log(const std::string& id, const std::string& group, const std::string& name);  // its tail
+    fs::path server_local_appdata() const;
+    void open_server_folder(const std::string& id, const std::string& which);
+    json suggest_server_cloud();
     json check_launcher_update();
     void install_launcher_update();
     void open_launcher_release();

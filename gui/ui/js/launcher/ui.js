@@ -33,6 +33,10 @@ const paths = {
   folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
   download: '<path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  // Placeholders until the real icons are drawn: a server rack and a puzzle piece.
+  server:
+    '<rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><path d="M8 7h.01M8 17h.01"/>',
+  mods: '<path d="M9 4h4v2a2 2 0 0 0 4 0V4h3v6h-2a2 2 0 0 0 0 4h2v6h-6v-2a2 2 0 0 0-4 0v2H4v-6h2a2 2 0 0 0 0-4H4V4Z"/>',
 };
 /** @param {string} name */
 export function icon(name) {

@@ -23,7 +23,7 @@ done
 cmake --build --preset linux --target star_forge
 win_tools="${WIN_TOOLS:-}"
 if [ -z "$win_tools" ]; then
-    cmake --build --preset win64 --target sc_inject sc_agent
+    cmake --build --preset win64 --target sc_inject sc_agent sc_server
     win_tools="$root/build/win64"
 fi
 
@@ -33,7 +33,7 @@ rm -rf "$out"
 mkdir -p "$files/usr/bin" "$files/usr/lib/STAR FORGE Launcher/tools" "$files/usr/share/applications"
 install -m755 "$root/build/linux/star-forge" "$files/usr/bin/star-forge"
 strip "$files/usr/bin/star-forge"
-install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$files/usr/lib/STAR FORGE Launcher/tools/"
+install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$files/usr/lib/STAR FORGE Launcher/tools/"
 for size in 32x32 128x128; do
     install -Dm644 "$root/gui/icons/$size.png" "$files/usr/share/icons/hicolor/$size/apps/star-forge.png"
 done

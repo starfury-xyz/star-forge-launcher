@@ -21,6 +21,32 @@ function parseProfile(item) {
       const item = object(link);
       return { key: string(item.key), label: string(item.label) };
     }),
+    /** A community server listed before it is installed: its sample key. @type {string | null} */
+    sample: null,
+  };
+}
+
+/**
+ * A community server that ships with the launcher, listed until a profile has its pack.
+ * @param {unknown} item
+ */
+function parseSample(item) {
+  const value = object(item);
+  const key = string(value.key);
+  return {
+    id: `sample:${key}`,
+    name: string(value.name),
+    server: value.server === null ? null : string(value.server),
+    localServer: false,
+    ownGameData: true,
+    patches: 0,
+    error: null,
+    packId: string(value.packId),
+    version: null,
+    description: string(value.description),
+    managed: true,
+    links: [],
+    sample: /** @type {string | null} */ (key),
   };
 }
 /** @typedef {ReturnType<typeof parseProfile>} ProfileInfo */
@@ -44,6 +70,8 @@ export function bindProfiles(preferences, onChange) {
   const confirm = control('confirm-dialog', HTMLDialogElement);
   /** @type {ProfileInfo[]} */
   let profiles = [];
+  /** Community servers not installed yet, after the profiles in the list. @type {ProfileInfo[]} */
+  let samples = [];
   let loaded = false;
   /** Profile being edited; null while adding. @type {ProfileInfo | null} */
   let editing = null;
@@ -54,12 +82,14 @@ export function bindProfiles(preferences, onChange) {
   /** @type {(url: string) => void} */
   let onReviewUpdate = () => {};
 
-  const current = () => profiles.find((p) => p.id === select.value) || null;
+  const current = () => [...profiles, ...samples].find((p) => p.id === select.value) || null;
 
   /** @param {ProfileInfo} profile */
   const optionLabel = (profile) =>
     brand(
-      profile.error
+      profile.sample
+        ? `${profile.name} (installs on Play)`
+        : profile.error
         ? `${profile.name} (invalid)`
         : updates.has(profile.id)
           ? `${profile.name} (update available)`
@@ -86,9 +116,11 @@ export function bindProfiles(preferences, onChange) {
         : 'Game only'
       : '–';
     required('summary-patches').textContent = profile ? String(profile.patches) : '–';
-    required('summary-version').textContent = profile?.version
-      ? `${profile.version}${profile.managed ? '' : ' (your own)'}`
-      : '–';
+    required('summary-version').textContent = profile?.sample
+      ? 'Not installed yet: Play installs it first'
+      : profile?.version
+        ? `${profile.version}${profile.managed ? '' : ' (your own)'}`
+        : '–';
     const description = required('summary-description');
     description.textContent = brand(profile?.description || '');
     description.hidden = !profile?.description;
@@ -110,9 +142,9 @@ export function bindProfiles(preferences, onChange) {
     required('summary-update-text').textContent = update
       ? `Version ${update.version} of this pack is available.`
       : '';
-    control('summary-folder', HTMLButtonElement).disabled = !profile;
-    edit.disabled = !profile;
-    checkUpdate.hidden = !profile?.managed;
+    control('summary-folder', HTMLButtonElement).disabled = !profile || Boolean(profile.sample);
+    edit.disabled = !profile || Boolean(profile.sample);
+    checkUpdate.hidden = !profile?.managed || Boolean(profile.sample);
     checkUpdate.disabled = checking || Boolean(profile?.error);
     checkUpdate.textContent = checking ? 'Checking…' : 'Check for updates';
   };
@@ -124,18 +156,20 @@ export function bindProfiles(preferences, onChange) {
     onChange();
     try {
       profiles = array(await invoke('list_profiles'), parseProfile);
+      const installed = new Set(profiles.map((p) => p.packId));
+      samples = array(await invoke('list_sample_packs'), parseSample).filter((s) => !installed.has(s.packId));
       select.replaceChildren();
-      if (!profiles.length) select.add(new Option('No profiles yet – add one', ''));
-      for (const profile of profiles) select.add(new Option(optionLabel(profile), profile.id));
+      if (!profiles.length && !samples.length) select.add(new Option('No profiles yet – add one', ''));
+      for (const profile of [...profiles, ...samples]) select.add(new Option(optionLabel(profile), profile.id));
       const saved = prefer ?? preferences.get().selectedProfile;
-      const usable = profiles.filter((p) => !p.error);
+      const usable = [...profiles, ...samples].filter((p) => !p.error);
       // Invalid profiles stay selectable so they can be edited or deleted; Play stays off.
-      const choice = profiles.find((p) => p.id === saved) || usable[0];
+      const choice = [...profiles, ...samples].find((p) => p.id === saved) || usable[0];
       select.value = choice ? choice.id : '';
       if ((choice?.id || '') !== preferences.get().selectedProfile)
         await preferences.update('selectedProfile', choice?.id || '');
       loaded = true;
-      select.disabled = !profiles.length;
+      select.disabled = !profiles.length && !samples.length;
       required('home-add-server').classList.toggle('primary', !profiles.length);
     } catch (error) {
       notice(`Could not load server profiles: ${errorMessage(error)}`, 'error');
@@ -158,10 +192,15 @@ export function bindProfiles(preferences, onChange) {
     required('pack-import').hidden = Boolean(profile);
     required('profile-managed-note').hidden = !profile?.managed;
     control('pack-link', HTMLInputElement).value = '';
+    // Adding: the manual form waits behind "Set up a server yourself", so a server's name typed
+    // there doesn't become an empty profile instead of its pack.
+    const manual = control('profile-manual', HTMLDetailsElement);
+    manual.open = Boolean(profile);
+    required('profile-manual-summary').hidden = Boolean(profile);
     required('delete-profile').hidden = !profile;
     required('profile-folder').hidden = !profile;
     openPanel(dialog);
-    nameInput.focus();
+    if (profile) nameInput.focus();
   };
 
   select.addEventListener('change', () => {
@@ -276,7 +315,10 @@ export function bindProfiles(preferences, onChange) {
 
   return {
     refresh,
+    list: () => profiles,
     ready: () => loaded && Boolean(current()) && !current()?.error,
+    /** The selected community server's sample key, when it isn't installed yet. */
+    pendingSample: () => current()?.sample ?? null,
     current,
     /** @param {Map<string, { version: string, url: string }>} found */
     setUpdates: (found) => {

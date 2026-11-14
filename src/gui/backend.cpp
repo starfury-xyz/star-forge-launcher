@@ -256,6 +256,26 @@ json Backend::invoke(const std::string& command, const json& args) {
         return finish_setup(arg_str(c, args, "gameDir"), arg_str(c, args, "profilesDir"), arg_bool(c, args, "moveProfiles")),
                nullptr;
     if (command == "install_appimage") return install_appimage(arg_str(c, args, "dir")), nullptr;
+    // mods.cpp (no Rust counterpart). `on` is true, false, or null for the patch's default.
+    if (command == "list_mods") return list_mods(arg_str(c, args, "kind"), arg_str(c, args, "id"));
+    if (command == "set_mod") {
+        const json& on = arg(c, args, "on");
+        return set_mod(arg_str(c, args, "kind"), arg_str(c, args, "id"), arg_str(c, args, "module"),
+                       arg_str(c, args, "patch"), on.is_null() ? std::nullopt : std::optional<bool>(arg_bool(c, args, "on")));
+    }
+    // servers.cpp (no Rust counterpart)
+    if (command == "list_servers") return list_servers();
+    if (command == "add_server") return add_server(arg_str(c, args, "name"), arg_str(c, args, "cloud"));
+    if (command == "remove_server") return remove_server(arg_str(c, args, "id")), nullptr;
+    if (command == "server_status") return server_status(arg_str(c, args, "id"));
+    if (command == "install_server_proxy") return install_server_proxy(arg_str(c, args, "id"));
+    if (command == "uninstall_server_proxy") return uninstall_server_proxy(arg_str(c, args, "id"));
+    if (command == "start_server") return start_server(arg_str(c, args, "id")), nullptr;
+    if (command == "stop_server") return stop_server(arg_str(c, args, "id")), nullptr;
+    if (command == "server_logs") return server_logs(arg_str(c, args, "id"));
+    if (command == "server_log") return server_log(arg_str(c, args, "id"), arg_str(c, args, "group"), arg_str(c, args, "name"));
+    if (command == "open_server_folder") return open_server_folder(arg_str(c, args, "id"), arg_str(c, args, "which")), nullptr;
+    if (command == "suggest_server_cloud") return suggest_server_cloud();
     if (command == "check_launcher_update") return check_launcher_update();
     if (command == "install_launcher_update") return install_launcher_update(), nullptr;
     if (command == "open_launcher_release") return open_launcher_release(), nullptr;

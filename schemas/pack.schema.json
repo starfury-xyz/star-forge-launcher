@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json",
+  "title": "STAR FORGE server pack",
+  "description": "pack.json at the root of a STAR FORGE server pack. Paths are relative to the pack folder and use forward slashes.",
+  "type": "object",
+  "required": [
+    "format",
+    "id",
+    "name",
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "format": {
+      "description": "Pack format version. The launcher refuses formats newer than it understands.",
+      "const": 1
+    },
+    "id": {
+      "description": "Unique, stable identifier, ideally a reversed domain you control. Used to recognise the pack when it is updated; never change it after release.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$",
+      "examples": [
+        "xyz.starfury.main"
+      ]
+    },
+    "name": {
+      "description": "Display name.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48
+    },
+    "version": {
+      "description": "Pack version (semver). Bump it on every release so players see an update.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.-]+)?$"
+    },
+    "description": {
+      "description": "One or two sentences shown on the pack card.",
+      "type": "string",
+      "maxLength": 300
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "links": {
+      "description": "Buttons shown on the play screen.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "website": {
+          "type": "string",
+          "format": "uri"
+        },
+        "discord": {
+          "type": "string",
+          "format": "uri"
+        },
+        "news": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "launcher": {
+          "description": "Minimum STAR FORGE Launcher version, e.g. \"0.2.0\".",
+          "type": "string"
+        },
+        "game": {
+          "description": "SHA-256 (hex) of the win64/game.exe builds this pack was made for. The launcher warns players whose game.exe matches none of them.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          }
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "description": "Master server host:port written to data/address.cfg. Omit to leave the game's own setting alone.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "local": {
+          "description": "Also start the game's bundled local server (MongoDB + Hub). Leave false for remote servers.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "description": "Extra game.exe arguments.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "branding": {
+      "description": "Look of the launcher while this pack is selected. Every entry is optional; missing ones fall back to STAR FORGE defaults.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "description": "Wordmark on the play screen. Transparent PNG, about 690x246.",
+          "$ref": "#/$defs/resource"
+        },
+        "icon": {
+          "description": "Square emblem for the pack list and rail. Transparent PNG, 256x256.",
+          "$ref": "#/$defs/resource"
+        },
+        "background": {
+          "description": "Play screen art: one image, or a list the launcher picks from at random each time it starts. JPG/PNG/WebP, at least 1920x1080, up to 8 MB each; the right side stays visible.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/resource"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/resource"
+              }
+            }
+          ]
+        },
+        "accent": {
+          "description": "Accent colour for buttons and highlights.",
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    },
+    "files_from": {
+      "description": "Download the pack's game files from a published file list instead of shipping them in files/ (which the pack must then not have). Only new or changed files are fetched. Set exactly one. A signed pack's list must be signed with the same key (<list URL>.sig).",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "manifest": {
+          "description": "A STAR FORGE file list (JSON): {\"files\": {\"data/x.lua\": {\"sha256\": \"…\", \"size\": 123}}}, optionally with base_url; make one with sc-launch pack files.",
+          "type": "string",
+          "format": "uri"
+        },
+        "scmod1": {
+          "description": "An SCMOD1 list: first line SCMOD1, then path<TAB>SHA-256<TAB>https URL per file.",
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "patches": {
+      "description": "Experimental. How the patchsets in the pack's patches/ folder (every patches/<module>.patchset.toml, same format the STAR FORGE Patcher builds for servers) and native plugins are applied.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "description": "How patches are applied. \"inject\": the agent DLL patches the game in memory before it runs (the only method so far).",
+          "enum": [
+            "inject"
+          ],
+          "default": "inject"
+        },
+        "on_error": {
+          "description": "When a required patch doesn't match the installed game: \"exit\" refuses to start the game, \"continue\" starts it with whatever applied.",
+          "enum": [
+            "exit",
+            "continue"
+          ],
+          "default": "exit"
+        },
+        "plugins": {
+          "description": "Native DLLs in patches/ loaded into the game after patching, for hooks byte patches can't express. They may export int starforge_plugin_init(const PluginApi*). Players are warned that these run native code.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^patches/[^\\\\]+\\.[dD][lL][lL]$"
+          }
+        },
+        "core": {
+          "description": "Core patches that ship with the launcher, turned on by id (see core-patches/ in the STAR FORGE repository). Applied before the pack's own patchsets.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["loose-before-packed"]
+          }
+        }
+      }
+    },
+    "update": {
+      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Unsigned packs installed from a published pack.json get this set automatically; signed packs must set it themselves.",
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "min_version": {
+          "description": "In the published pack.json: the oldest pack version your server still accepts. The launcher won't start the game with anything older until the player updates.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+].*)?$"
+        }
+      }
+    },
+    "download": {
+      "description": "Only in the published pack.json: where the pack's zip is and its SHA-256. The launcher refuses a download that doesn't match.",
+      "type": "object",
+      "required": [
+        "url",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "resource": {
+      "type": "string",
+      "pattern": "^resources/[^\\\\]+$"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 #pragma once
 
-// Thin wrapper over MinHook: redirect a function in another DLL to ours.
+// Thin wrapper over MinHook: redirect a function in another DLL to ours. Used by the agent
+// (game.exe, x64) and the server proxy (x86).
 //
 // After install(target, detour, &original), every call to `target` runs `detour` instead, and
 // `original` points at a trampoline that runs the real function. MinHook writes `original`
@@ -10,7 +11,7 @@
 
 #include <string>
 
-namespace sf::agent::hook {
+namespace sf::hook {
 
 // Each returns "" on success, else what went wrong (for the log).
 std::string create(void* target, void* detour, void** original);  // prepared, not live yet
@@ -28,4 +29,4 @@ std::string install(Fn target, Fn detour, Fn* original) {
                    reinterpret_cast<void**>(original));
 }
 
-}  // namespace sf::agent::hook
+}  // namespace sf::hook

@@ -134,6 +134,8 @@ export async function bindPacks(profiles, locked) {
   let busy = false;
   /** Where the open review came from, so a failed install can start over. */
   let source = '';
+  /** What to do with the profile once the open review is installed. @type {((id: string) => void) | null} */
+  let then = null;
 
   const checkUpdates = async () => {
     const found = array(await invoke('check_pack_updates'), (item) => {
@@ -143,8 +145,11 @@ export async function bindPacks(profiles, locked) {
     profiles.setUpdates(new Map(found.map((u) => [u.id, { version: u.version, url: u.url }])));
   };
 
-  /** @param {string} source a path, https link or starforge:// link */
-  const open = async (next) => {
+  /**
+   * @param {string} next a path, https link or starforge:// link
+   * @param {(id: string) => void} [after] run with the new profile once installed
+   */
+  const open = async (next, after) => {
     if (busy || !next.trim()) return;
     busy = true;
     importButtons.forEach((b) => (b.disabled = true));
@@ -155,6 +160,7 @@ export async function bindPacks(profiles, locked) {
       if (review) await invoke('discard_pack', { token: review.token });
       review = opened;
       source = next;
+      then = after ?? null;
       profiles.closeDialog();
       renderReview(review);
       install.disabled = false;
@@ -181,6 +187,7 @@ export async function bindPacks(profiles, locked) {
     }
     install.disabled = true;
     const from = source;
+    const after = then;
     // Installing uses the review up; the download window takes over when the
     // pack has game files to fetch.
     const installing = invoke('install_pack', { token: target.token });
@@ -192,13 +199,14 @@ export async function bindPacks(profiles, locked) {
         await profiles.refresh(id);
         notice(target.update ? `Updated ${target.name} to ${target.version}.` : `Installed ${target.name}.`, 'success');
         run(checkUpdates);
+        after?.(id);
       } catch (error) {
         // A refused install (say, the game is running) leaves the review staged; drop it.
         // Reopening the pack starts a fresh one.
         run(() => invoke('discard_pack', { token: target.token }));
         notice(`Could not install ${target.name}: ${errorMessage(error)}`, 'error', {
           label: 'Try again',
-          action: () => run(() => open(from)),
+          action: () => run(() => open(from, after ?? undefined)),
         });
       } finally {
         install.disabled = false;
@@ -219,17 +227,6 @@ export async function bindPacks(profiles, locked) {
     }),
   );
   profiles.onReviewUpdate((url) => run(() => open(url)));
-
-  // One-click starts for the community servers that ship with the launcher.
-  const samples = required('sample-packs');
-  for (const item of array(await invoke('list_sample_packs'), object)) {
-    const button = el('button', 'button', brand(string(item.name)));
-    button.type = 'button';
-    const key = string(item.key);
-    button.addEventListener('click', () => run(async () => open(string(await invoke('sample_pack_source', { key })))));
-    samples.append(button);
-  }
-  samples.hidden = samples.children.length < 2;
 
   // starforge:// links: listen first, then collect one that arrived earlier.
   await listen('pack-link', (url) => {
@@ -255,4 +252,12 @@ export async function bindPacks(profiles, locked) {
     const value = object(input);
     profiles.setUpdate(string(value.id), { version: string(value.version), url: string(value.url) });
   });
+
+  return {
+    /**
+     * Reviews and installs a community server that ships with the launcher.
+     * @param {string} key @param {(id: string) => void} after run with the new profile
+     */
+    installSample: (key, after) => run(async () => open(string(await invoke('sample_pack_source', { key })), after)),
+  };
 }

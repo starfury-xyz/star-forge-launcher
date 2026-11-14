@@ -45,7 +45,7 @@ export function bindBranding(profiles, preferences) {
 
   const update = () => {
     const profile = profiles.current();
-    const key = profile && !profile.error && preferences.get().packBranding ? `${profile.id}@${profile.version}` : '';
+    const key = profile && !profile.error && !profile.sample && preferences.get().packBranding ? `${profile.id}@${profile.version}` : '';
     if (key === shown) return;
     shown = key;
     if (!key || !profile) return paint(null);
