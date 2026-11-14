@@ -77,6 +77,12 @@ struct Com {
 
 int scale(HWND hwnd, int logical) { return MulDiv(logical, static_cast<int>(GetDpiForWindow(hwnd)), 96); }
 
+// The interface's background (launcher.css), for the parts of a window the webview doesn't cover.
+HBRUSH background() {
+    static const HBRUSH brush = CreateSolidBrush(RGB(0x0d, 0x0c, 0x0b));
+    return brush;
+}
+
 }  // namespace
 
 struct NativeWindow::Impl {
@@ -100,6 +106,9 @@ struct NativeWindow::Impl {
         const int inset = frameless && resizable && !IsZoomed(hwnd) ? scale(hwnd, kEdge) : 0;
         MoveWindow(static_cast<HWND>(widget.value()), inset, inset, std::max(0L, r.right - 2 * inset),
                    std::max(0L, r.bottom - 2 * inset), TRUE);
+        // The resize border's width changes with maximizing, and what it uncovers was never
+        // painted (white), so paint it again.
+        InvalidateRect(hwnd, nullptr, TRUE);
     }
 };
 
@@ -125,6 +134,10 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        break;
+    case WM_NCACTIVATE:
+        // -1: change the active state without painting a frame, which a frameless window doesn't have.
+        if (w->frameless) return DefWindowProcW(hwnd, msg, wp, -1);
         break;
     case WM_NCHITTEST:
         if (w->frameless) {
@@ -160,8 +173,15 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND: {
         RECT r;
         GetClientRect(hwnd, &r);
-        FillRect(reinterpret_cast<HDC>(wp), &r, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        FillRect(reinterpret_cast<HDC>(wp), &r, background());
         return 1;
+    }
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(hwnd, &ps);
+        FillRect(dc, &ps.rcPaint, background());
+        EndPaint(hwnd, &ps);
+        return 0;
     }
     case WM_CLOSE:
         if (w->owner && w->owner->on_close_requested) w->owner->on_close_requested();
@@ -263,6 +283,12 @@ NativeWindow::NativeWindow(const WindowSpec& spec) : impl_(std::make_shared<Impl
                     nullptr, GetModuleHandleW(nullptr), &w);
     if (!w.hwnd) throw std::runtime_error("cannot create a window (error " + std::to_string(GetLastError()) + ")");
     if (spec.click_through) SetLayeredWindowAttributes(w.hwnd, 0, 255, LWA_ALPHA);
+    if (spec.frameless) {
+        // Windows 11 draws a thin border around a window with a resize frame, light in the light
+        // theme; a frameless window's interface draws its own edges.
+        const COLORREF none = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(w.hwnd, DWMWA_BORDER_COLOR, &none, sizeof none);
+    }
     // Logical size at the window's DPI, centred on its monitor's work area if asked.
     const int width = scale(w.hwnd, spec.width), height = scale(w.hwnd, spec.height);
     UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
@@ -279,11 +305,11 @@ NativeWindow::NativeWindow(const WindowSpec& spec) : impl_(std::make_shared<Impl
     const bool debug = launch::get_env("STAR_FORGE_DEVTOOLS").has_value();
     w.view = std::make_unique<webview::webview>(debug, w.hwnd);
     auto* controller = static_cast<ICoreWebView2Controller*>(w.view->browser_controller().value());
-    if (spec.transparent) {
-        Com<ICoreWebView2Controller2> c2;
-        if (SUCCEEDED(controller->QueryInterface(__uuidof(ICoreWebView2Controller2), reinterpret_cast<void**>(c2.put()))))
-            c2->put_DefaultBackgroundColor(COREWEBVIEW2_COLOR{0, 0, 0, 0});
-    }
+    // What WebView2 shows before the page paints and in the strip a resize uncovers: white
+    // unless set, so the interface's own background (launcher.css), or nothing.
+    Com<ICoreWebView2Controller2> c2;
+    if (SUCCEEDED(controller->QueryInterface(__uuidof(ICoreWebView2Controller2), reinterpret_cast<void**>(c2.put()))))
+        c2->put_DefaultBackgroundColor(spec.transparent ? COREWEBVIEW2_COLOR{0, 0, 0, 0} : COREWEBVIEW2_COLOR{255, 0x0d, 0x0c, 0x0b});
     serve_assets(controller, w);
     w.layout();
 }
@@ -412,6 +438,7 @@ void init() {
     wc.lpfnWndProc = window_proc;
     wc.hInstance = inst;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = background();
     wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));  // the program's icon (app.rc)
     wc.lpszClassName = kClass;
     RegisterClassExW(&wc);
