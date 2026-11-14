@@ -7,6 +7,11 @@
 ;   /R        (with /S or /P) start the launcher when done, with the arguments after /ARGS
 ;   /UPDATE   an update: don't install WebView2
 ;
+; Launchers up to 0.2.6 also came as an .msi, installed for all users in Program Files. This
+; installer can't replace that copy (it installs per user), so it finds it and offers to uninstall
+; it: a button on its own page, or a question at the end of a passive update. msiexec asks for
+; administrator rights then, after the player chose to remove it.
+;
 ; Built by packaging/nsis.sh, which defines VERSION, EXE, TOOLS, ICON, WEBVIEW2 and OUTFILE.
 
 Unicode true
@@ -16,6 +21,7 @@ ManifestDPIAware true
 !include MUI2.nsh
 !include FileFunc.nsh
 !include LogicLib.nsh
+!include nsDialogs.nsh
 
 !define PRODUCTNAME "STAR FORGE Launcher"
 !define MAINBINARY "star-forge.exe"
@@ -38,11 +44,15 @@ VIAddVersionKey "LegalCopyright" ""
 
 Var PassiveMode
 Var UpdateMode
+Var MsiCode     ; product code of an .msi install of the launcher, or ""
+Var MsiButton
+Var MsiStatus
 
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
 !define MUI_ABORTWARNING
 
+Page custom MsiPage
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -68,6 +78,91 @@ Function .onInit
   ${IfNot} ${Errors}
     StrCpy $UpdateMode 1
   ${EndIf}
+  Call FindMsiCopy
+FunctionEnd
+
+; --- an .msi install from 0.2 -------------------------------------------------------------------
+
+!macro FindMsiIn ROOT
+  ${If} $MsiCode == ""
+    StrCpy $R0 0
+    ${Do}
+      EnumRegKey $R1 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall" $R0
+      ${If} $R1 == ""
+        ${ExitDo}
+      ${EndIf}
+      ReadRegStr $R2 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "DisplayName"
+      ReadRegDWORD $R3 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "WindowsInstaller"
+      ${If} $R2 == "${PRODUCTNAME}"
+      ${AndIf} $R3 = 1
+        StrCpy $MsiCode $R1
+        ${ExitDo}
+      ${EndIf}
+      IntOp $R0 $R0 + 1
+    ${Loop}
+  ${EndIf}
+!macroend
+
+; Sets $MsiCode to the .msi install's product code ({GUID}), if there is one.
+Function FindMsiCopy
+  StrCpy $MsiCode ""
+  SetRegView 64
+  !insertmacro FindMsiIn HKLM
+  SetRegView 32
+  !insertmacro FindMsiIn HKLM
+  SetRegView default
+  !insertmacro FindMsiIn HKCU
+FunctionEnd
+
+; Uninstalls it (msiexec asks for administrator rights). $R9 = msiexec's exit code.
+Function UninstallMsiCopy
+  ExecWait '"$SYSDIR\msiexec.exe" /x $MsiCode /passive /norestart' $R9
+  Call FindMsiCopy
+FunctionEnd
+
+Function MsiPage
+  ${If} $PassiveMode = 1
+  ${OrIf} $MsiCode == ""
+    Abort
+  ${EndIf}
+  !insertmacro MUI_HEADER_TEXT "Older version found" "An older ${PRODUCTNAME} is installed for all users."
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateLabel} 0 0 100% 64u "${PRODUCTNAME} 0.2, installed for all users from its .msi, is still on this computer. This version installs for your user only, so the old copy would stay in Program Files with its own Start menu entry.$\r$\n$\r$\nYou can remove it now, or later under Settings > Apps. Your profiles and settings are kept either way. Removing it needs administrator rights: Windows will ask."
+  Pop $0
+  ${NSD_CreateButton} 0 72u 60% 16u "Uninstall the old version"
+  Pop $MsiButton
+  ${NSD_OnClick} $MsiButton OnUninstallMsi
+  ${NSD_CreateLabel} 0 96u 100% 32u ""
+  Pop $MsiStatus
+  nsDialogs::Show
+FunctionEnd
+
+Function OnUninstallMsi
+  Pop $0
+  EnableWindow $MsiButton 0
+  ${NSD_SetText} $MsiStatus "Uninstalling the old version..."
+  Call UninstallMsiCopy
+  ${If} $MsiCode == ""
+    ${NSD_SetText} $MsiStatus "The old version is uninstalled. Press Next to continue."
+  ${Else}
+    ${NSD_SetText} $MsiStatus "The old version is still installed (msiexec exit code $R9). Try again, or remove it later under Settings > Apps."
+    EnableWindow $MsiButton 1
+  ${EndIf}
+FunctionEnd
+
+; A passive update from an .msi install has no pages: ask once it's done.
+Function AskAboutMsiCopy
+  ${If} $MsiCode == ""
+  ${OrIf} ${Silent}
+    Return
+  ${EndIf}
+  MessageBox MB_YESNO|MB_ICONQUESTION "${PRODUCTNAME} ${VERSION} is installed for your user. The older version, installed for all users from its .msi, is still in Program Files.$\r$\n$\r$\nUninstall the old version now? Windows will ask for administrator rights. Your profiles and settings are kept." /SD IDNO IDNO done
+  Call UninstallMsiCopy
+  ${If} $MsiCode != ""
+    MessageBox MB_OK|MB_ICONEXCLAMATION "The old version is still installed (msiexec exit code $R9). You can remove it under Settings > Apps." /SD IDOK
+  ${EndIf}
+  done:
 FunctionEnd
 
 Function SkipIfPassive
@@ -204,6 +299,9 @@ Function ArgsAfterArgs
 FunctionEnd
 
 Function .onInstSuccess
+  ${If} $PassiveMode = 1
+    Call AskAboutMsiCopy
+  ${EndIf}
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
     ${GetOptions} $CMDLINE "/R" $0

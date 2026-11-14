@@ -1,116 +1,131 @@
-# starforge-cpp
+# STAR FORGE Launcher
 
-C++ port of the [STAR FORGE](../star-forge) launcher, done one component at a time. The Rust
-crates in `star-forge` stay the reference until each part here is a drop-in replacement.
+A launcher for **Star Conflict** that lets you keep several server setups side by
+side and switch between them with one click. Each *server profile* carries its
+own server address, replacement game files and code patches. Nothing in your
+Steam install is modified; the changes exist only while the game runs with that
+profile.
 
-| Component | Rust source | Status |
-|---|---|---|
-| `sc_agent.dll` (injected into game.exe) | `crates/sc-agent` | bootstrap, profile loading, game data folders, file redirects + folder listings, patches + plugins: done |
-| `sf_core` (Windows lib: profile files as the agent reads them, Win32 helpers) | `crates/sc-profile` | what the agent and injector need (no full pack validation yet) |
-| `sf_patch` (portable lib: patchset format, check/apply, core patches) | `crates/sc-patch` | done |
-| `sf_launch` (portable lib: the launcher) | `crates/sc-launch` | done: env overrides, Steam/game/Proton detection, sc-inject command, process spawning, pack model (`src/pack`), profiles + settings sync, downloads (libcurl / WinHTTP), pack signatures (ed25519 via vendored Monocypher; verifies Rust-signed packs), trust pins, pack install/update (zip via vendored miniz), remote file lists + sync, launch prep, patch switches for profiles and server installs (`src/launch/mods`; `sc-launch patches`, `sc-launch server`) |
-| `sc-launch` (CLI) | `crates/sc-launch/src/main.rs` | done; same output as the Rust tool, `pack sign`/`pack files` byte-identical. Ran the real game end to end with C++ sc-launch + sc-inject + agent |
-| `sf_gui` (portable lib: the launcher window's backend) | `gui/src-tauri/src` | done: every command the interface invokes (prefs, play button, downloads, profiles, packs, setup), headless-tested |
-| `star-forge` (the launcher window) | `gui/src-tauri/src/main.rs`, `lifecycle.rs` | the unchanged HTML/JS interface (`gui/ui`) on webview/webview: WebKitGTK on Linux (runs; verified), WebView2 on Windows (builds; not yet run on real Windows). Tray (StatusNotifierItem over D-Bus on Linux, no AppIndicator library needed; notification icon on Windows), one launcher per data folder (later ones hand their `starforge://` links over), link registration (desktop entry / HKCU; `STAR_FORGE_NO_REGISTER=1` skips it), window size/position/maximized kept in `<data>/window-state.json`. Self-update as tauri-plugin-updater does it (signed `latest.json`, minisign signatures checked with Monocypher; verified against a real v0.2.6 release): off unless built with `-DSF_UPDATE_ENDPOINT=<latest.json URL>`. AppImage: `packaging/appimage.sh` (linuxdeploy + gtk plugin, as Tauri bundles it; runs on this glibc or newer) |
-| `sc-inject.exe` (starts game.exe with the agent) | `crates/sc-inject` | done (also double-checks a 0 LoadLibraryW result, which the Rust trusts) |
+STAR FORGE is built by the [STARFURY](https://starfury.xyz) community (an
+unofficial Star Conflict server), but it is meant for anyone running or playing
+on a Star Conflict server project.
 
-Everything builds as **Windows x64**: game.exe is 64-bit. You can build on Linux (cross-compile)
-or on Windows (MSVC), and both use the same CMake project and the same `build/win64/` folder.
+> **Status:** early development (0.3). It works for day-to-day play on Linux
+> (Proton) and Windows, but expect rough edges.
 
-The launcher also runs **natively on Linux** (it starts the game through Proton), so its
-portable code (`sf_patch`, `sf_launch`) has a third preset, `linux`, built with the system
-compiler into `build/linux/`:
+## Features
 
-```sh
-cmake --preset linux && cmake --build --preset linux && ctest --preset linux
-```
+- **Server packs**: a server hands out one link (or zip) with its address,
+  game files and look. The launcher shows what a pack changes before
+  installing it, and keeps it updated. Community servers are in the server
+  list from the start.
+- **Nothing touches your install**: a profile's files are redirected in while
+  the game runs, so servers that change the same files never clash, and each
+  profile keeps its own game data (store cache, notes, local server database).
+- **Signed packs**: server teams sign their packs; the launcher remembers each
+  pack's key and refuses updates from anyone else.
+- **File lists**: servers can host their game files as a list (STAR FORGE or
+  the SCMOD1 format other launchers use) and players download only what
+  changed.
+- **Client patches** (experimental): byte patches applied to the game's memory
+  before it runs, checked against your `game.exe`, plus native plugins. Core
+  patches ship with the launcher, such as letting packs replace single files
+  inside `.pak` archives.
+- **Linux and Windows**: on Linux the game runs through the Proton build and
+  prefix Steam uses, with the Steam overlay. The launcher updates itself.
+- **Command line**: `sc-launch` for scripts and for server teams' tooling.
+- **Server hosting** (experimental, off by default): run the game's own
+  server stack from the launcher, patch the server programs in memory and
+  read their logs; see [Server hosting](docs/server-hosting.md).
 
-Portable code keeps text as UTF-8 `std::string` and converts paths only with
-`sf::launch::upath()` / `ustr()` (see `src/launch/paths.hpp` for why).
+## Get started
 
-## Developer setup: Linux
+Download the launcher from the
+[Releases page](https://github.com/starfury-xyz/star-forge-launcher/releases)
+(Windows `-setup.exe`; Linux `.AppImage`, `.deb` or `.rpm`), start it, pick
+a server and press **Play**. Star Conflict must be installed through Steam.
 
-Same toolchain as `star-forge/patcher`: `clang-cl` + `lld-link` cross-compiling against
-Microsoft's CRT + Windows SDK, which [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
-downloads. Tests run under wine.
+## Documentation
 
-1. Tools:
-   ```sh
-   sudo pacman -S clang lld cmake ninja wine curl webkit2gtk-4.1          # Arch / CachyOS
-   sudo apt install clang lld cmake ninja-build wine libcurl4-openssl-dev libwebkit2gtk-4.1-dev  # Debian / Ubuntu
-   ```
-   `clang-cl`, `lld-link` and `llvm-rc` must be on `PATH` under those names (some distros
-   only install versioned names like `clang-cl-18`; symlink them if so). libcurl (with headers) is
-   only for the native `linux` preset's downloads; the Windows build uses WinHTTP, built into Windows.
-   WebKitGTK 4.1 (with GTK 3) is only for the native launcher window; without it the `linux` preset
-   skips `star-forge`. On Windows the window uses the WebView2 runtime that ships with Windows 10/11.
-2. Microsoft CRT + SDK (one-time). If you've built the Rust launcher you already have them in
-   `~/.cache/cargo-xwin/xwin`. Otherwise:
-   ```sh
-   cargo install cargo-xwin
-   cargo xwin env --target x86_64-pc-windows-msvc >/dev/null
-   ```
-   This downloads Microsoft's packages and implies accepting their license. To use another
-   location, pass `-DXWIN=/path/to/xwin` or set the `XWIN` env var.
-3. Build and test (Windows build, plus the `linux` preset above for the launcher):
-   ```sh
-   cmake --preset win64
-   cmake --build --preset win64     # -> build/win64/sc_agent.dll
-   ctest --preset win64             # runs the test exes under wine
-   ```
+- [Getting started](docs/getting-started.md): installing, adding servers,
+  updates, troubleshooting.
+- [Making a server pack](docs/making-a-pack.md): for server teams; start from
+  [`templates/pack`](templates/pack) or the [`samples/`](samples/README.md).
+- [Pack format](docs/pack-format.md), [File lists](docs/file-lists.md),
+  [Signing and trust](docs/signing-and-trust.md),
+  [Client patches](docs/client-patches.md),
+  [Server hosting](docs/server-hosting.md),
+  [Command line](docs/command-line.md), [How it works](docs/how-it-works.md).
+- [Development](docs/development.md): building (C++, CMake), tests,
+  repository layout, releases.
 
-`patch_test` also checks the core patches against your installed `game.exe` (on Linux it finds the
-Steam install itself; elsewhere pass `-DSF_GAME_EXE=C:/path/to/win64/game.exe`, or it skips that part).
-`core-patches/` is a copy of star-forge's: when star-forge changes them, copy them over again.
+Everything is indexed in [docs/](docs/README.md).
 
-Plugins include `src/agent/plugin_api.h` (plain C, same layout as the Rust agent's, so a plugin
-works with either agent) and export `starforge_plugin_init`; `tests/test_plugin.cpp` is a minimal one.
+## Goals and to-do
 
-xwin has no debug CRT, so every build uses the static release CRT (`/MT`), on both platforms.
+**Profiles for everyone**
+- [x] Server packs: import from a zip, folder, link or `starforge://` link,
+      with a review of what the pack changes before it's installed
+- [x] Pack updates from the server's published `pack.json`, checksum-verified,
+      keeping the player's own changes
+- [x] Warn when a pack was made for a different game build
+- [x] Per-pack branding: the selected pack's logo, icon, background (one, or
+      a random pick from a list) and accent colour; can be turned off in Settings
+- [x] Background folder setting: a random wallpaper of your own when the pack
+      has no background
+- [x] Client patches: server-patcher patchsets applied in memory by the agent,
+      checked against `game.exe` before launch, plus native plugins
+- [ ] `sfp build` for x64 sources (today client patchsets are written resolved)
+- [ ] x64 midhooks in the agent (C++-style hooks without a plugin)
+- [x] Let `files/` override members of `.pak` archives (`loose-before-packed`
+      core patch)
+- [ ] Settle on patch methods beyond `inject` if needed
+- [x] Patch switches per profile (**Mods** page, `sc-launch patches`; experimental)
+- [ ] Export a profile as a pack zip from the launcher
+- [ ] Profile editor for patches and extra arguments in the UI
+- [x] Pack signing: ed25519-signed manifests, key pinned per pack id on first
+      install, pack code re-checked before every launch; `sc-launch pack
+      keygen|sign|check` for server teams
+- [x] Each profile keeps its own game data (store cache, notes, local server
+      database); graphics settings and key bindings stay shared
+- [x] Servers can require a minimum pack version before players launch
+- [ ] Known publishers: ship server teams' keys with the launcher
+- [x] Core patches that ship with the launcher and packs switch on by id
+- [x] Packs can take their game files from a published file list (STAR FORGE
+      JSON or SCMOD1), downloading only what changed
 
-## Developer setup: Windows
+**Launcher**
+- [x] STAR FORGE's own logo, icon and default theme (v1)
+- [ ] Server status on the play screen (online / player count)
+- [x] Launcher self-update via GitHub releases (signed; AppImage and Windows installer)
+- [ ] Self-update for the deb and rpm packages
+- [x] Theme picker with colour previews (was "Faction colour")
+- [ ] macOS support (Proton/Wine path)
 
-> The Windows preset has not been verified on a Windows machine yet. If something below
-> fails, report the exact error so we can fix the preset or these notes.
+**Server hosting** (experimental)
+- [x] Start and stop a server install's stack (MongoDB, Hub and its services),
+      on Linux in the game's Proton prefix
+- [x] Server proxy: patchsets, C++ midhooks and a file overlay for the 32-bit
+      server programs, applied in memory
+- [x] Server logs in the launcher
+- [ ] Build patchsets from patch sources (code caves, `sfp build`)
+- [ ] Ship the server proxy with the launcher's releases
 
-1. Install **Visual Studio 2022** (Community is fine) or **Build Tools for Visual Studio 2022**
-   with the **"Desktop development with C++"** workload. It includes MSVC, the Windows SDK,
-   CMake and Ninja; nothing else is needed (no wine, no xwin).
-2. Clone with Git for Windows. `.gitattributes` keeps files LF, so `core.autocrlf` doesn't
-   matter.
-3. Build and test, either way:
-   - **Command line:** open **"x64 Native Tools Command Prompt for VS 2022"** (the normal
-     prompt doesn't have `cl` on `PATH`), then:
-     ```bat
-     cmake --preset win64-msvc
-     cmake --build --preset win64-msvc
-     ctest --preset win64-msvc
-     ```
-   - **Visual Studio:** *File → Open → Folder…*, pick the repo. It reads `CMakePresets.json`;
-     choose **win64-msvc** in the toolbar, then *Build → Build All* and *Test → Run CTests*.
-   - **Cursor / VS Code:** see the next section. CMake Tools sets up the MSVC environment by
-     itself; pick the **win64-msvc** preset when it asks.
+**Project**
+- [x] Open-source release (MIT)
+- [x] CI tests on Linux and Windows; tagged releases with packaged builds
+- [x] One C++ codebase for the launcher, CLI, injector and agent (0.3)
+- [ ] A clang-format style, enforced in CI
+- [ ] Code signing for Windows builds
+- [x] Guides for players and server teams ([docs/](docs/README.md))
+- [ ] Contributor guide
 
-## Editor (all platforms)
+## Disclaimer
 
-- **Cursor / VS Code:** the repo's `.vscode/` turns on CMake presets and turns off the
-  built-in C++ IntelliSense (it doesn't understand the cross-compile and shows false
-  errors). Install the recommended **clangd** and **CMake Tools** extensions when prompted.
-- **clangd** (Cursor, VS Code, Kate, Neovim, Zed, ...): `.clangd` points it at
-  `build/win64/compile_commands.json`, which configuring creates. Files show bogus errors
-  (`windows.h` not found, ...) until you've configured once. After that, restart clangd.
-- **Visual Studio:** works from the presets as-is; ignore `.clangd` and `.vscode/`.
+STAR FORGE is an unofficial fan project. It is not affiliated with or endorsed
+by the developers or publishers of Star Conflict. Star Conflict and its assets
+belong to their respective owners; this repository contains no game files.
 
-## Tests
+## License
 
-`tests/load_test.cpp` plays game.exe: it's built into `build/win64/fakegame/win64/`, loads
-`sc_agent.dll` like sc-inject would, and checks what the agent did (its `agent.log`, and real
-file/folder API calls). It runs one scenario per process (`load_test redirect`, ...), because a
-DLL with live hooks must never be unloaded; ctest registers each as `agent_<scenario>`. Run one
-with `ctest --preset win64 -R redirect -V`.
-
-Wine is close to Windows but not identical: e.g. its `FindClose` accepts any handle, so a test
-that relies on Windows rejecting a bad one can only fail on Windows. Run the tests on both.
-
-Every ported step adds checks (or a new test) and is proven by breaking the code on purpose and
-watching the right check fail, so each one works before the next starts.
+[MIT](LICENSE)

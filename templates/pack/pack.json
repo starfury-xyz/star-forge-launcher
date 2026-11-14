@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json",
+  "format": 1,
+  "id": "org.example.myserver",
+  "name": "My Server",
+  "version": "1.0.0",
+  "description": "A short line about your server, shown on the pack card.",
+  "authors": ["Your name"],
+  "links": {
+    "website": "https://example.org",
+    "discord": "https://discord.gg/your-invite"
+  },
+  "server": {
+    "address": "play.example.org:3801",
+    "local": false
+  },
+  "game": {
+    "args": []
+  },
+  "branding": {
+    "logo": "resources/logo.png",
+    "icon": "resources/icon.png",
+    "background": "resources/background.jpg",
+    "accent": "#e39a29"
+  }
+}

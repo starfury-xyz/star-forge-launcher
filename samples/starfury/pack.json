@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json",
+  "format": 1,
+  "id": "org.starforge.samples.starfury",
+  "name": "STARFURY",
+  "version": "1.0.0",
+  "description": "STARFURY.XYZ community server. Sample profile kept with STAR FORGE; it only sets the server address for now.",
+  "server": { "address": "STARFURY.XYZ:3801", "local": false },
+  "branding": { "accent": "#f12d62" },
+  "update": { "url": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/samples/starfury/pack.json" }
+}
