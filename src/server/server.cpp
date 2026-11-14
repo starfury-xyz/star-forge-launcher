@@ -119,19 +119,25 @@ Child start(const char* name, const std::wstring& exe, const std::wstring& args,
     return Child{name, pi.hProcess, pi.dwProcessId};
 }
 
-// Ctrl+C to one process, as the client does: join its console, send, leave.
+// Ctrl+C to one process, as the client does (join its console, send), but from a helper
+// process: on Windows the event can still reach the sender after it has left the console again,
+// which ended the supervisor in the middle of a stop.
 bool ctrl_c(DWORD pid) {
-    FreeConsole();
-    if (!AttachConsole(pid)) {
-        log("could not attach to the console of process %lu (error %lu)", pid, GetLastError());
-        return false;
-    }
-    SetConsoleCtrlHandler(nullptr, TRUE);  // not us
-    const bool ok = GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0);
-    if (!ok) log("could not send Ctrl+C to process %lu (error %lu)", pid, GetLastError());
-    FreeConsole();
-    SetConsoleCtrlHandler(nullptr, FALSE);
-    return ok;
+    wchar_t self[MAX_PATH];
+    DWORD n = GetModuleFileNameW(nullptr, self, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return log("could not find sc-server.exe (error %lu)", GetLastError()), false;
+    std::wstring cmd = L"\"" + std::wstring(self) + L"\" ctrl-c " + std::to_wstring(pid);
+    STARTUPINFOW si{sizeof si};
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(self, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+        return log("could not start the Ctrl+C helper (error %lu)", GetLastError()), false;
+    CloseHandle(pi.hThread);
+    DWORD code = 1;
+    if (WaitForSingleObject(pi.hProcess, 5000) == WAIT_OBJECT_0) GetExitCodeProcess(pi.hProcess, &code);
+    else TerminateProcess(pi.hProcess, 1);
+    CloseHandle(pi.hProcess);
+    if (code != 0) log("could not send Ctrl+C to process %lu (error %lu)", pid, code);
+    return code == 0;
 }
 
 // Ctrl+C, then a wait; killed if it outlasts the wait.
@@ -230,6 +236,13 @@ Settings settings(const std::wstring& cloud_in) {
     if (n == 0 || n >= MAX_PATH) throw std::runtime_error("LOCALAPPDATA is not set");
     s.mongo_data = std::wstring(local) + L"\\Targem\\StarConflict\\cloud\\mongodb\\data";
     return s;
+}
+
+int send_ctrl_c(unsigned long pid) {
+    FreeConsole();
+    if (!AttachConsole(pid)) return int(GetLastError());
+    SetConsoleCtrlHandler(nullptr, TRUE);  // not us
+    return GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0) ? 0 : int(GetLastError());
 }
 
 int run(const Settings& s) {

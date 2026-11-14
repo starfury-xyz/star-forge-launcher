@@ -6,6 +6,7 @@
 #include <shellapi.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <string>
 
@@ -13,8 +14,9 @@
 
 int wmain(int argc, wchar_t** argv) {
     const std::wstring cmd = argc == 3 ? argv[1] : L"";
+    if (cmd == L"ctrl-c") return sf::server::send_ctrl_c(std::wcstoul(argv[2], nullptr, 10));
     if (cmd != L"run" && cmd != L"stop") {
-        std::fputs("usage: sc-server.exe run|stop <cloud dir>\n", stderr);
+        std::fputs("usage: sc-server.exe run|stop <cloud dir>\n       sc-server.exe ctrl-c <pid>\n", stderr);
         return 2;
     }
     try {

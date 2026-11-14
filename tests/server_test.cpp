@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
     DWORD code = 999;
     GetExitCodeProcess(sup, &code);
     CloseHandle(sup);
-    check(code == 0, "run: exit 0 after a stop");
+    check(code == 0, "run: exit 0 after a stop (" + std::to_string(code) + ")");
     check(contains(test::read_file(marks / "hub.txt"), "ctrl-c"), "stop: Hub got Ctrl+C");
     check(contains(test::read_file(marks / "shard.txt"), "ctrl-c"), "stop: the Shard Hub left got Ctrl+C");
     check(contains(test::read_file(marks / "mongod.txt"), "ctrl-c"), "stop: MongoDB got Ctrl+C");

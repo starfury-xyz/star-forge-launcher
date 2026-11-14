@@ -10,6 +10,7 @@
 //   sc-server.exe run <cloud dir>    the supervisor: starts the stack, stays until Hub exits, then
 //                                    stops the MongoDB it started
 //   sc-server.exe stop <cloud dir>   asks a running supervisor's Hub to stop, waits for the end
+//   sc-server.exe ctrl-c <pid>       the supervisor's helper: Ctrl+C to that process's console
 //
 // While it runs, the supervisor keeps <cloud>\starforge\server.json up to date (pids and a
 // heartbeat every few seconds) for the launcher, and logs to <cloud>\starforge\logs\sc-server.log.
@@ -35,5 +36,6 @@ std::optional<std::pair<std::string, unsigned>> mongo_host(const std::string& cl
 
 int run(const Settings& s);    // exit code: 0 after a clean stop
 int stop(const Settings& s);   // exit code: 0 when the stack is down
+int send_ctrl_c(unsigned long pid);  // exit code: 0 once sent, else the Windows error
 
 }  // namespace sf::server
