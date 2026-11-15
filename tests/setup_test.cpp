@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "launch/launch.hpp"
+#include "launch/profiles.hpp"
 
 #include "check.hpp"
 
@@ -38,11 +39,14 @@ std::string setup_error(F f, std::optional<SteamFix>* fix = nullptr) {
     return "";
 }
 
-Options opts(std::optional<fs::path> game = {}, std::optional<fs::path> tools = {}, std::optional<fs::path> proton = {}) {
+// Steam's own Proton setup unless another runner is asked for.
+Options opts(std::optional<fs::path> game = {}, std::optional<fs::path> tools = {}, std::optional<fs::path> proton = {},
+             std::optional<std::string> runner = std::string(kSteamProtonRunner)) {
     Options o;
     o.game_dir = game;
     o.tools_dir = tools;
     o.proton = proton;
+    o.runner = runner;
     return o;
 }
 
@@ -330,14 +334,15 @@ int main() {
         o.runner = "wine";
         Setup s = resolve(o);
         check(!s.proton && s.wine && s.wine->program == bin / "wine" && !s.wine->umu &&
-                  s.wine->prefix == tmp / "data/prefix" && fs::is_directory(tmp / "data/prefix"),
+                  s.wine->prefix == tmp / "data/prefixes/wine" && fs::is_directory(tmp / "data/prefixes/wine"),
               "resolve: wine, the launcher's own prefix, a game outside any Steam library");
         set_env("STAR_FORGE_RUNNER", "umu-run");
         set_env("STAR_FORGE_WINEPREFIX", ustr(tmp / "pfx"));
-        Setup u = resolve(opts(game, tools));
-        check(u.wine && u.wine->umu && u.wine->prefix == tmp / "pfx", "resolve: STAR_FORGE_RUNNER and STAR_FORGE_WINEPREFIX");
-        set_env("STAR_FORGE_RUNNER", "proton");
-        check(resolve(opts(game, tools)).proton.has_value(), "resolve: STAR_FORGE_RUNNER=proton is Steam's Proton");
+        Setup u = resolve(opts(game, tools, {}, std::nullopt));
+        check(u.wine && u.wine->umu && !u.wine->proton && u.wine->prefix == tmp / "pfx",
+              "resolve: STAR_FORGE_RUNNER and STAR_FORGE_WINEPREFIX; umu-run by name is a Wine-style command");
+        set_env("STAR_FORGE_RUNNER", "steam-proton");
+        check(resolve(opts(game, tools, {}, std::nullopt)).proton.has_value(), "resolve: STAR_FORGE_RUNNER=steam-proton");
         set_env("STAR_FORGE_RUNNER", std::nullopt);
         set_env("STAR_FORGE_WINEPREFIX", std::nullopt);
 
@@ -346,7 +351,7 @@ int main() {
         std::vector<std::string> want{ustr(tools / "sc-inject.exe"), "--game", tool_path(tmp / "loose/win64/game.exe"),
                                       "--profile", tool_path(profile), "--dll", tool_path(tools / "sc_agent.dll"), "--", "-x"};
         check(c.program == bin / "wine" && c.args == want, "command: wine sc-inject.exe <args> -- <game args>");
-        check(c.env_value("WINEPREFIX") == ustr(tmp / "data/prefix") && !c.env_value("STEAM_COMPAT_DATA_PATH") &&
+        check(c.env_value("WINEPREFIX") == ustr(tmp / "data/prefixes/wine") && !c.env_value("STEAM_COMPAT_DATA_PATH") &&
                   !c.env_value("ENABLE_VK_LAYER_VALVE_steam_overlay_1") && !c.env_value("GAMEID"),
               "command: WINEPREFIX, nothing of Steam's");
         check(command(u, profile, {}).env_value("GAMEID") == std::string("umu-212070"), "command: umu-run gets a GAMEID");
@@ -358,8 +363,62 @@ int main() {
 
         const Command sc = server_command(s, tmp / "server/cloud", "run");
         check(sc.program == bin / "wine" && sc.args.front() == ustr(tools / "sc-server.exe") &&
-                  sc.env_value("WINEPREFIX") == ustr(tmp / "data/prefix"),
+                  sc.env_value("WINEPREFIX") == ustr(tmp / "data/prefixes/wine"),
               "server_command: wine sc-server.exe in the same prefix");
+
+        // umu, the default: tools/umu-run (else PATH), Steam's last Proton as PROTONPATH, its own prefix.
+        touch(bin / "python3");
+        touch(tools / "umu-run");
+        Setup m = resolve(opts(game, tools, {}, std::nullopt));
+        check(m.wine && m.wine->umu && m.wine->program == tools / "umu-run" && m.wine->proton == proton &&
+                  m.wine->prefix == tmp / "data/prefixes/umu",
+              "resolve: umu by default, the bundled umu-run, Steam's last Proton");
+        check(steam_compat_data() == library / "steamapps/compatdata/212070" && steam_recorded_proton() == proton,
+              "steam_compat_data / steam_recorded_proton");
+        Command mc = command(m, profile, {});
+        check(mc.program == tools / "umu-run" && mc.args.front() == ustr(tools / "sc-inject.exe") &&
+                  mc.env_value("PROTONPATH") == ustr(proton) && mc.env_value("GAMEID") == std::string("umu-212070") &&
+                  mc.env_value("WINEPREFIX") == ustr(tmp / "data/prefixes/umu"),
+              "command: umu-run sc-inject.exe with PROTONPATH, GAMEID, WINEPREFIX");
+        set_env("PROTONPATH", "GE-Proton");
+        check(!command(m, profile, {}).env_value("PROTONPATH") || command(m, profile, {}).env_value("PROTONPATH") == std::string("GE-Proton"),
+              "command: the player's PROTONPATH is kept");
+        set_env("PROTONPATH", std::nullopt);
+        check(resolve(opts(game, tools, tmp / "proton-y", std::nullopt)).wine->proton == tmp / "proton-y",
+              "resolve: the chosen Proton for umu");
+        check(contains(setup_error([&] { resolve(opts(game, tools, tmp / "gone", std::nullopt)); }), "no toolmanifest.vdf"),
+              "resolve: umu refuses a Proton without a toolmanifest");
+        fs::remove(tools / "umu-run");
+        check(resolve(opts(game, tools, {}, std::string("umu"))).wine->program == bin / "umu-run", "resolve: umu-run from PATH");
+        set_env("PATH", ustr(bin));  // nothing of this machine's
+        fs::remove(bin / "umu-run");
+        check(contains(setup_error([&] { resolve(opts(game, tools, {}, std::string("umu"))); }), "umu-launcher) is missing"),
+              "resolve: no umu-run anywhere");
+        touch(bin / "umu-run");
+        fs::remove(bin / "python3");
+        check(contains(setup_error([&] { resolve(opts(game, tools, {}, std::string("umu"))); }), "needs Python 3"),
+              "resolve: umu without python3");
+        touch(bin / "python3");
+        set_env("PATH", ustr(bin) + ":/usr/bin");
+
+        // The first launch in a umu or Wine prefix brings the game's data over from Steam's.
+        const fs::path steam_data = library / "steamapps/compatdata/212070/pfx/drive_c/users/steamuser/AppData/Local/Targem/StarConflict";
+        touch(steam_data / "user_config.xml", "<steam/>");
+        touch(steam_data / "profiles/0001.prfl", "p");
+        const fs::path umu_data = tmp / "data/prefixes/umu/drive_c/users/steamuser/AppData/Local/Targem/StarConflict";
+        check(profiles::shared_local_appdata(m) == tmp / "data/prefixes/umu/drive_c/users/steamuser/AppData/Local",
+              "shared_local_appdata: steamuser under umu, before the prefix exists");
+        check(profiles::import_steam_data(m, steam_compat_data()) == steam_data &&
+                  test::read_file(umu_data / "user_config.xml") == "<steam/>" && fs::exists(umu_data / "profiles/0001.prfl"),
+              "import_steam_data: Steam's game data copied into the new prefix");
+        touch(umu_data / "user_config.xml", "<mine/>");
+        check(!profiles::import_steam_data(m, steam_compat_data()) && test::read_file(umu_data / "user_config.xml") == "<mine/>",
+              "import_steam_data: only once");
+        Setup fresh = m;
+        fresh.wine->prefix = tmp / "fresh";
+        fs::create_directories(tmp / "fresh");
+        check(!profiles::import_steam_data(fresh, std::nullopt) && fs::exists(tmp / "fresh" / profiles::kImportMarker),
+              "import_steam_data: no Steam prefix, nothing to copy, not looked for again");
 
         set_env("PATH", old_path);
         set_env("STAR_FORGE_DATA_DIR", std::nullopt);

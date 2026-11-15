@@ -50,8 +50,14 @@ json Backend::snapshot() const {
         proton = ustr(p.dir) + " inside " + (runtime.empty() ? std::string("the Steam Linux Runtime") : ustr(runtime));
         runner = proton;
     }
-    if (g.setup && g.setup->wine)
-        runner = ustr(g.setup->wine->program) + " with the prefix " + ustr(g.setup->wine->prefix);
+    if (g.setup && g.setup->wine) {
+        const auto& w = *g.setup->wine;
+        if (w.umu)
+            runner = "umu-launcher with " + (w.proton ? ustr(*w.proton) : std::string("umu's own Proton")) +
+                     ", prefix " + ustr(w.prefix);
+        else
+            runner = ustr(w.program) + ", prefix " + ustr(w.prefix);
+    }
 #endif
     json action = nullptr;
     if (phase == Phase::Ready) action = "launch";

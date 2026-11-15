@@ -99,10 +99,12 @@ const char* kUsage =
     "  --profiles-dir <dir>   Profile folder (default: the per-user data folder)\n"
     "  --game-dir <dir>       Star Conflict install (default: found through Steam)\n"
     "  --tools-dir <dir>      Folder with sc-inject.exe and sc_agent.dll (default: next to sc-launch)\n"
-    "  --proton <dir>         Proton build to use (Linux; default: the one that last ran the game)\n"
-    "  --runner <cmd>         proton (Steam's Proton, the Linux default) or a Wine-style command such as\n"
-    "                         wine, umu-run or a wrapper script, run as <cmd> program.exe args\n"
-    "  --wine-prefix <dir>    WINEPREFIX for a Wine-style runner (default: <data dir>/prefix)\n"
+    "  --runner <name>        umu (the Linux default: umu-launcher with Proton), steam-proton (Steam's\n"
+    "                         own setup; deprecated) or a Wine-style command such as wine or a wrapper\n"
+    "                         script, run as <cmd> program.exe args (the macOS default is wine)\n"
+    "  --proton <dir>         Proton build for umu and steam-proton (default: the one Steam last ran the\n"
+    "                         game with; umu falls back to its own)\n"
+    "  --wine-prefix <dir>    prefix for umu and Wine-style runners (default: <data dir>/prefixes/<umu|wine>)\n"
     "  --yes                  Install without asking for confirmation\n"
     "  --key <file>           Pack signing key, for pack sign and pack files\n"
     "  --base-url <url>       Where the files of a pack files list will be hosted\n"
@@ -395,8 +397,11 @@ int run(const std::vector<std::string>& args) {
             std::printf("runtime:  %s (Proton runs inside this container)\n", ustr(setup.proton->runtime).c_str());
             std::printf("prefix:   %s\n", ustr(setup.proton->compat_data).c_str());
         }
+        if (setup.proton) std::printf("runner:   steam-proton (deprecated; umu is the default)\n");
         if (setup.wine) {
             std::printf("runner:   %s%s\n", ustr(setup.wine->program).c_str(), setup.wine->umu ? " (umu)" : "");
+            if (setup.wine->umu)
+                std::printf("proton:   %s\n", setup.wine->proton ? ustr(*setup.wine->proton).c_str() : "umu's own (downloaded on first use)");
             std::printf("prefix:   %s\n", ustr(setup.wine->prefix).c_str());
         }
         return 0;

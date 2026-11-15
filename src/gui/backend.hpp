@@ -74,9 +74,9 @@ struct Preferences {
     bool pack_branding = true;      // show the selected server pack's logo, icon, background and colour
     std::string background_folder;  // the player's own wallpapers; empty = Steam's banner
     std::string game_directory;     // empty = find through Steam
-    std::string proton_path;        // Proton build folder (Linux); empty = the one that last ran the game
-    std::string runner;             // empty = Steam's Proton (Linux) / wine (macOS); else a Wine-style command
-    std::string wine_prefix;        // a Wine-style runner's prefix; empty = <data dir>/prefix
+    std::string proton_path;        // Proton build folder (Linux, umu or steam-proton); empty = Steam's last
+    std::string runner;             // empty = umu (Linux) / wine (macOS); steam-proton; or a Wine-style command
+    std::string wine_prefix;        // prefix for umu and Wine-style runners; empty = <data dir>/prefixes/...
     bool check_updates = true;      // look for a new launcher version at startup
     bool experimental = false;      // show unfinished features (the Mods and Servers pages)
     bool setup_done = false;        // the first-run setup was finished

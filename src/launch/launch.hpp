@@ -3,17 +3,24 @@
 // Port of sc-launch's launch.rs and compat.rs: works out the game, tools and (on Linux) Proton
 // setup, and builds the command that starts sc-inject.exe for a profile.
 //
-// Linux: by default the game's own Steam prefix (compatdata/212070) and the Proton build that last
+// Linux runs our Windows tools through a runner:
+// - "umu" (the default): umu-launcher (umu-run, bundled in tools/ by the packages, else from
+//   PATH) with Proton inside the Steam Linux Runtime, both of which umu fetches itself. Proton is
+//   the one chosen in Settings, else the one Steam last ran the game with, else umu's own.
+// - "steam-proton" (deprecated, to be removed after 0.4): Steam's own setup, below.
+// - Any other name or path: a Wine-style command, below.
+//
+// steam-proton: the game's own Steam prefix (compatdata/212070) and the Proton build that last
 // ran it are reused, so settings, the local Mongo data and the prefix version stay the same as a
 // normal Steam launch. Proton always runs inside the Steam Linux Runtime its build asks for
 // (require_tool_appid in its toolmanifest.vdf), through the runtime's `run` script, as Steam does.
 // A build that names no runtime, or whose runtime isn't installed, is refused rather than run
 // against the host's libraries; the error says what to do in Steam.
 //
-// Instead of Steam's Proton, a Wine-style runner can be chosen: any program run as
-// `<runner> program.exe args` with WINEPREFIX set (wine, a Wine build, umu-run, or a wrapper
-// script). It uses a prefix of its own (by default <data dir>/prefix), needs nothing from Steam,
-// and so also works with a game outside a Steam library, without Steam, and on macOS.
+// umu and Wine-style runners (any program run as `<runner> program.exe args` with WINEPREFIX
+// set: wine, a Wine build, umu-run, a wrapper script) use a prefix of their own (by default
+// <data dir>/prefixes/<umu|wine>), need nothing from Steam, and so also work with a game outside
+// a Steam library, without Steam, and (Wine) on macOS.
 
 #include <cstdint>
 #include <optional>
@@ -54,21 +61,23 @@ struct SetupError : std::runtime_error {
 struct Options {
     std::optional<fs::path> game_dir;   // holding win64\ and data\; found through Steam if unset
     std::optional<fs::path> tools_dir;  // sc-inject.exe + sc_agent.dll; defaults to this program's folder
-    std::optional<fs::path> proton;     // Proton build to use instead of the one that last ran the prefix
-    // How to run our Windows tools (Linux, macOS): "proton" for Steam's Proton (the default on
-    // Linux), else a Wine-style command: a name looked up on PATH or a path (the default on macOS
-    // is "wine").
+    std::optional<fs::path> proton;     // Proton build for umu and steam-proton, instead of the one Steam last used
+    // How to run our Windows tools (Linux, macOS): "umu" (the Linux default), "steam-proton", or a
+    // Wine-style command: a name looked up on PATH or a path (the default on macOS is "wine").
     std::optional<std::string> runner;
-    std::optional<fs::path> wine_prefix;  // a Wine-style runner's WINEPREFIX; default <data dir>/prefix
+    std::optional<fs::path> wine_prefix;  // WINEPREFIX for umu and Wine-style runners
 };
 
-inline constexpr const char* kProtonRunner = "proton";
+inline constexpr const char* kUmuRunner = "umu";
+inline constexpr const char* kSteamProtonRunner = "steam-proton";  // deprecated
+inline constexpr const char* kUmuExe = "umu-run";                   // bundled in tools/
 
-// A Wine-style runner: `program exe args` with WINEPREFIX=prefix.
+// umu or a Wine-style runner: `program exe args` with WINEPREFIX=prefix.
 struct Wine {
-    fs::path program;  // as found on PATH
+    fs::path program;  // umu-run, or the command as found on PATH
     fs::path prefix;
-    bool umu = false;  // umu-run: also given GAMEID (umu-212070) unless the environment sets one
+    bool umu = false;               // umu-run: also given GAMEID (umu-212070) unless the environment sets one
+    std::optional<fs::path> proton;  // umu: PROTONPATH, unless the environment sets one; unset = umu's own
 };
 
 struct Proton {
@@ -101,14 +110,22 @@ Proton detect_proton(const fs::path& steam_root, const fs::path& game_library, c
 
 // --- Wine-style runners ---
 
-// The runner Options ask for, after STAR_FORGE_RUNNER and the platform default; "proton" or a
-// Wine-style command.
+// The runner Options ask for, after STAR_FORGE_RUNNER and the platform default.
 std::string runner_name(const Options& opts);
+// The game's Steam prefix folder (steamapps/compatdata/212070, holding pfx/) in any Steam library.
+std::optional<fs::path> steam_compat_data();
+// The Proton Steam last ran the game with, if it is still there and umu can use it (it has a
+// toolmanifest.vdf).
+std::optional<fs::path> steam_recorded_proton();
+// The umu setup: tools/umu-run, else umu-run on PATH; PROTONPATH from `proton`, else
+// steam_recorded_proton(), else umu's own; `prefix` default <data dir>/prefixes/umu (created).
+// Throws SetupError.
+Wine umu_setup(const fs::path& tools_dir, const std::optional<fs::path>& prefix, const std::optional<fs::path>& proton);
 // `name` on the host's PATH (an AppImage's own folders don't count), or `name` itself if it holds
 // a '/' and is a file. nullopt if not found.
 std::optional<fs::path> find_on_path(const std::string& name);
-// The Wine setup for runner `name` and `prefix` (default <data dir>/prefix, created if missing).
-// Throws SetupError.
+// The Wine setup for runner `name` and `prefix` (default <data dir>/prefixes/wine, created if
+// missing). Throws SetupError.
 Wine wine_setup(const std::string& name, const std::optional<fs::path>& prefix);
 // Wine-style runners found on PATH, for the settings page.
 std::vector<std::string> wine_candidates();

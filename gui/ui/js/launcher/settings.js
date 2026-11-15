@@ -36,9 +36,9 @@ export async function bindSettings(preferences, store) {
       ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', '<input id="game-directory" data-preference="gameDirectory" type="text" spellcheck="false" placeholder="Found through Steam">')}
       <p class="settings-path" id="detected-game"></p></section>
       <section class="setting-group" ${compat.supported ? '' : 'hidden'}><h2>Compatibility</h2>
-      ${row('Run the game with', 'Automatic uses Steam’s Proton. Or name a Wine-style command (wine, umu-run, a Wine build or a wrapper script), run as <i>command</i> program.exe; it uses a prefix of its own and needs nothing from Steam.', 'runner', '<input id="runner" data-preference="runner" type="text" spellcheck="false" list="runner-list" placeholder="Automatic"><datalist id="runner-list"></datalist>')}
-      <div id="proton-settings">${row('Proton version', 'Automatic uses the Proton that last ran the game from Steam, with the same prefix and saved settings.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}</div>
-      <div id="wine-settings" hidden>${row('Wine prefix', 'Leave empty for the launcher’s own prefix in its data folder.', 'wine-prefix', '<input id="wine-prefix" data-preference="winePrefix" type="text" spellcheck="false" placeholder="Launcher’s own prefix">')}</div>
+      ${row('Run the game with', 'Automatic uses umu-launcher, which runs Proton without needing Steam (it downloads its runtime the first time). Or name a Wine-style command (wine, a Wine build or a wrapper script), run as <i>command</i> program.exe. <b>steam-proton</b> uses Steam’s own setup and will be removed in a later version.', 'runner', '<input id="runner" data-preference="runner" type="text" spellcheck="false" list="runner-list" placeholder="Automatic (umu)"><datalist id="runner-list"></datalist>')}
+      <div id="proton-settings">${row('Proton version', 'Automatic uses the Proton Steam last ran the game with, or else umu’s own.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}</div>
+      <div id="prefix-settings">${row('Prefix', 'Leave empty for the launcher’s own prefix in its data folder. Your settings are copied from Steam’s prefix the first time.', 'wine-prefix', '<input id="wine-prefix" data-preference="winePrefix" type="text" spellcheck="false" placeholder="Launcher’s own prefix">')}</div>
       <p class="settings-path" id="detected-proton"></p></section>
       <section class="setting-group"><h2>Setup</h2>
       ${row('Run setup again', 'Pick the Star Conflict and profiles folders again, as on first start.', 'run-setup', '<span class="confirm-inline"><button class="button" id="run-setup">Run setup…</button><span id="run-setup-confirm" hidden>Open the setup now? <button class="button primary" id="run-setup-yes">Run setup</button><button class="button" id="run-setup-no">Cancel</button></span></span>')}</section>
@@ -50,7 +50,7 @@ export async function bindSettings(preferences, store) {
           select.add(new Option(path.split(/[\\/]/).filter(Boolean).pop() || path, path));
       const list = area.querySelector('#runner-list');
       if (list)
-        for (const name of ['proton', ...compat.wine]) {
+        for (const name of ['umu', 'steam-proton', ...compat.wine]) {
           const option = document.createElement('option');
           option.value = name;
           list.append(option);
@@ -90,9 +90,9 @@ export async function bindSettings(preferences, store) {
         : state?.phase === 'checking'
           ? 'Looking for the game…'
           : 'Star Conflict was not found.';
-    const wineStyle = values.runner !== '' && values.runner !== 'proton';
-    area.querySelector('#proton-settings')?.toggleAttribute('hidden', wineStyle);
-    area.querySelector('#wine-settings')?.toggleAttribute('hidden', !wineStyle);
+    const runner = values.runner === '' ? 'umu' : values.runner;
+    area.querySelector('#proton-settings')?.toggleAttribute('hidden', runner !== 'umu' && runner !== 'steam-proton');
+    area.querySelector('#prefix-settings')?.toggleAttribute('hidden', runner === 'steam-proton');
     const proton = area.querySelector('#detected-proton');
     if (proton) proton.textContent = state?.runner ? `Using ${state.runner}` : '';
   };

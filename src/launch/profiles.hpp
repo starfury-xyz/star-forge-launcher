@@ -69,6 +69,14 @@ std::optional<fs::path> find_pack(const fs::path& profiles_dir, const std::strin
 
 // The game's normal %LOCALAPPDATA%: inside the Proton or Wine prefix on Linux and macOS.
 std::optional<fs::path> shared_local_appdata(const Setup& setup);
+// Where the game keeps its per-user data inside %LOCALAPPDATA%.
+inline constexpr const char* kGameDataFolder = "Targem/StarConflict";
+// In a umu or Wine prefix: the Steam import below was done.
+inline constexpr const char* kImportMarker = ".starforge-steam-import";
+// Once per umu or Wine prefix: copies the game's data (settings, key bindings, notes, the local
+// database) from Steam's prefix (`steam_compat`, see steam_compat_data()) into it, unless the
+// prefix already has some. Returns the folder copied from, if any. Throws std::runtime_error.
+std::optional<fs::path> import_steam_data(const Setup& setup, const std::optional<fs::path>& steam_compat);
 // The profile's own %LOCALAPPDATA%.
 fs::path profile_local_appdata(const fs::path& profile_dir);
 // Brings the profile's and the shared copies of the settings files up to date with each other.

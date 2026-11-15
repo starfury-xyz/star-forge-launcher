@@ -5,7 +5,8 @@ program (`game.exe` is 64-bit, the server programs in `cloud/` are 32-bit), so
 those parts always build for Windows: on Windows with MSVC, or on Linux by
 cross-compiling with `clang-cl` and testing under Wine. The launcher and
 `sc-launch` also build natively for Linux, where they start the game through
-Proton.
+umu-launcher and Proton. The packages bundle a pinned umu (`packaging/fetch-umu.sh`);
+a development build uses `umu-run` from `STAR_FORGE_TOOLS_DIR`, else the system's.
 
 | Preset | Builds | Folder |
 |---|---|---|

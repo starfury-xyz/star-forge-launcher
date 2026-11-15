@@ -2,8 +2,9 @@
 
 ## Install
 
-1. Install **Star Conflict** through Steam. On Linux, start it from Steam once
-   so its Proton prefix exists.
+1. Install **Star Conflict** through Steam (or have a copy of the game
+   folder; on Linux set it under **Settings → Star Conflict**). Linux needs
+   Python 3 for umu-launcher, which the launcher uses to run the game.
 2. Download STAR FORGE Launcher from the
    [Releases page](https://github.com/starfury-xyz/star-forge-launcher/releases):
 
@@ -12,13 +13,12 @@
    | Windows | `-setup.exe` |
    | Linux | `.AppImage` (any distro), `.deb` or `.rpm` |
 
-3. Start it. It finds the game in your Steam libraries and, on Linux, the
-   Proton build, Steam Linux Runtime and prefix Steam uses for it. If
-   something is missing (the game isn't installed, it was never started from
-   Steam, or the runtime isn't installed), the launcher says so and the play
-   button becomes **OPEN STEAM**, which opens Steam to fix it; press **RETRY**
-   afterwards. The game
-   folder can also be set under **Settings → Star Conflict**.
+3. Start it. It finds the game in your Steam libraries; if it isn't there,
+   the play button becomes **OPEN STEAM** to install it, or set the game
+   folder under **Settings → Star Conflict**. On Linux the game runs with
+   Proton through umu-launcher, in a prefix of the launcher's own: the first
+   start downloads the Steam Linux Runtime (a few hundred MB) and copies your
+   game settings over from Steam's prefix.
 
 The launcher updates itself: it checks at startup and offers to install a new
 version and restart (turn this off, or check by hand, under **Settings →
@@ -78,9 +78,9 @@ modified: the profile's changes exist only while the game runs with it.
   selected server's pack styles the launcher, your own background folder, and
   update checks.
 - **Settings → Star Conflict**: the game folder and (Linux) what runs it:
-  Steam's Proton (and which build), or a Wine-style command such as `wine`
-  or `umu-run` with a prefix of its own (see
-  [How it works](how-it-works.md#linux-without-steams-proton)).
+  umu with a Proton build of your choice (the default), a Wine-style command
+  such as `wine`, or the deprecated `steam-proton` (see
+  [How it works](how-it-works.md#linux-runners)).
 - **Settings → Experimental**: shows the **Mods** and **Servers** pages, for
   switching single patches and running a server install
   ([Server hosting](server-hosting.md)). New and still changing.
@@ -132,5 +132,7 @@ Common causes:
 - **"…needs the Steam Linux Runtime…"** or **"…doesn't run inside the Steam
   Linux Runtime"** (Linux): install the runtime with **OPEN STEAM**, or choose a
   current Proton for Star Conflict in Steam (Properties → Compatibility).
-  Or set **Run the game with** to `wine` or `umu-run` in Settings, which
-  needs nothing from Steam.
+  These only come up with the deprecated `steam-proton` runner; the default
+  (umu) needs nothing from Steam.
+- **"…needs Python 3"** (Linux): install `python3` with your package manager,
+  or set **Run the game with** to `wine`.

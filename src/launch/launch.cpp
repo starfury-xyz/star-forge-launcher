@@ -184,8 +184,73 @@ std::string runner_name(const Options& opts) {
 #ifdef __APPLE__
     return "wine";
 #else
-    return kProtonRunner;
+    return kUmuRunner;
 #endif
+}
+
+std::optional<fs::path> steam_compat_data() {
+    for (const auto& lib : steam::libraries(steam::steam_roots())) {
+        const fs::path dir = lib / "steamapps" / "compatdata" / steam::kGameAppid;
+        if (is_dir(dir / "pfx")) return dir;
+    }
+    return std::nullopt;
+}
+
+std::optional<fs::path> steam_recorded_proton() {
+    auto compat = steam_compat_data();
+    if (!compat) return std::nullopt;
+    auto text = read_text(*compat / "config_info");
+    auto dir = text ? proton_from_config_info(*text) : std::nullopt;
+    if (!dir || !is_file(*dir / "proton") || !is_file(*dir / "toolmanifest.vdf")) return std::nullopt;
+    return dir;
+}
+
+namespace {
+
+// The prefix for `kind` ("umu", "wine"): `given`, else <data dir>/prefixes/<kind>; created.
+fs::path make_prefix(const std::optional<fs::path>& given, const char* kind) {
+    fs::path prefix;
+    if (given) {
+        prefix = *given;
+    } else {
+        auto data = profiles::data_dir();
+        if (!data) throw SetupError("cannot work out the launcher data folder for the game's prefix");
+        prefix = *data / "prefixes" / kind;
+    }
+    if (!prefix.is_absolute()) throw SetupError(ustr(prefix) + ": the prefix needs an absolute path");
+    // Wine and umu set up an empty prefix folder on first use.
+    std::error_code ec;
+    fs::create_directories(prefix, ec);
+    if (ec) throw SetupError("cannot create the prefix " + ustr(prefix) + ": " + ec.message());
+    return prefix;
+}
+
+}  // namespace
+
+Wine umu_setup(const fs::path& tools_dir, const std::optional<fs::path>& prefix, const std::optional<fs::path>& proton) {
+    Wine w;
+    w.umu = true;
+    if (is_file(tools_dir / kUmuExe)) {
+        w.program = tools_dir / kUmuExe;
+    } else if (auto p = find_on_path(kUmuExe)) {
+        w.program = *p;
+    } else {
+        throw SetupError(std::string(kUmuExe) + " (umu-launcher) is missing from " + ustr(tools_dir) +
+                         " and not on PATH. Install umu-launcher, or choose another runner in Settings.");
+    }
+    // umu-launcher is a Python program.
+    if (!find_on_path("python3"))
+        throw SetupError("umu-launcher needs Python 3, which isn't installed. Install python3, or choose wine as the "
+                         "runner in Settings.");
+    if (proton) {
+        if (!is_file(*proton / "toolmanifest.vdf"))
+            throw SetupError(ustr(*proton) + " has no toolmanifest.vdf, so umu can't run it; choose another Proton in Settings.");
+        w.proton = *proton;
+    } else {
+        w.proton = steam_recorded_proton();
+    }
+    w.prefix = make_prefix(prefix, "umu");
+    return w;
 }
 
 std::optional<fs::path> find_on_path(const std::string& name) {
@@ -218,19 +283,8 @@ Wine wine_setup(const std::string& name, const std::optional<fs::path>& prefix) 
                          ". Install it, or choose another runner in Settings.");
     Wine w;
     w.program = *program;
-    w.umu = ustr(program->filename()).rfind("umu-run", 0) == 0;
-    if (prefix) {
-        w.prefix = *prefix;
-    } else {
-        auto data = profiles::data_dir();
-        if (!data) throw SetupError("cannot work out the launcher data folder for the Wine prefix");
-        w.prefix = *data / "prefix";
-    }
-    if (!w.prefix.is_absolute()) throw SetupError(ustr(w.prefix) + ": the Wine prefix needs an absolute path");
-    // Wine (and umu) set up an empty prefix folder on first use.
-    std::error_code ec;
-    fs::create_directories(w.prefix, ec);
-    if (ec) throw SetupError("cannot create the Wine prefix " + ustr(w.prefix) + ": " + ec.message());
+    w.umu = ustr(program->filename()).rfind(kUmuExe, 0) == 0;
+    w.prefix = make_prefix(prefix, "wine");
     return w;
 }
 
@@ -291,7 +345,11 @@ Setup resolve(const Options& given) {
                              " (pass --tools-dir or set STAR_FORGE_TOOLS_DIR)");
 
 #ifndef _WIN32
-    if (*opts.runner != kProtonRunner) {
+    if (*opts.runner == kUmuRunner) {
+        setup.wine = umu_setup(setup.tools_dir, opts.wine_prefix, opts.proton);
+        return setup;
+    }
+    if (*opts.runner != kSteamProtonRunner) {
         setup.wine = wine_setup(*opts.runner, opts.wine_prefix);
         return setup;
     }
@@ -360,6 +418,7 @@ Command tool_command(const Setup& setup, const char* verb, const fs::path& exe, 
         for (const auto& a : args) cmd.arg(a);
         cmd.set_env("WINEPREFIX", ustr(w.prefix));
         if (w.umu && !get_env("GAMEID")) cmd.set_env("GAMEID", std::string("umu-") + steam::kGameAppid);
+        if (w.umu && w.proton && !get_env("PROTONPATH")) cmd.set_env("PROTONPATH", ustr(*w.proton));
         for (auto& change : env::host_env()) cmd.env.push_back(change);
         return cmd;
     }

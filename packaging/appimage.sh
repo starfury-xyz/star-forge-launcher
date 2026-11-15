@@ -6,6 +6,7 @@
 #
 #   packaging/appimage.sh            -> build/appimage/STAR_FORGE_Launcher-<version>-x86_64.AppImage
 #
+# Bundles umu-launcher as tools/umu-run (packaging/fetch-umu.sh downloads the pinned release).
 # Needs the Windows sc-inject.exe and sc_agent.dll (they go in tools/): from the win64 build, or
 # from WIN_TOOLS=<folder> (CI builds them on Windows). And linuxdeploy, its appimage plugin,
 # Tauri's fork of its gtk plugin (upstream's doesn't patch WebKitGTK) and AppImageKit's AppRun:
@@ -39,6 +40,9 @@ mkdir -p "$appdir/usr/bin/tools" "$appdir/usr/bin/icons" "$appdir/usr/share/appl
 install -m755 "$root/build/linux/star-forge" "$appdir/usr/bin/star-forge"
 strip "$appdir/usr/bin/star-forge"
 install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$appdir/usr/bin/tools/"
+umu="$("$root/packaging/fetch-umu.sh")"
+install -m755 "$umu/umu-run" "$appdir/usr/bin/tools/"
+install -m644 "$umu/umu-run.NOTICE" "$appdir/usr/bin/tools/"
 # For "Add to applications menu" (Backend::resources is the program's folder).
 cp "$root"/gui/icons/*.png "$appdir/usr/bin/icons/"
 for size in 32x32 128x128; do

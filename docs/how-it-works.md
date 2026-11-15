@@ -20,26 +20,74 @@ Before a launch the launcher:
 4. checks the pack's patches against the installed `game.exe`;
 5. copies the player's graphics settings and key bindings into the profile.
 
-It then starts `sc-inject.exe`: directly on Windows, and on Linux through the
-same Proton, runtime and prefix Steam uses (below). The injector writes the server address
+It then starts `sc-inject.exe`: directly on Windows, and on Linux through a
+runner (umu with Proton by default; below). The injector writes the server address
 to the profile's `files/data/address.cfg`, starts `game.exe` suspended, loads
 `sc_agent.dll` into it and resumes it. Everything the game starts (such as the
 built-in local server) runs in a job object and is stopped when the game
 exits. Afterwards the launcher copies changed settings back.
 
-## Linux: Proton inside the Steam Linux Runtime
+## Linux: runners
 
-The launcher runs the game the way Steam does, with what Steam already set up:
+On Linux the launcher starts its Windows tools through a **runner**, chosen
+under **Settings → Star Conflict → Run the game with** (`--runner`,
+`STAR_FORGE_RUNNER`).
+
+### umu (the default)
+
+[umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) runs
+Proton inside the Steam Linux Runtime the way Steam does, without needing
+Steam. The packages ship it as `tools/umu-run` (a pinned release; the system's
+`umu-run` is used when the tools folder has none). It needs Python 3.
+
+```
+umu-run sc-inject.exe --game … --profile … --dll …
+```
+
+with `WINEPREFIX` set to the launcher's own prefix (`prefixes/umu` in its data
+folder unless one is chosen), `GAMEID=umu-212070`, and `PROTONPATH` set to:
+
+1. the Proton chosen in Settings (`--proton`, `STAR_FORGE_PROTON`), else
+2. the Proton Steam last ran the game with, if it's still installed, else
+3. nothing, and umu downloads its own (UMU-Proton).
+
+umu downloads the runtime that Proton build asks for the first time (a few
+hundred MB, kept in `~/.local/share/umu`), so the first start takes longer and
+needs the internet. `PROTONPATH` and `GAMEID` set in the environment win.
+
+Nothing else comes from Steam, so the game folder may be anywhere (a copied
+install works; set it under **Settings → Star Conflict**), and it works with
+the launcher started by Steam as a non-Steam game (Steam Deck) or with Steam
+running in another container.
+
+### Wine-style commands
+
+Any other name or path is run as `<command> sc-inject.exe …` with
+`WINEPREFIX` set (`prefixes/wine` unless one is chosen): `wine`, a Wine build,
+or a wrapper script. Other variables (`WINEDLLOVERRIDES`, `DXVK_*`…) pass
+through. Plain Wine draws with its own Direct3D unless DXVK is installed in the
+prefix. This is the default on macOS.
+
+### The game's data in the new prefix
+
+The first time the game starts in a umu or Wine prefix, the launcher copies
+the game's data (`AppData/Local/Targem/StarConflict`: settings, key bindings,
+notes, the local server's database) over from Steam's prefix, if Steam ever ran
+the game and the new prefix has none yet. It does this once per prefix
+(`.starforge-steam-import` in the prefix records it). Profiles that keep their
+own game data (the default) carry their settings with them anyway.
+
+### steam-proton (deprecated)
+
+The runner from 0.3 and earlier, to be removed in a later release: it reuses
+everything Steam set up for the game.
 
 - **Prefix:** the game's own, `steamapps/compatdata/212070`. Steam creates it
-  on the first launch (and runs the game's first-time installers there); the
-  launcher never makes one itself.
+  on the first launch; the launcher never makes one itself.
 - **Proton:** the build Steam last ran the game with, from that prefix's
   `config_info`, unless one is chosen in Settings.
 - **Runtime:** the Steam Linux Runtime that Proton build asks for in its
   `toolmanifest.vdf` (`require_tool_appid`), found in the Steam libraries.
-
-The command is
 
 ```
 SteamLinuxRuntime_4/run -- <proton>/proton waitforexitandrun sc-inject.exe --game … --profile … --dll …
@@ -47,36 +95,12 @@ SteamLinuxRuntime_4/run -- <proton>/proton waitforexitandrun sc-inject.exe --gam
 
 with Steam's environment (`STEAM_COMPAT_DATA_PATH`, `SteamAppId`, …) and the
 game, prefix, profile and tools folders shared into the pressure-vessel
-container. Proton never runs outside the runtime: a build that names no
-runtime, or whose runtime isn't installed, is refused with a message saying
-what to do in Steam (and the play button opens Steam for it). `sc-launch info`
-shows the Proton, runtime and prefix in use.
+container. A build without a runtime, or whose runtime isn't installed, is
+refused with a message saying what to do in Steam. When Steam itself started
+the launcher (as a non-Steam game), Steam's `SteamGameId` is kept so the
+overlay and Game Mode follow the shortcut.
 
-## Linux without Steam's Proton
-
-**Settings → Star Conflict → Run the game with** (`--runner`,
-`STAR_FORGE_RUNNER`) can name a Wine-style command instead: `wine`, a Wine
-build, `umu-run`, or a wrapper script. The launcher then runs
-
-```
-<runner> sc-inject.exe --game … --profile … --dll …
-```
-
-with `WINEPREFIX` set to a prefix of its own (`prefix/` in the launcher's data
-folder unless one is chosen), which Wine sets up on first use. Nothing comes
-from Steam: no runtime, no overlay, no `compatdata`, and the game folder may be
-anywhere. This suits a launcher started by Steam as a non-Steam game, a Steam
-running in another container, or no Steam at all, and it is the default on
-macOS. `umu-run` also gets `GAMEID=umu-212070` unless the environment sets one;
-other variables (`PROTONPATH`, `WINEDLLOVERRIDES`, `DXVK_*`…) pass through.
-Plain Wine draws with its own Direct3D unless DXVK is installed in the prefix.
-
-The prefix is not Steam's, so the game's normal AppData there starts empty;
-profiles that keep their own game data (the default) aren't affected.
-
-When the launcher itself was started by Steam (as a non-Steam game, as on a
-Steam Deck), the Proton path keeps Steam's `SteamGameId` so the overlay and
-Game Mode's window focus follow the shortcut.
+`sc-launch info` shows the runner, Proton and prefix in use.
 
 ## The agent
 

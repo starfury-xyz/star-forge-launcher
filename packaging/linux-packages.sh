@@ -34,6 +34,9 @@ mkdir -p "$files/usr/bin" "$files/usr/lib/STAR FORGE Launcher/tools" "$files/usr
 install -m755 "$root/build/linux/star-forge" "$files/usr/bin/star-forge"
 strip "$files/usr/bin/star-forge"
 install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$files/usr/lib/STAR FORGE Launcher/tools/"
+umu="$("$root/packaging/fetch-umu.sh")"
+install -m755 "$umu/umu-run" "$files/usr/lib/STAR FORGE Launcher/tools/"
+install -m644 "$umu/umu-run.NOTICE" "$files/usr/lib/STAR FORGE Launcher/tools/"
 for size in 32x32 128x128; do
     install -Dm644 "$root/gui/icons/$size.png" "$files/usr/share/icons/hicolor/$size/apps/star-forge.png"
 done
@@ -68,7 +71,7 @@ Installed-Size: $(du -sk --exclude=DEBIAN "$deb" | cut -f1)
 Maintainer: star-forge
 Priority: optional
 Section: games
-Depends: $depends
+Depends: $depends, python3
 Description: $summary
 EOF
 dpkg-deb --root-owner-group -Zxz --build "$deb" "$out/STAR_FORGE_Launcher_${version}_amd64.deb" >/dev/null
@@ -83,10 +86,10 @@ Name: star-forge-launcher
 Version: $version
 Release: 1
 Summary: $summary
-License: MIT
+License: MIT and GPL-3.0-only
 BuildArch: x86_64
 AutoReqProv: no
-Requires: libcurl.so.4()(64bit), libgtk-3.so.0()(64bit), libwebkit2gtk-4.1.so.0()(64bit), libjavascriptcoregtk-4.1.so.0()(64bit)
+Requires: libcurl.so.4()(64bit), libgtk-3.so.0()(64bit), libwebkit2gtk-4.1.so.0()(64bit), libjavascriptcoregtk-4.1.so.0()(64bit), python3
 Provides: star-forge-launcher
 
 %description
@@ -104,7 +107,7 @@ cp -a "$files/." "%{buildroot}/"
 /usr/share/icons/hicolor/256x256/apps/star-forge.png
 EOF
 rpmbuild -bb --quiet --define "_topdir $rpmtop" --define "_build_id_links none" \
-    --define "__strip /bin/true" "$rpmtop/SPECS/star-forge-launcher.spec"
+    --define "__strip /bin/true" --define "__brp_mangle_shebangs /bin/true" "$rpmtop/SPECS/star-forge-launcher.spec"
 cp "$rpmtop"/RPMS/x86_64/*.rpm "$out/STAR_FORGE_Launcher-${version}-1.x86_64.rpm"
 
 ls -l "$out"/*.deb "$out"/*.rpm

@@ -566,7 +566,7 @@ void game(const fs::path& base) {
     const json compat = call("detect_compat_tools");
     check(compat["supported"] == true && contains(compat["proton"].dump(), ustr(proton)), "Proton builds to choose from");
 #else
-    check(snap["proton"].is_null() && call("detect_compat_tools").dump() == R"({"proton":[],"supported":false})", "no Proton on Windows");
+    check(snap["proton"].is_null() && call("detect_compat_tools").dump() == R"({"proton":[],"supported":false,"wine":[]})", "no Proton on Windows");
 #endif
     const json art = call("get_artwork");
 #ifndef _WIN32
@@ -868,6 +868,7 @@ int run(int argc, char** argv) {
     set_env(env::kToolsDir, std::nullopt);
     set_env(env::kGameDir, std::nullopt);
     set_env(env::kProton, std::nullopt);
+    set_env(env::kRunner, "steam-proton");  // the launch flow below fakes Steam's setup
     set_env("APPIMAGE", std::nullopt);
 #ifndef _WIN32
     set_env("HOME", ustr(base / "home"));  // Steam is looked for here

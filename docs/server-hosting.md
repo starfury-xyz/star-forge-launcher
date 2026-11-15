@@ -21,8 +21,8 @@ With the Experimental setting on, two pages appear:
 - **Mods**: switch single patches on or off, for a profile's client patches
   or for a server install's patchsets.
 
-On Linux the server runs in the game's own Proton prefix, through the Steam
-Linux Runtime, like the game.
+On Linux the server runs in the same prefix and with the same runner as the
+game (by default umu with Proton, in the launcher's own prefix).
 
 ## On the command line
 

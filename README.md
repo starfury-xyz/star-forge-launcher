@@ -11,7 +11,7 @@ unofficial Star Conflict server), but it is meant for anyone running or playing
 on a Star Conflict server project.
 
 > **Status:** early development (0.3). It works for day-to-day play on Linux
-> (Proton) and Windows, but expect rough edges.
+> (umu + Proton) and Windows, but expect rough edges.
 
 ## Features
 
@@ -31,8 +31,9 @@ on a Star Conflict server project.
   before it runs, checked against your `game.exe`, plus native plugins. Core
   patches ship with the launcher, such as letting packs replace single files
   inside `.pak` archives.
-- **Linux and Windows**: on Linux the game runs through the Proton build and
-  prefix Steam uses, with the Steam overlay. The launcher updates itself.
+- **Linux and Windows**: on Linux the game runs with Proton through the bundled
+  umu-launcher, without needing Steam (or with system Wine or any wrapper).
+  The launcher updates itself.
 - **Command line**: `sc-launch` for scripts and for server teams' tooling.
 - **Server hosting** (experimental, off by default): run the game's own
   server stack from the launcher, patch the server programs in memory and
@@ -104,7 +105,7 @@ Everything is indexed in [docs/](docs/README.md).
 
 **Server hosting** (experimental)
 - [x] Start and stop a server install's stack (MongoDB, Hub and its services),
-      on Linux in the game's Proton prefix
+      on Linux in the game's prefix
 - [x] Server proxy: patchsets, C++ midhooks and a file overlay for the 32-bit
       server programs, applied in memory
 - [x] Server logs in the launcher

@@ -275,9 +275,9 @@ std::optional<fs::path> shared_local_appdata(const Setup& setup) {
     return std::nullopt;
 #else
     if (setup.wine) {
-        // Proton-based runners (umu-run) name the user steamuser; Wine uses the login name.
+        // Proton (under umu) names the user steamuser; Wine uses the login name.
         const fs::path users = setup.wine->prefix / "drive_c/users";
-        if (dir_exists(users / "steamuser")) return users / "steamuser/AppData/Local";
+        if (setup.wine->umu || dir_exists(users / "steamuser")) return users / "steamuser/AppData/Local";
         auto user = get_env("USER");
         if (!user || user->empty()) user = get_env("LOGNAME");
         if (!user || user->empty()) return std::nullopt;
@@ -286,6 +286,27 @@ std::optional<fs::path> shared_local_appdata(const Setup& setup) {
     if (!setup.proton) return std::nullopt;
     return setup.proton->compat_data / "pfx/drive_c/users/steamuser/AppData/Local";
 #endif
+}
+
+std::optional<fs::path> import_steam_data(const Setup& setup, const std::optional<fs::path>& steam_compat) {
+    if (!setup.wine) return std::nullopt;
+    const fs::path marker = setup.wine->prefix / kImportMarker;
+    if (path_exists(marker)) return std::nullopt;
+    std::optional<fs::path> copied;
+    const auto shared = shared_local_appdata(setup);
+    if (steam_compat && shared) {
+        const fs::path from = *steam_compat / "pfx/drive_c/users/steamuser/AppData/Local" / kGameDataFolder;
+        const fs::path to = *shared / kGameDataFolder;
+        if (dir_exists(from) && !path_exists(to)) {
+            std::error_code ec;
+            fs::create_directories(to, ec);
+            if (!ec) fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+            if (ec) throw std::runtime_error("could not copy the game's data from Steam's prefix: " + ec.message());
+            copied = from;
+        }
+    }
+    write_or_throw(marker, "the game's data from Steam's prefix was looked for once; delete this file to look again\n");
+    return copied;
 }
 
 fs::path profile_local_appdata(const fs::path& profile_dir) { return profile_dir / pack::kStateDir / "AppData" / "Local"; }

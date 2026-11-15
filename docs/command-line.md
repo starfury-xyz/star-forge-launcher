@@ -55,9 +55,9 @@ New and still changing; see [Server hosting](server-hosting.md).
 | `--profiles-dir <dir>` | the launcher's data folder |
 | `--game-dir <dir>` | found through Steam |
 | `--tools-dir <dir>` | next to `sc-launch` |
-| `--proton <dir>` | Linux: the Proton build that last ran the game |
-| `--runner <cmd>` | `proton` (Steam's Proton) on Linux, `wine` on macOS; or any Wine-style command (`wine`, `umu-run`, a Wine build, a wrapper script) |
-| `--wine-prefix <dir>` | a Wine-style runner's prefix: `prefix/` in the launcher's data folder |
+| `--proton <dir>` | Linux, umu and steam-proton: the Proton build Steam last ran the game with (umu: else its own) |
+| `--runner <name>` | `umu` on Linux, `wine` on macOS; also `steam-proton` (deprecated) or any Wine-style command (`wine`, a Wine build, a wrapper script) |
+| `--wine-prefix <dir>` | prefix for umu and Wine-style runners: `prefixes/<umu\|wine>` in the launcher's data folder |
 | `--yes` | install without asking |
 
 ## Environment
@@ -70,8 +70,8 @@ Used when the matching option isn't given; builds configured with
 | `STAR_FORGE_GAME_DIR` | Star Conflict install folder |
 | `STAR_FORGE_TOOLS_DIR` | folder with `sc-inject.exe`, `sc_agent.dll` and `sc-server.exe` |
 | `STAR_FORGE_PROTON` | Proton build (Linux) |
-| `STAR_FORGE_RUNNER` | `proton` or a Wine-style command |
-| `STAR_FORGE_WINEPREFIX` | a Wine-style runner's prefix |
+| `STAR_FORGE_RUNNER` | `umu`, `steam-proton` or a Wine-style command |
+| `STAR_FORGE_WINEPREFIX` | prefix for umu and Wine-style runners |
 | `STAR_FORGE_DATA_DIR` | launcher data folder (preferences, profiles, logs, pinned keys) |
 | `STAR_FORGE_PACK_KEY` | pack signing key text, for `pack sign` and `pack files` |
 | `STAR_FORGE_SERVER_PROXY` | the server proxy DLL `server install` uses (experimental) |

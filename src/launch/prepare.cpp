@@ -63,6 +63,9 @@ Prepared prepare(const Setup& setup, const fs::path& dir, const std::vector<std:
     if (synced) tell(events, note(*synced));
     for (const std::string& warning : patching::preflight(dir, profile, setup.game_exe())) tell(events, note(warning));
     auto shared = profiles::shared_local_appdata(setup);
+    if (setup.wine)
+        if (auto from = profiles::import_steam_data(setup, steam_compat_data()))
+            tell(events, note("Copied your Star Conflict settings and data from Steam's prefix (" + ustr(*from) + ")."));
     profiles::sync_shared(dir, profile, shared);
     Command command = launch::command(setup, dir, game_args);
     return Prepared{std::move(command), std::move(profile), std::move(t), shared};
