@@ -7,13 +7,13 @@ to **Unreleased** as you go and rename it to the version when you tag
 ## Unreleased
 
 - **Linux: the game now runs through umu-launcher** (bundled) instead of
-  Steam's own Proton setup. It uses Proton (the one Steam last ran the game
-  with, the one chosen in Settings, or umu's own) in a prefix of the
+  Steam's own Proton setup. It uses umu's own Proton (UMU-Proton, the same
+  for everyone; another build can be picked in Settings) in a prefix of the
   launcher's own, and no longer needs Steam to have started the game first or
   the game to be in a Steam library, so copied installs, non-Steam shortcuts
   (Steam Deck) and sandboxed Steam work. Your settings are copied over from
-  Steam's prefix on the first start, which also downloads the Steam Linux
-  Runtime once (a few hundred MB). Needs Python 3.
+  Steam's prefix on the first start, which also downloads UMU-Proton and the
+  Steam Linux Runtime once (about 2 GB unpacked). Needs Python 3.
 - Linux and macOS: **Settings → Star Conflict → Run the game with**
   (`--runner`, `STAR_FORGE_RUNNER`) can also name a Wine-style command:
   system `wine`, a Wine build or a wrapper script (the default on macOS).

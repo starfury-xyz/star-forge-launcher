@@ -366,26 +366,27 @@ int main() {
                   sc.env_value("WINEPREFIX") == ustr(tmp / "data/prefixes/wine"),
               "server_command: wine sc-server.exe in the same prefix");
 
-        // umu, the default: tools/umu-run (else PATH), Steam's last Proton as PROTONPATH, its own prefix.
+        // umu, the default: tools/umu-run (else PATH), umu's own Proton unless one is chosen, its own prefix.
         touch(bin / "python3");
         touch(tools / "umu-run");
         Setup m = resolve(opts(game, tools, {}, std::nullopt));
-        check(m.wine && m.wine->umu && m.wine->program == tools / "umu-run" && m.wine->proton == proton &&
+        check(m.wine && m.wine->umu && m.wine->program == tools / "umu-run" && !m.wine->proton &&
                   m.wine->prefix == tmp / "data/prefixes/umu",
-              "resolve: umu by default, the bundled umu-run, Steam's last Proton");
-        check(steam_compat_data() == library / "steamapps/compatdata/212070" && steam_recorded_proton() == proton,
-              "steam_compat_data / steam_recorded_proton");
+              "resolve: umu by default, the bundled umu-run, umu's own Proton (not Steam's)");
+        check(steam_compat_data() == library / "steamapps/compatdata/212070", "steam_compat_data");
         Command mc = command(m, profile, {});
         check(mc.program == tools / "umu-run" && mc.args.front() == ustr(tools / "sc-inject.exe") &&
-                  mc.env_value("PROTONPATH") == ustr(proton) && mc.env_value("GAMEID") == std::string("umu-212070") &&
+                  !mc.env_value("PROTONPATH") && mc.env_value("GAMEID") == std::string("umu-212070") &&
                   mc.env_value("WINEPREFIX") == ustr(tmp / "data/prefixes/umu"),
-              "command: umu-run sc-inject.exe with PROTONPATH, GAMEID, WINEPREFIX");
+              "command: umu-run sc-inject.exe with GAMEID and WINEPREFIX, no PROTONPATH");
+        const Setup chosen = resolve(opts(game, tools, proton, std::nullopt));
+        check(chosen.wine->proton == proton && command(chosen, profile, {}).env_value("PROTONPATH") == ustr(proton),
+              "resolve: a chosen Proton becomes PROTONPATH");
         set_env("PROTONPATH", "GE-Proton");
-        check(!command(m, profile, {}).env_value("PROTONPATH") || command(m, profile, {}).env_value("PROTONPATH") == std::string("GE-Proton"),
+        check(!command(chosen, profile, {}).env_value("PROTONPATH") ||
+                  command(chosen, profile, {}).env_value("PROTONPATH") == std::string("GE-Proton"),
               "command: the player's PROTONPATH is kept");
         set_env("PROTONPATH", std::nullopt);
-        check(resolve(opts(game, tools, tmp / "proton-y", std::nullopt)).wine->proton == tmp / "proton-y",
-              "resolve: the chosen Proton for umu");
         check(contains(setup_error([&] { resolve(opts(game, tools, tmp / "gone", std::nullopt)); }), "no toolmanifest.vdf"),
               "resolve: umu refuses a Proton without a toolmanifest");
         fs::remove(tools / "umu-run");

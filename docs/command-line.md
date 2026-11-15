@@ -55,7 +55,7 @@ New and still changing; see [Server hosting](server-hosting.md).
 | `--profiles-dir <dir>` | the launcher's data folder |
 | `--game-dir <dir>` | found through Steam |
 | `--tools-dir <dir>` | next to `sc-launch` |
-| `--proton <dir>` | Linux, umu and steam-proton: the Proton build Steam last ran the game with (umu: else its own) |
+| `--proton <dir>` | Linux: umu's own UMU-Proton (steam-proton: the build Steam last ran the game with) |
 | `--runner <name>` | `umu` on Linux, `wine` on macOS; also `steam-proton` (deprecated) or any Wine-style command (`wine`, a Wine build, a wrapper script) |
 | `--wine-prefix <dir>` | prefix for umu and Wine-style runners: `prefixes/<umu\|wine>` in the launcher's data folder |
 | `--yes` | install without asking |

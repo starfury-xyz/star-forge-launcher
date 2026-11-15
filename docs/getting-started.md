@@ -16,9 +16,9 @@
 3. Start it. It finds the game in your Steam libraries; if it isn't there,
    the play button becomes **OPEN STEAM** to install it, or set the game
    folder under **Settings → Star Conflict**. On Linux the game runs with
-   Proton through umu-launcher, in a prefix of the launcher's own: the first
-   start downloads the Steam Linux Runtime (a few hundred MB) and copies your
-   game settings over from Steam's prefix.
+   umu-launcher's own Proton, in a prefix of the launcher's own: the first
+   start downloads UMU-Proton and the Steam Linux Runtime (about 2 GB unpacked)
+   and copies your game settings over from Steam's prefix.
 
 The launcher updates itself: it checks at startup and offers to install a new
 version and restart (turn this off, or check by hand, under **Settings →
@@ -78,7 +78,7 @@ modified: the profile's changes exist only while the game runs with it.
   selected server's pack styles the launcher, your own background folder, and
   update checks.
 - **Settings → Star Conflict**: the game folder and (Linux) what runs it:
-  umu with a Proton build of your choice (the default), a Wine-style command
+  umu with its own Proton or a build of your choice (the default), a Wine-style command
   such as `wine`, or the deprecated `steam-proton` (see
   [How it works](how-it-works.md#linux-runners)).
 - **Settings → Experimental**: shows the **Mods** and **Servers** pages, for

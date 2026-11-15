@@ -196,15 +196,6 @@ std::optional<fs::path> steam_compat_data() {
     return std::nullopt;
 }
 
-std::optional<fs::path> steam_recorded_proton() {
-    auto compat = steam_compat_data();
-    if (!compat) return std::nullopt;
-    auto text = read_text(*compat / "config_info");
-    auto dir = text ? proton_from_config_info(*text) : std::nullopt;
-    if (!dir || !is_file(*dir / "proton") || !is_file(*dir / "toolmanifest.vdf")) return std::nullopt;
-    return dir;
-}
-
 namespace {
 
 // The prefix for `kind` ("umu", "wine"): `given`, else <data dir>/prefixes/<kind>; created.
@@ -242,12 +233,11 @@ Wine umu_setup(const fs::path& tools_dir, const std::optional<fs::path>& prefix,
     if (!find_on_path("python3"))
         throw SetupError("umu-launcher needs Python 3, which isn't installed. Install python3, or choose wine as the "
                          "runner in Settings.");
+    // Unset: umu's own UMU-Proton, the same build for every player.
     if (proton) {
         if (!is_file(*proton / "toolmanifest.vdf"))
             throw SetupError(ustr(*proton) + " has no toolmanifest.vdf, so umu can't run it; choose another Proton in Settings.");
         w.proton = *proton;
-    } else {
-        w.proton = steam_recorded_proton();
     }
     w.prefix = make_prefix(prefix, "umu");
     return w;

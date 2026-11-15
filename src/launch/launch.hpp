@@ -6,7 +6,7 @@
 // Linux runs our Windows tools through a runner:
 // - "umu" (the default): umu-launcher (umu-run, bundled in tools/ by the packages, else from
 //   PATH) with Proton inside the Steam Linux Runtime, both of which umu fetches itself. Proton is
-//   the one chosen in Settings, else the one Steam last ran the game with, else umu's own.
+//   the one chosen in Settings, else umu's own (UMU-Proton), so every player runs the same build.
 // - "steam-proton" (deprecated, to be removed after 0.4): Steam's own setup, below.
 // - Any other name or path: a Wine-style command, below.
 //
@@ -61,7 +61,7 @@ struct SetupError : std::runtime_error {
 struct Options {
     std::optional<fs::path> game_dir;   // holding win64\ and data\; found through Steam if unset
     std::optional<fs::path> tools_dir;  // sc-inject.exe + sc_agent.dll; defaults to this program's folder
-    std::optional<fs::path> proton;     // Proton build for umu and steam-proton, instead of the one Steam last used
+    std::optional<fs::path> proton;     // Proton build for umu (default its own) and steam-proton (default Steam's last)
     // How to run our Windows tools (Linux, macOS): "umu" (the Linux default), "steam-proton", or a
     // Wine-style command: a name looked up on PATH or a path (the default on macOS is "wine").
     std::optional<std::string> runner;
@@ -114,11 +114,8 @@ Proton detect_proton(const fs::path& steam_root, const fs::path& game_library, c
 std::string runner_name(const Options& opts);
 // The game's Steam prefix folder (steamapps/compatdata/212070, holding pfx/) in any Steam library.
 std::optional<fs::path> steam_compat_data();
-// The Proton Steam last ran the game with, if it is still there and umu can use it (it has a
-// toolmanifest.vdf).
-std::optional<fs::path> steam_recorded_proton();
 // The umu setup: tools/umu-run, else umu-run on PATH; PROTONPATH from `proton`, else
-// steam_recorded_proton(), else umu's own; `prefix` default <data dir>/prefixes/umu (created).
+// umu's own (UMU-Proton); `prefix` default <data dir>/prefixes/umu (created).
 // Throws SetupError.
 Wine umu_setup(const fs::path& tools_dir, const std::optional<fs::path>& prefix, const std::optional<fs::path>& proton);
 // `name` on the host's PATH (an AppImage's own folders don't count), or `name` itself if it holds

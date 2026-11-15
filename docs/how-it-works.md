@@ -45,15 +45,16 @@ umu-run sc-inject.exe --game … --profile … --dll …
 ```
 
 with `WINEPREFIX` set to the launcher's own prefix (`prefixes/umu` in its data
-folder unless one is chosen), `GAMEID=umu-212070`, and `PROTONPATH` set to:
+folder unless one is chosen) and `GAMEID=umu-212070`. Proton is umu's own
+(UMU-Proton), so every player runs the same build; a Proton chosen in Settings
+(`--proton`, `STAR_FORGE_PROTON`: Steam's, GE, CachyOS…) is passed as
+`PROTONPATH` instead.
 
-1. the Proton chosen in Settings (`--proton`, `STAR_FORGE_PROTON`), else
-2. the Proton Steam last ran the game with, if it's still installed, else
-3. nothing, and umu downloads its own (UMU-Proton).
-
-umu downloads the runtime that Proton build asks for the first time (a few
-hundred MB, kept in `~/.local/share/umu`), so the first start takes longer and
-needs the internet. `PROTONPATH` and `GAMEID` set in the environment win.
+The first start downloads UMU-Proton (about 470 MB) and the Steam Linux
+Runtime it needs, about 2 GB once unpacked and shared with other umu games
+(the runtime in `~/.local/share/umu`; UMU-Proton in Steam's
+`compatibilitytools.d` if there is one, where Steam and the Proton picker
+also see it), so it takes longer and needs the internet. `PROTONPATH` and `GAMEID` set in the environment win.
 
 Nothing else comes from Steam, so the game folder may be anywhere (a copied
 install works; set it under **Settings → Star Conflict**), and it works with
