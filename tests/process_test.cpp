@@ -6,6 +6,11 @@
 
 #include "check.hpp"
 
+#ifndef _WIN32
+#include <csignal>
+#include <unistd.h>
+#endif
+
 using namespace sf::launch;
 using test::check;
 using test::contains;
@@ -114,6 +119,26 @@ int main(int argc, char** argv) {
         cmd.program = "/bin/sh";
         cmd.arg("-c").arg("kill -9 $$");
         check(!spawn(cmd).wait(), "killed by a signal: no exit code");
+    }
+    // The child starts clean: no inherited descriptors past stderr (Steam's Game Mode hands the
+    // launcher dozens without close-on-exec, which hung SteamLinuxRuntime's run script), and
+    // SIGPIPE at its default even though the launcher ignores it.
+    {
+        int leak[2];
+        check(pipe(leak) == 0, "pipe for the leak test");
+        void (*old)(int) = signal(SIGPIPE, SIG_IGN);
+        Command cmd;
+        cmd.program = "/bin/sh";
+        cmd.arg("-c").arg("ls /proc/$$/fd | tr '\\n' ' '; grep SigIgn /proc/$$/status");
+        std::string got = run(cmd);
+        signal(SIGPIPE, old);
+        close(leak[0]);
+        close(leak[1]);
+        check(contains(got, "0 1 2 ") && !contains(got, std::to_string(leak[0]) + " ") &&
+                  !contains(got, std::to_string(leak[1]) + " "),
+              "inherited descriptors are closed: " + got);
+        check(!contains(got, "0000000000001000") && !contains(got, "0000000000001004"),
+              "SIGPIPE is not ignored in the child: " + got);
     }
 #endif
 

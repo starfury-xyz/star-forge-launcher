@@ -9,9 +9,15 @@
 #include <windows.h>
 #else
 #include <cerrno>
+#include <climits>
+#include <csignal>
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 extern char** environ;
 #endif
 
@@ -210,6 +216,13 @@ Process spawn(const Command& cmd, const Output& out, bool) {
     const std::string out_file = out.kind == Output::Kind::File ? ustr(out.file) : "/dev/null";
 
     // The child reports a failed chdir/exec through this pipe (closed on a successful exec).
+    // The highest descriptor the child may have inherited, for closing them when close_range is
+    // not available.
+    rlimit lim{};
+    const int max_fd = getrlimit(RLIMIT_NOFILE, &lim) == 0 && lim.rlim_cur != RLIM_INFINITY
+                           ? static_cast<int>(std::min<rlim_t>(lim.rlim_cur, 65536))
+                           : 65536;
+
     int report[2];
     if (pipe2(report, O_CLOEXEC) != 0) throw std::runtime_error("could not start " + program + ": pipe failed");
     pid_t pid = fork();
@@ -229,6 +242,22 @@ Process spawn(const Command& cmd, const Output& out, bool) {
                 dup2(fd, 2);
             }
         }
+        // Start the child clean: only stdin/stdout/stderr (and the report pipe, closed on exec),
+        // nothing blocked, SIGPIPE back to default. Started from Steam in Game Mode, the launcher
+        // holds dozens of Steam/WebKit descriptors without close-on-exec; passing them on left
+        // SteamLinuxRuntime_sniper/run waiting forever on its own $(readlink) pipe.
+        auto close_from = [max_fd](int from, int to) {
+#ifdef __linux__
+            if (from > to || syscall(SYS_close_range, from, to, 0) == 0) return;
+#endif
+            for (int f = from; f <= to && f < max_fd; ++f) close(f);
+        };
+        close_from(3, report[1] - 1);
+        close_from(report[1] + 1, INT_MAX);
+        sigset_t none;
+        sigemptyset(&none);
+        sigprocmask(SIG_SETMASK, &none, nullptr);
+        signal(SIGPIPE, SIG_DFL);
         if (!cwd.empty() && chdir(cwd.c_str()) != 0) {
             int e = errno;
             (void)!write(report[1], &e, sizeof e);

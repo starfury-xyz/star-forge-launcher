@@ -6,6 +6,10 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- **Steam Deck Game Mode: the game no longer hangs at "Running" with no
+  window.** Started from Steam, the launcher passed dozens of Steam's open
+  handles on to the game's runtime, which then waited forever. Programs the
+  launcher starts now get only standard input/output.
 - **Linux: the game now runs through umu-launcher** (bundled) instead of
   Steam's own Proton setup. It uses umu's own Proton (UMU-Proton, the same
   for everyone; another build can be picked in Settings) in a prefix of the
