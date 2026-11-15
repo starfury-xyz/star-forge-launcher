@@ -1,0 +1,26 @@
+{
+  // Builds used by launch.json: the Linux launcher (build/linux) and the Windows tools it starts
+  // the game with (build/win64). Ctrl+Shift+B runs "build: all".
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build: linux",
+      "type": "shell",
+      "command": "cmake --preset linux && cmake --build --preset linux",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "build: win64 tools",
+      "type": "shell",
+      "command": "cmake --preset win64 && cmake --build --preset win64",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "build: all",
+      "dependsOn": ["build: linux", "build: win64 tools"],
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

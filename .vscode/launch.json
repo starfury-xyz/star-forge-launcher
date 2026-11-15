@@ -1,0 +1,44 @@
+{
+  // F5 builds (tasks.json "build: all") and starts the launcher from build/linux, with the Windows
+  // tools from build/win64. Needs the CodeLLDB extension (vadimcn.vscode-lldb).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "STAR FORGE launcher",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/star-forge",
+      "cwd": "${workspaceFolder}",
+      "env": { "STAR_FORGE_TOOLS_DIR": "${workspaceFolder}/build/win64" },
+      "preLaunchTask": "build: all"
+    },
+    {
+      "name": "sc-launch info",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/sc-launch",
+      "args": ["info"],
+      "cwd": "${workspaceFolder}",
+      "env": { "STAR_FORGE_TOOLS_DIR": "${workspaceFolder}/build/win64" },
+      "preLaunchTask": "build: all"
+    },
+    {
+      "name": "sc-launch run <profile>",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/sc-launch",
+      "args": ["run", "${input:profile}"],
+      "cwd": "${workspaceFolder}",
+      "env": { "STAR_FORGE_TOOLS_DIR": "${workspaceFolder}/build/win64" },
+      "preLaunchTask": "build: all"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "profile",
+      "type": "promptString",
+      "description": "Profile to run (sc-launch list shows them)",
+      "default": "local-no-server"
+    }
+  ]
+}
