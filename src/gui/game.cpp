@@ -6,6 +6,7 @@
 
 #include "gui/internal.hpp"
 #include "launch/env.hpp"
+#include "launch/gamescope.hpp"
 #include "launch/prepare.hpp"
 #include "launch/process.hpp"
 #include "launch/profiles.hpp"
@@ -120,7 +121,10 @@ launch::Options Backend::options() const {
         if (t.empty()) return std::nullopt;
         return launch::upath(t);
     };
-    launch::Options o{path(p.game_directory), tools_dir(), path(p.proton_path)};
+    launch::Options o;
+    o.game_dir = path(p.game_directory);
+    o.tools_dir = tools_dir();
+    o.proton = path(p.proton_path);
     if (const std::string r = trim(p.runner); !r.empty()) o.runner = r;
     o.wine_prefix = path(p.wine_prefix);
     return o;
@@ -225,6 +229,11 @@ void Backend::start_game() {
     }
     update_game([](Game& g) { g.phase = Phase::Running; });
 
+    // Steam Deck Game Mode: tag the game's windows so gamescope shows them (gamescope.hpp). The
+    // launcher has to stay running for that, so "exit" keeps it open there.
+    std::shared_ptr<launch::gamescope::WindowTagger> tagger;
+    if (auto app = launch::gamescope::app_id()) tagger = std::make_shared<launch::gamescope::WindowTagger>(*app);
+
     switch (prefs().launch_behavior) {
     case LaunchBehavior::Tray:
         try {
@@ -235,6 +244,7 @@ void Backend::start_game() {
         break;
     case LaunchBehavior::KeepOpen: break;
     case LaunchBehavior::Exit:
+        if (tagger) break;
         // The game keeps running on its own.
         host_.exit();
         return;
@@ -243,8 +253,9 @@ void Backend::start_game() {
     auto shared = prepared.shared;
     auto profile = prepared.profile;
     background(
-        [this, child, dir, shared, profile] {
+        [this, child, dir, shared, profile, tagger]() mutable {
             const std::optional<int> code = child->wait();
+            tagger.reset();
             try {
                 launch::profiles::sync_shared(dir, profile, shared);
             } catch (const std::exception& e) {

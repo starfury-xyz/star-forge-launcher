@@ -10,6 +10,10 @@ to **Unreleased** as you go and rename it to the version when you tag
   window.** Started from Steam, the launcher passed dozens of Steam's open
   handles on to the game's runtime, which then waited forever. Programs the
   launcher starts now get only standard input/output.
+- **Steam Deck Game Mode: the game window now shows** instead of the launcher.
+  umu turns off Steam's overlay library in Game Mode, which is what tags game
+  windows for the Deck's compositor; the launcher now tags them itself while
+  the game runs (so in Game Mode "Exit launcher" keeps it open).
 - **Linux: the game now runs through umu-launcher** (bundled) instead of
   Steam's own Proton setup. It uses umu's own Proton (UMU-Proton, the same
   for everyone; another build can be picked in Settings) in a prefix of the

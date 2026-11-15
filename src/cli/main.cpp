@@ -22,6 +22,7 @@
 #endif
 
 #include "launch/env.hpp"
+#include "launch/gamescope.hpp"
 #include "launch/launch.hpp"
 #include "launch/mods.hpp"
 #include "launch/packs.hpp"
@@ -421,7 +422,11 @@ int run(const std::vector<std::string>& args) {
         std::fflush(stdout);
         std::optional<int> code;
         try {
-            code = spawn(prepared.command).wait();
+            Process game = spawn(prepared.command);
+            // Steam Deck Game Mode: tag the game's windows so gamescope shows them.
+            std::optional<gamescope::WindowTagger> tagger;
+            if (auto app = gamescope::app_id()) tagger.emplace(*app);
+            code = game.wait();
         } catch (const std::exception& e) {
             throw std::runtime_error(std::string("could not start the injector: ") + e.what());
         }

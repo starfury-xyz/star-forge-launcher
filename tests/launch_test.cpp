@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "launch/env.hpp"
+#include "launch/gamescope.hpp"
 #include "launch/paths.hpp"
 #include "launch/steam.hpp"
 
@@ -146,5 +147,22 @@ int main() {
         check(!steam::is_game_dir(tmp / "exe_only"), "is_game_dir: win64/game.exe alone isn't enough");
     }
 
+    // Gamescope (Steam Deck Game Mode): which app id the game's windows get.
+    {
+        using sf::launch::gamescope::app_id;
+        using sf::launch::gamescope::is_wine_class;
+        check(app_id("gamescope", nullptr, "212070") == 212070u, "gamescope: a Steam game's id as is");
+        check(app_id(nullptr, "gamescope", "212070") == 212070u, "gamescope: XDG_SESSION_DESKTOP counts too");
+        // A non-Steam shortcut's 64-bit game id: the app id is its top 32 bits.
+        check(app_id("gamescope", nullptr, "16429544735187271680") == 3825301475u, "gamescope: a shortcut's app id");
+        check(!app_id("KDE", "KDE", "212070"), "gamescope: not in a gamescope session");
+        check(!app_id("gamescope", nullptr, nullptr) && !app_id("gamescope", nullptr, "") &&
+                  !app_id("gamescope", nullptr, "12x") && !app_id("gamescope", nullptr, "0"),
+              "gamescope: no usable SteamGameId");
+        check(is_wine_class("steam_app_212070") && is_wine_class("game.exe") && is_wine_class("SC-INJECT.EXE"),
+              "gamescope: Wine window classes");
+        check(!is_wine_class("Star-forge") && !is_wine_class(".exe") && !is_wine_class("steamwebhelper"),
+              "gamescope: other window classes");
+    }
     return test::failures ? 1 : 0;
 }

@@ -175,6 +175,7 @@ add_library(sf_launch STATIC
     src/crypto/random.cpp
     src/crypto/sha256.cpp
     src/launch/env.cpp
+    src/launch/gamescope.cpp
     src/launch/launch.cpp
     src/launch/mods.cpp
     src/launch/net.cpp
@@ -196,7 +197,7 @@ if(WIN32)
     target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt)  # registry (Steam's install path), downloads, random
 else()
     find_package(CURL REQUIRED)
-    target_link_libraries(sf_launch PUBLIC CURL::libcurl)
+    target_link_libraries(sf_launch PUBLIC CURL::libcurl ${CMAKE_DL_LIBS})  # dl: gamescope.cpp loads libxcb
 endif()
 # Development builds can read <repo>/.env at startup (machine-specific STAR_FORGE_* overrides,
 # see star-forge's .env.example). Off by default, so a release never does.
