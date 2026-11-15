@@ -6,6 +6,13 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Linux: the game can run with system Wine, `umu-run` or any Wine-style
+  command instead of Steam's Proton (**Settings → Star Conflict → Run the
+  game with**, `--runner`, `STAR_FORGE_RUNNER`), in a prefix of its own. It
+  needs nothing from Steam and works with a game folder outside Steam.
+- Started by Steam as a non-Steam game (Steam Deck), the launcher keeps the
+  shortcut's `SteamGameId` so the overlay and Game Mode follow the game.
+
 ## 0.3.0
 
 - **Rewritten in C++.** The launcher, `sc-launch`, the injector and the agent

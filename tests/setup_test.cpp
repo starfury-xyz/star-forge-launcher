@@ -236,6 +236,17 @@ int main() {
               "command: overlay preloaded once, Vulkan layer on");
         set_env("LD_PRELOAD", std::nullopt);
         check(command(s, profile, {}).env_value("LD_PRELOAD") == overlay, "command: overlay added to an empty LD_PRELOAD");
+        // Started by Steam as a non-Steam game: the shortcut's id stays for the overlay and gamescope.
+        set_env("SteamGameId", "3141592653");
+        {
+            const Command shortcut = command(s, profile, {});
+            check(shortcut.env_value("SteamGameId") == std::string("3141592653") &&
+                      shortcut.env_value("SteamOverlayGameId") == std::string("3141592653") &&
+                      shortcut.env_value("SteamAppId") == std::string("212070") &&
+                      shortcut.env_value("STEAM_COMPAT_APP_ID") == std::string("212070"),
+                  "command: a Steam shortcut's SteamGameId is kept, the game's appid still given");
+        }
+        set_env("SteamGameId", std::nullopt);
         check(command(s, profile, {}).args.back() == "Z:" + [&] { auto d = ustr(tools / "sc_agent.dll"); std::replace(d.begin(), d.end(), '/', '\\'); return d; }(),
               "command: no game args, no --");
         set_env("PRESSURE_VESSEL_FILESYSTEMS_RW", std::nullopt);
@@ -297,6 +308,63 @@ int main() {
               "server_command: the game's prefix, no overlay");
 #endif
     }
+
+#ifndef _WIN32
+    // Wine-style runners: `<runner> exe args` in a prefix of their own, nothing from Steam.
+    {
+        const fs::path bin = tmp / "bin";
+        touch(bin / "wine");
+        touch(bin / "umu-run");
+        const auto old_path = get_env("PATH");
+        set_env("PATH", ustr(bin) + ":/usr/bin");
+        set_env("STAR_FORGE_DATA_DIR", ustr(tmp / "data"));
+
+        check(find_on_path("wine") == bin / "wine", "find_on_path: on PATH");
+        check(!find_on_path("no-such-wine"), "find_on_path: missing");
+        check(find_on_path(ustr(bin / "umu-run")) == bin / "umu-run" && !find_on_path(ustr(tmp / "nope/wine")),
+              "find_on_path: a path is checked as given");
+        check(contains(setup_error([&] { wine_setup("no-such-wine", std::nullopt); }), "was not found on PATH"),
+              "wine_setup: a missing runner is named");
+
+        Options o = opts(tmp / "loose", tools);
+        o.runner = "wine";
+        Setup s = resolve(o);
+        check(!s.proton && s.wine && s.wine->program == bin / "wine" && !s.wine->umu &&
+                  s.wine->prefix == tmp / "data/prefix" && fs::is_directory(tmp / "data/prefix"),
+              "resolve: wine, the launcher's own prefix, a game outside any Steam library");
+        set_env("STAR_FORGE_RUNNER", "umu-run");
+        set_env("STAR_FORGE_WINEPREFIX", ustr(tmp / "pfx"));
+        Setup u = resolve(opts(game, tools));
+        check(u.wine && u.wine->umu && u.wine->prefix == tmp / "pfx", "resolve: STAR_FORGE_RUNNER and STAR_FORGE_WINEPREFIX");
+        set_env("STAR_FORGE_RUNNER", "proton");
+        check(resolve(opts(game, tools)).proton.has_value(), "resolve: STAR_FORGE_RUNNER=proton is Steam's Proton");
+        set_env("STAR_FORGE_RUNNER", std::nullopt);
+        set_env("STAR_FORGE_WINEPREFIX", std::nullopt);
+
+        const fs::path profile = fs::canonical(tmp / "profiles/starfury");
+        Command c = command(s, profile, {"-x"});
+        std::vector<std::string> want{ustr(tools / "sc-inject.exe"), "--game", tool_path(tmp / "loose/win64/game.exe"),
+                                      "--profile", tool_path(profile), "--dll", tool_path(tools / "sc_agent.dll"), "--", "-x"};
+        check(c.program == bin / "wine" && c.args == want, "command: wine sc-inject.exe <args> -- <game args>");
+        check(c.env_value("WINEPREFIX") == ustr(tmp / "data/prefix") && !c.env_value("STEAM_COMPAT_DATA_PATH") &&
+                  !c.env_value("ENABLE_VK_LAYER_VALVE_steam_overlay_1") && !c.env_value("GAMEID"),
+              "command: WINEPREFIX, nothing of Steam's");
+        check(command(u, profile, {}).env_value("GAMEID") == std::string("umu-212070"), "command: umu-run gets a GAMEID");
+        set_env("GAMEID", "umu-custom");
+        check(!command(u, profile, {}).env_value("GAMEID").has_value() ||
+                  command(u, profile, {}).env_value("GAMEID") == std::string("umu-custom"),
+              "command: the player's GAMEID is kept");
+        set_env("GAMEID", std::nullopt);
+
+        const Command sc = server_command(s, tmp / "server/cloud", "run");
+        check(sc.program == bin / "wine" && sc.args.front() == ustr(tools / "sc-server.exe") &&
+                  sc.env_value("WINEPREFIX") == ustr(tmp / "data/prefix"),
+              "server_command: wine sc-server.exe in the same prefix");
+
+        set_env("PATH", old_path);
+        set_env("STAR_FORGE_DATA_DIR", std::nullopt);
+    }
+#endif
 
     return test::failures ? 1 : 0;
 }

@@ -10,6 +10,7 @@
  *   fixLabel: string | null,
  *   gameDirectory: string | null,
  *   proton: string | null,
+ *   runner: string | null,
  * }} LauncherSnapshot
  */
 
@@ -77,6 +78,7 @@ export function parseSnapshot(input) {
     fixLabel: optionalText(value.fixLabel),
     gameDirectory: optionalText(value.gameDirectory),
     proton: optionalText(value.proton),
+    runner: optionalText(value.runner),
   });
 }
 

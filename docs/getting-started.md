@@ -77,7 +77,10 @@ modified: the profile's changes exist only while the game runs with it.
   closing the window, the colour theme (hover to preview), whether the
   selected server's pack styles the launcher, your own background folder, and
   update checks.
-- **Settings → Star Conflict**: the game folder and (Linux) the Proton build.
+- **Settings → Star Conflict**: the game folder and (Linux) what runs it:
+  Steam's Proton (and which build), or a Wine-style command such as `wine`
+  or `umu-run` with a prefix of its own (see
+  [How it works](how-it-works.md#linux-without-steams-proton)).
 - **Settings → Experimental**: shows the **Mods** and **Servers** pages, for
   switching single patches and running a server install
   ([Server hosting](server-hosting.md)). New and still changing.
@@ -129,3 +132,5 @@ Common causes:
 - **"…needs the Steam Linux Runtime…"** or **"…doesn't run inside the Steam
   Linux Runtime"** (Linux): install the runtime with **OPEN STEAM**, or choose a
   current Proton for Star Conflict in Steam (Properties → Compatibility).
+  Or set **Run the game with** to `wine` or `umu-run` in Settings, which
+  needs nothing from Steam.

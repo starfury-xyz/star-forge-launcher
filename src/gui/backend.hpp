@@ -75,6 +75,8 @@ struct Preferences {
     std::string background_folder;  // the player's own wallpapers; empty = Steam's banner
     std::string game_directory;     // empty = find through Steam
     std::string proton_path;        // Proton build folder (Linux); empty = the one that last ran the game
+    std::string runner;             // empty = Steam's Proton (Linux) / wine (macOS); else a Wine-style command
+    std::string wine_prefix;        // a Wine-style runner's prefix; empty = <data dir>/prefix
     bool check_updates = true;      // look for a new launcher version at startup
     bool experimental = false;      // show unfinished features (the Mods and Servers pages)
     bool setup_done = false;        // the first-run setup was finished

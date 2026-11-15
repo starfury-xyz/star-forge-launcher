@@ -9,6 +9,11 @@
 // (require_tool_appid in its toolmanifest.vdf), through the runtime's `run` script, as Steam does.
 // A build that names no runtime, or whose runtime isn't installed, is refused rather than run
 // against the host's libraries; the error says what to do in Steam.
+//
+// Instead of Steam's Proton, a Wine-style runner can be chosen: any program run as
+// `<runner> program.exe args` with WINEPREFIX set (wine, a Wine build, umu-run, or a wrapper
+// script). It uses a prefix of its own (by default <data dir>/prefix), needs nothing from Steam,
+// and so also works with a game outside a Steam library, without Steam, and on macOS.
 
 #include <cstdint>
 #include <optional>
@@ -50,6 +55,20 @@ struct Options {
     std::optional<fs::path> game_dir;   // holding win64\ and data\; found through Steam if unset
     std::optional<fs::path> tools_dir;  // sc-inject.exe + sc_agent.dll; defaults to this program's folder
     std::optional<fs::path> proton;     // Proton build to use instead of the one that last ran the prefix
+    // How to run our Windows tools (Linux, macOS): "proton" for Steam's Proton (the default on
+    // Linux), else a Wine-style command: a name looked up on PATH or a path (the default on macOS
+    // is "wine").
+    std::optional<std::string> runner;
+    std::optional<fs::path> wine_prefix;  // a Wine-style runner's WINEPREFIX; default <data dir>/prefix
+};
+
+inline constexpr const char* kProtonRunner = "proton";
+
+// A Wine-style runner: `program exe args` with WINEPREFIX=prefix.
+struct Wine {
+    fs::path program;  // as found on PATH
+    fs::path prefix;
+    bool umu = false;  // umu-run: also given GAMEID (umu-212070) unless the environment sets one
 };
 
 struct Proton {
@@ -62,7 +81,8 @@ struct Proton {
 struct Setup {
     fs::path game_dir;
     fs::path tools_dir;
-    std::optional<Proton> proton;  // Linux only
+    std::optional<Proton> proton;  // Linux, with Steam's Proton
+    std::optional<Wine> wine;      // with a Wine-style runner instead
     fs::path game_exe() const { return game_dir / "win64" / "game.exe"; }
 };
 
@@ -78,6 +98,20 @@ fs::path runtime_for(const fs::path& proton_dir, const std::vector<fs::path>& li
 // The Proton setup for the game's prefix in `game_library`. Throws SetupError.
 Proton detect_proton(const fs::path& steam_root, const fs::path& game_library, const std::vector<fs::path>& libraries,
                      const std::optional<fs::path>& proton_override);
+
+// --- Wine-style runners ---
+
+// The runner Options ask for, after STAR_FORGE_RUNNER and the platform default; "proton" or a
+// Wine-style command.
+std::string runner_name(const Options& opts);
+// `name` on the host's PATH (an AppImage's own folders don't count), or `name` itself if it holds
+// a '/' and is a file. nullopt if not found.
+std::optional<fs::path> find_on_path(const std::string& name);
+// The Wine setup for runner `name` and `prefix` (default <data dir>/prefix, created if missing).
+// Throws SetupError.
+Wine wine_setup(const std::string& name, const std::optional<fs::path>& prefix);
+// Wine-style runners found on PATH, for the settings page.
+std::vector<std::string> wine_candidates();
 
 // --- launch ---
 
@@ -95,8 +129,8 @@ std::string tool_path(const fs::path& path);
 // The command that runs sc-inject.exe for the profile in `profile_dir`. Throws std::runtime_error.
 Command command(const Setup& setup, const fs::path& profile_dir, const std::vector<std::string>& game_args);
 // The command that runs `sc-server.exe <verb> <cloud>` (verb "run" or "stop") for a server
-// install: in the game's Proton prefix on Linux, so the servers share the client's local
-// database and AppData. Throws std::runtime_error.
+// install: in the game's prefix on Linux and macOS (Proton's, or the Wine-style runner's), so the
+// servers share the client's local database and AppData. Throws std::runtime_error.
 Command server_command(const Setup& setup, const fs::path& cloud_dir, const std::string& verb);
 
 }  // namespace sf::launch

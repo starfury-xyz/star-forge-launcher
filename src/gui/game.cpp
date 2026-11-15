@@ -42,13 +42,16 @@ json Backend::snapshot() const {
     std::lock_guard<std::mutex> lock(game_->mu);
     const Game& g = *game_;
     const Phase phase = g.phase.value_or(Phase::Checking);
-    std::optional<std::string> proton;
+    std::optional<std::string> proton, runner;
 #ifndef _WIN32
     if (g.setup && g.setup->proton) {
         const auto& p = *g.setup->proton;
         const fs::path runtime = p.runtime.parent_path().filename();
         proton = ustr(p.dir) + " inside " + (runtime.empty() ? std::string("the Steam Linux Runtime") : ustr(runtime));
+        runner = proton;
     }
+    if (g.setup && g.setup->wine)
+        runner = ustr(g.setup->wine->program) + " with the prefix " + ustr(g.setup->wine->prefix);
 #endif
     json action = nullptr;
     if (phase == Phase::Ready) action = "launch";
@@ -62,6 +65,7 @@ json Backend::snapshot() const {
         {"fixLabel", g.fix ? json(g.fix->label()) : json(nullptr)},
         {"gameDirectory", g.setup ? json(ustr(g.setup->game_dir)) : json(nullptr)},
         {"proton", opt_str(proton)},
+        {"runner", opt_str(runner)},
     };
 }
 
@@ -110,7 +114,10 @@ launch::Options Backend::options() const {
         if (t.empty()) return std::nullopt;
         return launch::upath(t);
     };
-    return launch::Options{path(p.game_directory), tools_dir(), path(p.proton_path)};
+    launch::Options o{path(p.game_directory), tools_dir(), path(p.proton_path)};
+    if (const std::string r = trim(p.runner); !r.empty()) o.runner = r;
+    o.wine_prefix = path(p.wine_prefix);
+    return o;
 }
 
 void Backend::refresh() {
@@ -286,12 +293,12 @@ json Backend::perform_action(const std::string& action) {
 
 json Backend::detect_compat_tools() {
 #ifdef _WIN32
-    return nlohmann::ordered_json{{"supported", false}, {"proton", json::array()}};
+    return nlohmann::ordered_json{{"supported", false}, {"proton", json::array()}, {"wine", json::array()}};
 #else
     const auto roots = launch::steam::steam_roots();
     json proton = json::array();
     for (const auto& p : launch::proton_candidates(roots, launch::steam::libraries(roots))) proton.push_back(ustr(p));
-    return nlohmann::ordered_json{{"supported", true}, {"proton", proton}};
+    return nlohmann::ordered_json{{"supported", true}, {"proton", proton}, {"wine", launch::wine_candidates()}};
 #endif
 }
 

@@ -136,7 +136,7 @@ void prefs(const fs::path& data) {
     const json defaults = call("get_launcher_preferences");
     check(defaults.dump() ==
               R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","experimental":false,"factionTheme":"starforge","gameDirectory":"",)"
-              R"("launchBehavior":"tray","packBranding":true,"protonPath":"","selectedProfile":"","setupDone":false})",
+              R"("launchBehavior":"tray","packBranding":true,"protonPath":"","runner":"","selectedProfile":"","setupDone":false,"winePrefix":""})",
           "defaults: " + defaults.dump());
 
     test::write_file(data / "launcher.json", R"({"selectedProfile":"x","bogus":1})");
@@ -154,7 +154,7 @@ void prefs(const fs::path& data) {
     check(test::read_file(data / "launcher.json") ==
               "{\n  \"selectedProfile\": \"\",\n  \"launchBehavior\": \"keepOpen\",\n  \"closeBehavior\": \"exit\",\n"
               "  \"factionTheme\": \"starforge\",\n  \"packBranding\": true,\n  \"backgroundFolder\": \"\",\n"
-              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"checkUpdates\": true,\n  \"experimental\": false,\n"
+              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"runner\": \"\",\n  \"winePrefix\": \"\",\n  \"checkUpdates\": true,\n  \"experimental\": false,\n"
               "  \"setupDone\": false\n}",
           "launcher.json laid out as serde_json's to_string_pretty");
     check(!fs::exists(data / "launcher.json.tmp"), "no temporary file left");

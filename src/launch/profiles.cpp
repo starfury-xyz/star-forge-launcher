@@ -274,6 +274,15 @@ std::optional<fs::path> shared_local_appdata(const Setup& setup) {
     if (auto v = get_env("LOCALAPPDATA")) return upath(*v);
     return std::nullopt;
 #else
+    if (setup.wine) {
+        // Proton-based runners (umu-run) name the user steamuser; Wine uses the login name.
+        const fs::path users = setup.wine->prefix / "drive_c/users";
+        if (dir_exists(users / "steamuser")) return users / "steamuser/AppData/Local";
+        auto user = get_env("USER");
+        if (!user || user->empty()) user = get_env("LOGNAME");
+        if (!user || user->empty()) return std::nullopt;
+        return users / upath(*user) / "AppData/Local";
+    }
     if (!setup.proton) return std::nullopt;
     return setup.proton->compat_data / "pfx/drive_c/users/steamuser/AppData/Local";
 #endif

@@ -67,7 +67,7 @@ std::optional<fs::path> find_pack(const fs::path& profiles_dir, const std::strin
 // everywhere, so they're synced with the game's normal folder before and after each session,
 // newest copy wins.
 
-// The game's normal %LOCALAPPDATA%: inside the Proton prefix on Linux.
+// The game's normal %LOCALAPPDATA%: inside the Proton or Wine prefix on Linux and macOS.
 std::optional<fs::path> shared_local_appdata(const Setup& setup);
 // The profile's own %LOCALAPPDATA%.
 fs::path profile_local_appdata(const fs::path& profile_dir);

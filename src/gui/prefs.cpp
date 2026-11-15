@@ -58,6 +58,8 @@ nlohmann::ordered_json Preferences::to_json() const {
             {"backgroundFolder", background_folder},
             {"gameDirectory", game_directory},
             {"protonPath", proton_path},
+            {"runner", runner},
+            {"winePrefix", wine_prefix},
             {"checkUpdates", check_updates},
             {"experimental", experimental},
             {"setupDone", setup_done}};
@@ -74,6 +76,8 @@ Preferences Preferences::from_json(const json& j) {
     if (auto v = o.get("backgroundFolder")) p.background_folder = serde::str(*v);
     if (auto v = o.get("gameDirectory")) p.game_directory = serde::str(*v);
     if (auto v = o.get("protonPath")) p.proton_path = serde::str(*v);
+    if (auto v = o.get("runner")) p.runner = serde::str(*v);
+    if (auto v = o.get("winePrefix")) p.wine_prefix = serde::str(*v);
     if (auto v = o.get("checkUpdates")) p.check_updates = serde::boolean(*v);
     if (auto v = o.get("experimental")) p.experimental = serde::boolean(*v);
     if (auto v = o.get("setupDone")) p.setup_done = serde::boolean(*v);
@@ -136,7 +140,7 @@ json Backend::update_preferences(const json& update) {
         throw std::runtime_error("invalid value for " + key + ": " + e.what());
     }
     Preferences next = modify_prefs([&](Preferences& p) { p = parsed; });
-    if (key == "gameDirectory" || key == "protonPath") refresh();
+    if (key == "gameDirectory" || key == "protonPath" || key == "runner" || key == "winePrefix") refresh();
     return next.to_json();
 }
 

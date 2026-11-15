@@ -100,12 +100,16 @@ const char* kUsage =
     "  --game-dir <dir>       Star Conflict install (default: found through Steam)\n"
     "  --tools-dir <dir>      Folder with sc-inject.exe and sc_agent.dll (default: next to sc-launch)\n"
     "  --proton <dir>         Proton build to use (Linux; default: the one that last ran the game)\n"
+    "  --runner <cmd>         proton (Steam's Proton, the Linux default) or a Wine-style command such as\n"
+    "                         wine, umu-run or a wrapper script, run as <cmd> program.exe args\n"
+    "  --wine-prefix <dir>    WINEPREFIX for a Wine-style runner (default: <data dir>/prefix)\n"
     "  --yes                  Install without asking for confirmation\n"
     "  --key <file>           Pack signing key, for pack sign and pack files\n"
     "  --base-url <url>       Where the files of a pack files list will be hosted\n"
     "\n"
     "ENVIRONMENT (used when the matching option is not given):\n"
-    "  STAR_FORGE_GAME_DIR, STAR_FORGE_TOOLS_DIR, STAR_FORGE_PROTON, STAR_FORGE_DATA_DIR\n"
+    "  STAR_FORGE_GAME_DIR, STAR_FORGE_TOOLS_DIR, STAR_FORGE_PROTON, STAR_FORGE_RUNNER,\n"
+    "  STAR_FORGE_WINEPREFIX, STAR_FORGE_DATA_DIR\n"
     "  Development builds also read them from the repo's .env file.\n";
 
 struct Cli {
@@ -130,6 +134,8 @@ Cli parse(const std::vector<std::string>& args) {
         else if (a == "--game-dir") cli.opts.game_dir = upath(value());
         else if (a == "--tools-dir") cli.opts.tools_dir = upath(value());
         else if (a == "--proton") cli.opts.proton = upath(value());
+        else if (a == "--runner") cli.opts.runner = value();
+        else if (a == "--wine-prefix") cli.opts.wine_prefix = upath(value());
         else if (a == "--key") cli.key = upath(value());
         else if (a == "--base-url") cli.base_url = value();
         else if (a == "-h" || a == "--help") cli.command = {"help"};
@@ -388,6 +394,10 @@ int run(const std::vector<std::string>& args) {
             std::printf("proton:   %s\n", ustr(setup.proton->dir).c_str());
             std::printf("runtime:  %s (Proton runs inside this container)\n", ustr(setup.proton->runtime).c_str());
             std::printf("prefix:   %s\n", ustr(setup.proton->compat_data).c_str());
+        }
+        if (setup.wine) {
+            std::printf("runner:   %s%s\n", ustr(setup.wine->program).c_str(), setup.wine->umu ? " (umu)" : "");
+            std::printf("prefix:   %s\n", ustr(setup.wine->prefix).c_str());
         }
         return 0;
     }

@@ -52,6 +52,32 @@ runtime, or whose runtime isn't installed, is refused with a message saying
 what to do in Steam (and the play button opens Steam for it). `sc-launch info`
 shows the Proton, runtime and prefix in use.
 
+## Linux without Steam's Proton
+
+**Settings → Star Conflict → Run the game with** (`--runner`,
+`STAR_FORGE_RUNNER`) can name a Wine-style command instead: `wine`, a Wine
+build, `umu-run`, or a wrapper script. The launcher then runs
+
+```
+<runner> sc-inject.exe --game … --profile … --dll …
+```
+
+with `WINEPREFIX` set to a prefix of its own (`prefix/` in the launcher's data
+folder unless one is chosen), which Wine sets up on first use. Nothing comes
+from Steam: no runtime, no overlay, no `compatdata`, and the game folder may be
+anywhere. This suits a launcher started by Steam as a non-Steam game, a Steam
+running in another container, or no Steam at all, and it is the default on
+macOS. `umu-run` also gets `GAMEID=umu-212070` unless the environment sets one;
+other variables (`PROTONPATH`, `WINEDLLOVERRIDES`, `DXVK_*`…) pass through.
+Plain Wine draws with its own Direct3D unless DXVK is installed in the prefix.
+
+The prefix is not Steam's, so the game's normal AppData there starts empty;
+profiles that keep their own game data (the default) aren't affected.
+
+When the launcher itself was started by Steam (as a non-Steam game, as on a
+Steam Deck), the Proton path keeps Steam's `SteamGameId` so the overlay and
+Game Mode's window focus follow the shortcut.
+
 ## The agent
 
 The agent runs inside the game before any of the game's own code:

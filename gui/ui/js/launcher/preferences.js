@@ -15,6 +15,8 @@ export function parsePreferences(input) {
     closeBehavior: choice(value.closeBehavior, ['tray', 'exit']),
     gameDirectory: string(value.gameDirectory),
     protonPath: string(value.protonPath),
+    runner: string(value.runner),
+    winePrefix: string(value.winePrefix),
     checkUpdates: boolean(value.checkUpdates),
     experimental: boolean(value.experimental),
   };

@@ -10,7 +10,7 @@ const themeName = (name) => brand(name[0].toUpperCase() + name.slice(1));
  * @param {ReturnType<typeof import('./state.js').createLauncherStore>} store */
 export async function bindSettings(preferences, store) {
   let tab = 'launcher';
-  let compat = { supported: false, proton: /** @type {string[]} */ ([]) };
+  let compat = { supported: false, proton: /** @type {string[]} */ ([]), wine: /** @type {string[]} */ ([]) };
   const area = required('settings-content');
   /** @param {string} title @param {string} note @param {string} id @param {string} input */
   const row = (title, note, id, input) =>
@@ -36,7 +36,9 @@ export async function bindSettings(preferences, store) {
       ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', '<input id="game-directory" data-preference="gameDirectory" type="text" spellcheck="false" placeholder="Found through Steam">')}
       <p class="settings-path" id="detected-game"></p></section>
       <section class="setting-group" ${compat.supported ? '' : 'hidden'}><h2>Compatibility</h2>
-      ${row('Proton version', 'Automatic uses the Proton that last ran the game from Steam, with the same prefix and saved settings.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}
+      ${row('Run the game with', 'Automatic uses Steam’s Proton. Or name a Wine-style command (wine, umu-run, a Wine build or a wrapper script), run as <i>command</i> program.exe; it uses a prefix of its own and needs nothing from Steam.', 'runner', '<input id="runner" data-preference="runner" type="text" spellcheck="false" list="runner-list" placeholder="Automatic"><datalist id="runner-list"></datalist>')}
+      <div id="proton-settings">${row('Proton version', 'Automatic uses the Proton that last ran the game from Steam, with the same prefix and saved settings.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}</div>
+      <div id="wine-settings" hidden>${row('Wine prefix', 'Leave empty for the launcher’s own prefix in its data folder.', 'wine-prefix', '<input id="wine-prefix" data-preference="winePrefix" type="text" spellcheck="false" placeholder="Launcher’s own prefix">')}</div>
       <p class="settings-path" id="detected-proton"></p></section>
       <section class="setting-group"><h2>Setup</h2>
       ${row('Run setup again', 'Pick the Star Conflict and profiles folders again, as on first start.', 'run-setup', '<span class="confirm-inline"><button class="button" id="run-setup">Run setup…</button><span id="run-setup-confirm" hidden>Open the setup now? <button class="button primary" id="run-setup-yes">Run setup</button><button class="button" id="run-setup-no">Cancel</button></span></span>')}</section>
@@ -46,6 +48,13 @@ export async function bindSettings(preferences, store) {
       if (select instanceof HTMLSelectElement)
         for (const path of compat.proton)
           select.add(new Option(path.split(/[\\/]/).filter(Boolean).pop() || path, path));
+      const list = area.querySelector('#runner-list');
+      if (list)
+        for (const name of ['proton', ...compat.wine]) {
+          const option = document.createElement('option');
+          option.value = name;
+          list.append(option);
+        }
     }
     sync();
   };
@@ -81,8 +90,11 @@ export async function bindSettings(preferences, store) {
         : state?.phase === 'checking'
           ? 'Looking for the game…'
           : 'Star Conflict was not found.';
+    const wineStyle = values.runner !== '' && values.runner !== 'proton';
+    area.querySelector('#proton-settings')?.toggleAttribute('hidden', wineStyle);
+    area.querySelector('#wine-settings')?.toggleAttribute('hidden', !wineStyle);
     const proton = area.querySelector('#detected-proton');
-    if (proton) proton.textContent = state?.proton ? `Using ${state.proton}` : '';
+    if (proton) proton.textContent = state?.runner ? `Using ${state.runner}` : '';
   };
   // Theme picker: hovering or arrowing through themes previews them on the
   // whole launcher; closing without choosing puts the saved one back.
@@ -166,7 +178,13 @@ export async function bindSettings(preferences, store) {
       run(() => preferences.update(key, choice(input.value, ['tray', 'exit'])));
     else if ((key === 'packBranding' || key === 'checkUpdates' || key === 'experimental') && input instanceof HTMLInputElement)
       run(() => preferences.update(key, input.checked));
-    else if (key === 'gameDirectory' || key === 'protonPath' || key === 'backgroundFolder')
+    else if (
+      key === 'gameDirectory' ||
+      key === 'protonPath' ||
+      key === 'runner' ||
+      key === 'winePrefix' ||
+      key === 'backgroundFolder'
+    )
       run(() => preferences.update(key, input.value.trim()));
   });
   document.addEventListener('click', (event) => {
@@ -205,6 +223,7 @@ export async function bindSettings(preferences, store) {
     compat = {
       supported: boolean(value.supported),
       proton: Array.isArray(value.proton) ? value.proton.map(string) : [],
+      wine: Array.isArray(value.wine) ? value.wine.map(string) : [],
     };
     required('launcher-version').textContent = `STAR FORGE Launcher ${string(await invoke('app_version'))}`;
     render();
