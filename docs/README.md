@@ -15,6 +15,8 @@
   and what players see.
 - [Client patches](client-patches.md): patchsets and native plugins
   (experimental).
+- [Mods](mods.md): player-installed client mods, the mod format, data
+  patches and Lua hooks (design draft).
 - [Server hosting](server-hosting.md): running and patching a server install
   from the launcher (experimental).
 
