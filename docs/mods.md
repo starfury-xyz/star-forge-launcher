@@ -52,6 +52,9 @@ game folder by hand. Plain files work that way; [data patches](#data-patches),
 
 ## Packs that restrict mods
 
+> **Deferred.** Not part of the first version: every installed mod loads.
+> This section is the plan for later.
+
 A pack can limit which mods its players load (a competitive server, say), in
 `pack.json`:
 
