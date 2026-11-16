@@ -196,6 +196,8 @@ add_library(sf_launch STATIC
     src/launch/signing.cpp
     src/launch/trust.cpp
     src/launch/steam.cpp
+    src/mod/blocks.cpp
+    src/mod/sfpatch.cpp
     src/pack/pack.cpp
 )
 target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher miniz)
@@ -395,6 +397,25 @@ if(BUILD_TESTING)
     add_executable(mods_test tests/mods_test.cpp)
     target_link_libraries(mods_test PRIVATE sf_launch)
     add_test(NAME mods COMMAND mods_test)
+    add_executable(sfpatch_test tests/sfpatch_test.cpp)
+    target_link_libraries(sfpatch_test PRIVATE sf_launch)
+    # Optional: the game folder and a coms-retro-sc-ui checkout, for the checks against real files.
+    set(_game "$ENV{HOME}/.local/share/Steam/steamapps/common/star conflict")
+    set(_retro "${CMAKE_SOURCE_DIR}/../coms-retro-sc-ui")
+    foreach(_v GAME RETRO)
+        string(TOLOWER ${_v} _l)
+        if(NOT DEFINED SF_${_v}_DIR AND CMAKE_HOST_UNIX AND IS_DIRECTORY "${_${_l}}")
+            if(WIN32)
+                string(REPLACE "/" "\\" _z "${_${_l}}")
+                set(SF_${_v}_DIR "Z:${_z}")
+            else()
+                set(SF_${_v}_DIR "${_${_l}}")
+            endif()
+        endif()
+    endforeach()
+    set(SF_GAME_DIR "${SF_GAME_DIR}" CACHE STRING "Game folder for sfpatch_test (empty: skip that part)")
+    set(SF_RETRO_DIR "${SF_RETRO_DIR}" CACHE STRING "coms-retro-sc-ui checkout for sfpatch_test (empty: skip)")
+    add_test(NAME sfpatch COMMAND sfpatch_test "${SF_GAME_DIR}" "${SF_RETRO_DIR}")
     add_executable(gui_test tests/gui_test.cpp)
     target_link_libraries(gui_test PRIVATE sf_gui monocypher)
     if(WIN32)
@@ -406,7 +427,7 @@ if(BUILD_TESTING)
     target_link_libraries(cli_test PRIVATE sf_launch)
     add_dependencies(cli_test sc_launch)
     add_test(NAME cli COMMAND cli_test $<TARGET_FILE:sc_launch>)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli gui)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli gui sfpatch)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")

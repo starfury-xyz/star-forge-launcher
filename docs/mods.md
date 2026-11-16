@@ -201,6 +201,7 @@ A selector picks blocks by path, from the top of the file:
 | `Texture[name="ItemSubtype_FocusedRay"]` | `Texture` blocks with a line `name "ItemSubtype_FocusedRay"` directly inside. |
 | `Item[fileName="ui\scripts\work\uigamefuncs.lua"]` | The resource entry for that script. |
 | `*` | Any header. |
+| `.` | The top level of the file (for `set`, `unset` and `add into`), e.g. `set . { base_res 3440 1440 }`. |
 
 Headers and keys compare without regard to case and to runs of spaces or tabs;
 values compare exactly, quotes removed.
