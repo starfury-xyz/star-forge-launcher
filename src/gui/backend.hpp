@@ -158,6 +158,7 @@ private:
     json get_artwork();
     json view_game_install();
     json view_launch_log();
+    json view_game_logs();  // the game's own logs folder for the selected profile
     void cancel_download(uint64_t id);
     json list_profiles();
     json save_profile(const json& profile);

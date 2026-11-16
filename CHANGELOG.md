@@ -15,6 +15,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 - **Folder settings are picked, not typed**: the game folder, Wine prefix and
   background folder have Browse… and Clear buttons, and only accept a folder
   that exists.
+- **Open game logs** (Settings → Star Conflict → Folders and logs) opens the
+  game's own logs folder for the selected profile.
 
 - **Steam Deck Game Mode: the game no longer hangs at "Running" with no
   window.** Started from Steam, the launcher passed dozens of Steam's open

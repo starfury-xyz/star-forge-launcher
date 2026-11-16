@@ -388,6 +388,32 @@ json Backend::view_game_install() {
     return nullptr;
 }
 
+// The game writes its logs under LOCALAPPDATA: the profile's own state/ folder, or the shared one
+// (the prefix's on Linux) for a profile that shares the game's data.
+json Backend::view_game_logs() {
+    const std::string selected = prefs().selected_profile;
+    if (selected.empty() || !launch::profiles::valid_name(selected)) throw std::runtime_error("Choose a server profile first.");
+    const fs::path dir = profiles_dir() / launch::upath(selected);
+    bool own = true;
+    try {
+        own = pack::Profile::load(dir).own_game_data;
+    } catch (const std::exception&) {
+    }
+    std::optional<fs::path> local;
+    if (own) {
+        local = launch::profiles::profile_local_appdata(dir);
+    } else {
+        std::lock_guard<std::mutex> lock(game_->mu);
+        if (game_->setup) local = launch::profiles::shared_local_appdata(*game_->setup);
+    }
+    if (!local) throw std::runtime_error("The game folder has not been found yet.");
+    const fs::path logs = *local / launch::upath(launch::profiles::kGameDataFolder) / "logs";
+    std::error_code ec;
+    if (!fs::is_directory(logs, ec)) throw std::runtime_error("The game has not written any logs for this profile yet.");
+    host_.open(ustr(logs));
+    return nullptr;
+}
+
 json Backend::view_launch_log() {
     auto log = launch_log();
     std::error_code ec;
