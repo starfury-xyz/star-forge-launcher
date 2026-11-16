@@ -105,7 +105,8 @@ int main() {
 
     // a: a folder mod with a script, a patch and a file.
     write(mods / "a/mod.json", manifest("a", R"(,"needs":["loose-before-packed"],
-          "scripts":[{"file":"ui\\mods\\a\\a.lua","after":"ui\\scripts\\work\\uigamefuncs.lua"}],
+          "scripts":[{"file":"ui\\mods\\a\\a.txt","type":"TEXTURE","after":"ui\\scripts\\work\\uigamefuncs.lua"},
+                     {"file":"ui\\mods\\a\\a.lua","after":"ui\\scripts\\work\\uigamefuncs.lua"}],
           "lua":{"replaces":["UI.Wnd:Update"]})"));
     write(mods / "a/files/data/ui/mods/a/a.lua", "-- a");
     write(mods / "a/files/data/ui/shared.dds", "a");
@@ -167,8 +168,9 @@ int main() {
     check(broken_noted && !contains(icons, "rect \"5\""), "a failing .sfpatch is left out whole (its first op too)");
     // Script registered right after uigamefuncs.lua, CRLF kept.
     std::string res = test::read_file(mods / ".merged/data/ui/uiresources.txt");
-    check(contains(res, "uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n}\r\nItem\r\n{\r\n\tfileName \"ui\\mods\\a\\a.lua\"\r\n"),
+    check(contains(res, "uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n}\r\nItem\r\n{\r\n\tfileName \"ui\\mods\\a\\a.txt\"\r\n"),
           "scripts: registered after the named script");
+    check(res.find("a\\a.txt") < res.find("a\\a.lua"), "scripts with the same anchor keep their order");
     // Whole files and Lua.
     check(has_conflict(r, "file data/ui/shared.dds", {"b", "a"}), "conflict: same file in two mods");
     check(has_conflict(r, "lua UI.Wnd:Update", {"b", "a"}), "conflict: same Lua function replaced");

@@ -205,7 +205,14 @@ std::string rel_slash(const fs::path& p, const fs::path& base) {
 // The uiresources.txt patch for a mod's `scripts`.
 std::string scripts_patch(const mod::Manifest& m) {
     std::string out = "patch \"data/ui/uiresources.txt\"\n{\n";
-    for (const auto& s : m.scripts) {
+    // Entries keep the order they're listed in: one with the same `after` as the entry before it
+    // goes after that entry, not straight after the shared anchor (which would reverse them).
+    std::optional<std::string> prev_after, prev_file;
+    for (mod::Script s : m.scripts) {
+        const std::optional<std::string> written = s.after;
+        if (s.after && prev_after && *s.after == *prev_after) s.after = prev_file;
+        prev_after = written;
+        prev_file = s.file;
         std::string item = "\t\tItem\n\t\t{\n\t\t\tfileName \"" + s.file + "\"\n\t\t\tresourceType \"" + s.type +
                            "\"\n\t\t\tloadingGroups \"" + s.groups + "\"\n\t\t}\n";
         if (s.after)
