@@ -407,7 +407,8 @@ json Backend::view_game_logs() {
         if (game_->setup) local = launch::profiles::shared_local_appdata(*game_->setup);
     }
     if (!local) throw std::runtime_error("The game folder has not been found yet.");
-    const fs::path logs = *local / launch::upath(launch::profiles::kGameDataFolder) / "logs";
+    fs::path logs = *local / launch::upath(launch::profiles::kGameDataFolder) / "logs";
+    logs.make_preferred();  // kGameDataFolder has a /, which Explorer would be shown as is
     std::error_code ec;
     if (!fs::is_directory(logs, ec)) throw std::runtime_error("The game has not written any logs for this profile yet.");
     host_.open(ustr(logs));

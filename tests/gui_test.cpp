@@ -234,7 +234,8 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     check(error_of("view_game_logs") == "The game has not written any logs for this profile yet.", "no game logs yet");
     fs::create_directories(profiles / "my-server/state/AppData/Local/Targem/StarConflict/logs");
     call("view_game_logs");
-    check(host.last_opened() == ustr(profiles / "my-server/state/AppData/Local/Targem/StarConflict/logs"), "the profile's game logs open");
+    check(host.last_opened() == ustr(fs::path(profiles / "my-server/state/AppData/Local/Targem/StarConflict/logs").make_preferred()),
+          "the profile's game logs open: " + host.last_opened());
     check(call("save_profile", input(nullptr, "My Server", "", false, true)) == "my-server-2" && b.prefs().selected_profile == "my-server",
           "a second one: a free name, selection kept");
     test::write_file(profiles / "my-server/files/data/address.cfg", "set net_masterServerAddress \"STARFURY.XYZ:3801\"\r\n");
