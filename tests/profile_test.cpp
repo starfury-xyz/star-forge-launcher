@@ -153,5 +153,23 @@ int main() {
     check(profile_file(L"Z:\\p\\", L"data\\a.cfg") == L"Z:\\p\\files\\data\\a.cfg", "profile_file joins");
     check(state_local_appdata(L"Z:\\p\\") == L"Z:\\p\\state\\AppData\\Local", "state_local_appdata joins");
 
+    // mods\.layers, as the launcher's mod loader writes it.
+    {
+        std::wstring dir = make(L"mods", kMinimalPack);
+        check(mod_layers(dir).layers.empty() && mod_layers(dir).skipped.empty(), "mod_layers: no file, no layers");
+        CreateDirectoryW((dir + L"\\mods").c_str(), nullptr);
+        test::write_file(dir + L"\\mods\\.layers",
+                         "# comment\nfingerprint abc123\nmod b 1.0.0\nmod a 1.0.0\ncore loose-before-packed\n"
+                         "layer mods/.merged\r\nlayer mods/a/files\nlayer mods/../files\nlayer files\n"
+                         "layer mods/x:y\nwhatever\n");
+        ModLayers m = mod_layers(dir);
+        check(m.fingerprint == "abc123" && m.mods.size() == 2 && m.core == std::vector<std::string>{"loose-before-packed"},
+              "mod_layers: fingerprint, mods and core patches");
+        check(m.layers.size() == 2 && m.layers[0] == normalize(dir) + L"\\mods\\.merged" &&
+                  m.layers[1] == normalize(dir) + L"\\mods\\a\\files",
+              "mod_layers: layers made absolute, CRLF tolerated");
+        check(m.skipped.size() == 4, "mod_layers: .., outside mods/, : and unknown lines skipped");
+    }
+
     return test::failures ? 1 : 0;
 }

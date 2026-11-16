@@ -216,6 +216,48 @@ std::optional<std::string> patches_rel(const std::string& path) {
     return rel;
 }
 
+ModLayers mod_layers(const std::wstring& profile_dir) {
+    ModLayers out;
+    std::string text;
+    if (read_file(normalize(profile_dir) + L"\\mods\\.layers", text)) return out;
+    std::size_t p = 0;
+    while (p < text.size()) {
+        std::size_t e = text.find('\n', p);
+        std::string line = trim(text.substr(p, e == std::string::npos ? std::string::npos : e - p));
+        p = e == std::string::npos ? text.size() : e + 1;
+        if (line.empty() || line[0] == '#') continue;
+        std::size_t sp = line.find(' ');
+        std::string key = line.substr(0, sp), value = sp == std::string::npos ? "" : trim(line.substr(sp + 1));
+        if (key == "fingerprint") {
+            out.fingerprint = value;
+        } else if (key == "mod") {
+            out.mods.push_back(value);
+        } else if (key == "core" && !value.empty()) {
+            out.core.push_back(value);
+        } else if (key == "layer" && value.rfind("mods/", 0) == 0 && value.find_first_of("\\:") == std::string::npos) {
+            bool plain = true;
+            std::size_t s = 0;
+            while (plain) {
+                std::size_t n = value.find('/', s);
+                std::string part = value.substr(s, n == std::string::npos ? std::string::npos : n - s);
+                if (part.empty() || part == "." || part == "..") plain = false;
+                if (n == std::string::npos) break;
+                s = n + 1;
+            }
+            if (!plain) {
+                out.skipped.push_back(line);
+                continue;
+            }
+            std::wstring rel = wide(value);
+            std::replace(rel.begin(), rel.end(), L'/', L'\\');
+            out.layers.push_back(normalize(profile_dir) + L"\\" + rel);
+        } else {
+            out.skipped.push_back(line);
+        }
+    }
+    return out;
+}
+
 std::wstring profile_file(const std::wstring& profile_dir, const std::wstring& rel) {
     return normalize(profile_dir) + L"\\" + kFilesDir + L"\\" + rel;
 }

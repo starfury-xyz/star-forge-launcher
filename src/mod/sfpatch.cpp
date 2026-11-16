@@ -317,7 +317,46 @@ const char* op_name(Op::Kind k) {
     return "?";
 }
 
-std::vector<Edit> edits_for(const Doc& d, const Node& root, const Op& op, std::string& err) {
+std::string name_segment(std::string_view t, const Node& n, const std::vector<Node>& siblings);
+
+std::string lower_ascii(std::string s) {
+    for (char& c : s)
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return s;
+}
+
+// The address of `target` under `parent` ("" if not found): its path, each step named uniquely.
+bool address_walk(std::string_view t, const Node& parent, const Node* target, std::string prefix, std::string& out) {
+    for (const auto& c : parent.children) {
+        if (!c.block) continue;
+        bool hit = &c == target;
+        bool inside = !hit && c.open <= target->open && target->close <= c.close;
+        if (!hit && !inside) continue;
+        std::string seg;
+        try {
+            seg = name_segment(t, c, parent.children);
+        } catch (const PatchError&) {
+            seg = std::string(t.substr(c.begin, c.open - c.begin)) + "@" + std::to_string(line_of(t, c.begin));
+        }
+        std::string path = prefix.empty() ? seg : prefix + "/" + seg;
+        if (hit) {
+            out = path;
+            return true;
+        }
+        return address_walk(t, c, target, path, out);
+    }
+    return false;
+}
+
+std::string address_of(const Doc& d, const Node& root, const Node* target) {
+    if (target == &root) return ".";
+    std::string out;
+    address_walk(d.text, root, target, "", out);
+    return out;
+}
+
+std::vector<Edit> edits_for(const Doc& d, const Node& root, const Op& op, std::string& err,
+                            std::vector<std::string>* touched) {
     std::vector<Edit> edits;
     if (op.kind == Op::Kind::Add) {
         edits.push_back(insert_into(d, root, op.body));
@@ -334,6 +373,14 @@ std::vector<Edit> edits_for(const Doc& d, const Node& root, const Op& op, std::s
         return {};
     }
     for (const Node* n : targets) {
+        if (touched) {
+            std::string a = address_of(d, root, n);
+            if (op.kind == Op::Kind::Set || op.kind == Op::Kind::Unset) {
+                for (const auto& en : op.entries) touched->push_back(a + "#" + lower_ascii(en.key));
+            } else if (op.kind == Op::Kind::Replace || op.kind == Op::Kind::Remove) {
+                touched->push_back(a);
+            }
+        }
         switch (op.kind) {
         case Op::Kind::Set:
         case Op::Kind::Unset:
@@ -494,7 +541,16 @@ Patch parse_patch(std::string_view text, const std::string& name) {
 
 // --- apply ----------------------------------------------------------------------------------
 
-std::string apply(std::string text, const FilePatch& patch, const std::string& patch_name) {
+bool overlaps(const std::string& a, const std::string& b) {
+    if (a == b) return true;
+    const std::string& s = a.size() < b.size() ? a : b;
+    const std::string& l = a.size() < b.size() ? b : a;
+    if (s == ".") return l.rfind(".#", 0) == 0;  // top-level keys only; "." itself isn't replaced
+    return l.compare(0, s.size(), s) == 0 && (l[s.size()] == '/' || l[s.size()] == '#');
+}
+
+std::string apply(std::string text, const FilePatch& patch, const std::string& patch_name,
+                  std::vector<std::string>* touched) {
     for (const Op& op : patch.ops) {
         std::string where = patch_name + ":" + std::to_string(op.line) + ": " + op_name(op.kind) +
                             (op.selector.empty() ? "" : " " + op.selector);
@@ -508,7 +564,7 @@ std::string apply(std::string text, const FilePatch& patch, const std::string& p
         std::string err;
         std::vector<Edit> edits;
         try {
-            edits = edits_for(d, root, op, err);
+            edits = edits_for(d, root, op, err, touched);
         } catch (const PatchError& e) {
             err = e.what();
         }

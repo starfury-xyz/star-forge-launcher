@@ -183,6 +183,7 @@ add_library(sf_launch STATIC
     src/launch/env.cpp
     src/launch/gamescope.cpp
     src/launch/launch.cpp
+    src/launch/mod_loader.cpp
     src/launch/mods.cpp
     src/launch/net.cpp
     src/launch/packs.cpp
@@ -197,6 +198,7 @@ add_library(sf_launch STATIC
     src/launch/trust.cpp
     src/launch/steam.cpp
     src/mod/blocks.cpp
+    src/mod/manifest.cpp
     src/mod/sfpatch.cpp
     src/pack/pack.cpp
 )
@@ -397,6 +399,9 @@ if(BUILD_TESTING)
     add_executable(mods_test tests/mods_test.cpp)
     target_link_libraries(mods_test PRIVATE sf_launch)
     add_test(NAME mods COMMAND mods_test)
+    add_executable(mod_loader_test tests/mod_loader_test.cpp)
+    target_link_libraries(mod_loader_test PRIVATE sf_launch miniz)
+    add_test(NAME mod_loader COMMAND mod_loader_test)
     add_executable(sfpatch_test tests/sfpatch_test.cpp)
     target_link_libraries(sfpatch_test PRIVATE sf_launch)
     # Optional: the game folder and a coms-retro-sc-ui checkout, for the checks against real files.
@@ -427,7 +432,7 @@ if(BUILD_TESTING)
     target_link_libraries(cli_test PRIVATE sf_launch)
     add_dependencies(cli_test sc_launch)
     add_test(NAME cli COMMAND cli_test $<TARGET_FILE:sc_launch>)
-    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli gui sfpatch)
+    set(PORTABLE_TESTS patch launch setup process pack net signing remote trust packs prepare cli gui sfpatch mod_loader)
 
 if(WIN32)
     set(FAKEGAME "${CMAKE_BINARY_DIR}/fakegame/win64")

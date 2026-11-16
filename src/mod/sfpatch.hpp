@@ -61,7 +61,16 @@ Patch parse_patch(std::string_view text, const std::string& name);
 // `text` with every operation of `patch` applied, in order. Throws PatchError naming the
 // operation that failed (a selector matching nothing or too much, a key set twice in one block,
 // the target not parsing).
-std::string apply(std::string text, const FilePatch& patch, const std::string& patch_name);
+//
+// `touched`, if given, gets what each operation changed, for spotting two mods changing the same
+// thing: a block's address (its path, each step named so it matches only that block, like diff()
+// names them: `objects 18/object agen/defaults`, `Texture[name="X"]`) for replace and remove,
+// the address plus "#<key>" for set and unset. Adding blocks touches nothing (adds combine).
+std::string apply(std::string text, const FilePatch& patch, const std::string& patch_name,
+                  std::vector<std::string>* touched = nullptr);
+
+// Whether two touched addresses overlap: the same, or one inside the other.
+bool overlaps(const std::string& a, const std::string& b);
 
 // The .sfpatch text that turns `base` into `modded` for game path `file`: `set` and `unset` for
 // changed, added and removed keys. Throws PatchError where it can't say it with those (blocks

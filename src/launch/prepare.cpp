@@ -2,8 +2,10 @@
 
 #include <stdexcept>
 
+#include "launch/mod_loader.hpp"
 #include "launch/patching.hpp"
 #include "launch/profiles.hpp"
+#include "launch/signing.hpp"
 
 namespace sf::launch::prepare {
 namespace {
@@ -62,6 +64,20 @@ Prepared prepare(const Setup& setup, const fs::path& dir, const std::vector<std:
     if (sync_error) throw std::runtime_error(*sync_error);
     if (synced) tell(events, note(*synced));
     for (const std::string& warning : patching::preflight(dir, profile, setup.game_exe())) tell(events, note(warning));
+    // The player's mods (docs/mods.md). A failure here starts the game without them rather than
+    // not at all, and never with an older run's layers.
+    std::vector<std::string> mod_notes;
+    try {
+        mod_notes = mod_loader::build(dir, setup.game_dir, [&] {
+                        std::error_code ec;
+                        return signing::sha256_file(setup.game_exe(), nullptr, ec).value_or("");
+                    }).notes;
+    } catch (const std::exception& e) {
+        std::error_code ec;
+        fs::remove(dir / mod_loader::kModsDir / mod_loader::kLayersFile, ec);
+        mod_notes = {std::string("Starting without mods: ") + e.what()};
+    }
+    for (const std::string& n : mod_notes) tell(events, note(n));
     auto shared = profiles::shared_local_appdata(setup);
     if (setup.wine)
         if (auto from = profiles::import_steam_data(setup, steam_compat_data()))

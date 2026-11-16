@@ -9,6 +9,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -77,6 +78,19 @@ bool init() {
     if (prof.trace_files) log("tracing file access");
     if (!prof.name.empty()) log("profile name: %s", prof.name.c_str());
 
+    // The player's mods, as the launcher's mod loader set them up for this start.
+    const profile::ModLayers mods = profile::mod_layers(profile_dir);
+    if (!mods.mods.empty()) {
+        log("mods: %zu loaded (fingerprint %s)", mods.mods.size(), mods.fingerprint.c_str());
+        for (const auto& m : mods.mods) log("  mod %s", m.c_str());
+    }
+    for (const auto& line : mods.skipped) log("warning: mods\\.layers: ignored \"%s\"", line.c_str());
+    for (const auto& c : mods.core)
+        if (std::find(prof.patches.core.begin(), prof.patches.core.end(), c) == prof.patches.core.end()) {
+            log("core patch %s: a mod needs it", c.c_str());
+            prof.patches.core.push_back(c);
+        }
+
     if (!patches::apply_all(profile_dir, prof)) return false;  // the pack says don't start like this
     if (prof.own_game_data) folders::install(profile::state_local_appdata(profile_dir));
 
@@ -86,7 +100,9 @@ bool init() {
     }
     redirect::Config files;
     files.game_root = game_root;
-    files.layers = {profile_dir + L"\\" + profile::kFilesDir};
+    files.layers = mods.layers;
+    for (const auto& l : files.layers) log("layer: %s", utf8(l).c_str());
+    files.layers.push_back(profile_dir + L"\\" + profile::kFilesDir);
     files.trace = prof.trace_files;
     files.log = [](const char* line) { log("%s", line); };
     if (std::string err = redirect::install(std::move(files)); !err.empty()) log("%s, file redirects disabled", err.c_str());

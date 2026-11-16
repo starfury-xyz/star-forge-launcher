@@ -146,6 +146,13 @@ struct Pack {
     void validate() const;
 };
 
+// local.json "mods": the player's mod load order and the mods they turned off (docs/mods.md).
+struct ModChoices {
+    std::vector<std::string> order;  // mod ids, first loaded first; unlisted mods load after these
+    std::vector<std::string> off;    // installed but not loaded
+    bool empty() const { return order.empty() && off.empty(); }
+};
+
 // local.json: the player's changes on top of the pack.
 struct Local {
     std::optional<std::string> name;    // display name instead of the pack's
@@ -156,6 +163,7 @@ struct Local {
     std::map<std::string, std::map<std::string, bool>> patches;  // module -> patch id -> on
     // Use the game's normal per-user data folder instead of the profile's own (state/).
     bool shared_game_data = false;
+    ModChoices mods;
 
     static Local from_json(const std::string& text);  // throws Error("local.json: ...")
     std::string to_json() const;

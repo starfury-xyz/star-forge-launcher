@@ -104,4 +104,18 @@ std::vector<std::wstring> patchset_files(const std::wstring& profile_dir);
 // "." or "..".
 std::optional<std::string> patches_rel(const std::string& path);
 
+// What the launcher's mod loader wrote for this start (<profile>\mods\.layers; see
+// launch/mod_loader.hpp): the folders to serve before <profile>\files, first wins, and the core
+// patches the loaded mods need.
+struct ModLayers {
+    std::string fingerprint;
+    std::vector<std::string> mods;     // "id version", in load order
+    std::vector<std::string> core;     // core patch ids
+    std::vector<std::wstring> layers;  // absolute, inside <profile>\mods
+    std::vector<std::string> skipped;  // lines that weren't understood or pointed outside mods/
+};
+
+// Reads <profile>\mods\.layers; empty when there isn't one (no mods). Never throws.
+ModLayers mod_layers(const std::wstring& profile_dir);
+
 }  // namespace sf::profile

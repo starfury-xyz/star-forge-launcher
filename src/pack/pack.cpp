@@ -103,7 +103,7 @@ Pack read_pack(const json& j) {
 }
 
 Local read_local(const json& j) {
-    Obj o(j, "Local", {"name", "server", "local_server", "args", "trace_files", "patches", "shared_game_data"});
+    Obj o(j, "Local", {"name", "server", "local_server", "args", "trace_files", "patches", "shared_game_data", "mods"});
     Local l;
     l.name = opt_str(o, "name");
     l.server = opt_str(o, "server");
@@ -118,6 +118,11 @@ Local read_local(const json& j) {
         }
     }
     if (const json* v = o.get("shared_game_data")) l.shared_game_data = boolean(*v);
+    if (const json* v = o.opt("mods")) {
+        Obj m(*v, "Mods", {"order", "off"});
+        if (const json* x = m.opt("order")) l.mods.order = strings(*x);
+        if (const json* x = m.opt("off")) l.mods.off = strings(*x);
+    }
     return l;
 }
 
@@ -239,6 +244,12 @@ std::string Local::to_json() const {
         j["patches"] = p;
     }
     if (shared_game_data) j["shared_game_data"] = true;
+    if (!mods.empty()) {
+        ojson m = ojson::object();
+        if (!mods.order.empty()) m["order"] = mods.order;
+        if (!mods.off.empty()) m["off"] = mods.off;
+        j["mods"] = m;
+    }
     return j.dump(2) + "\n";
 }
 
