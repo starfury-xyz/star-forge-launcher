@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.3.1
+
 - **Pre-release updates** (Settings → Launcher → Updates): testers can get
   launcher test versions (tags like `v0.3.1-rc.1`, published as GitHub
   pre-releases) before everyone else. Off by default; turning it off waits for
