@@ -115,6 +115,28 @@ int main(int argc, char** argv) {
     std::tie(code, out) = sc(with({"patches", "cli-test", "yes", "game.exe", "loose-before-packed"}));
     check(code == 1 && out == "sc-launch: expected on, off or default, not \"yes\"\n", "patches: a bad switch word");
 
+    // Mods: list, switch, order; and the author's diff.
+    std::tie(code, out) = sc(with({"mods", "cli-test"}));
+    check(code == 0 && contains(out, "no mods in "), "mods: none yet: " + out);
+    test::write_file(g_dir / "profiles/cli-test/mods/zeta/mod.json", R"({"format":1,"id":"zeta","name":"Zeta","version":"1.0.0"})");
+    test::write_file(g_dir / "profiles/cli-test/mods/alpha/mod.json", R"({"format":1,"id":"alpha","version":"2.0.0"})");
+    std::tie(code, out) = sc(with({"mods", "cli-test"}));
+    check(code == 0 && out.find("alpha") < out.find("zeta") && contains(out, "1.0.0") && contains(out, "Zeta"),
+          "mods: listed by id: " + out);
+    std::tie(code, out) = sc(with({"mods", "cli-test", "order", "zeta", "alpha"}));
+    check(code == 0, "mods order: " + out);
+    std::tie(code, out) = sc(with({"mods", "cli-test", "off", "alpha"}));
+    check(code == 0 && out == "cli-test: mod alpha is off\n", "mods off: " + out);
+    std::tie(code, out) = sc(with({"mods", "cli-test"}));
+    check(out.find("zeta") < out.find("alpha") && contains(out, "off             alpha"), "mods: order and switch shown: " + out);
+    std::tie(code, out) = sc(with({"mods", "cli-test", "on", "nope"}));
+    check(code == 1 && contains(out, "no mod \"nope\""), "mods on: unknown id refused: " + out);
+    test::write_file(g_dir / "stock.txt", "Texture\n{\n\tname \"A\"\n\trect \"0 0 1 1\"\n}\n");
+    test::write_file(g_dir / "modded.txt", "Texture\n{\n\tname \"A\"\n\trect \"5 5 1 1\"\n}\n");
+    std::tie(code, out) = sc({"mod", "diff", ustr(g_dir / "stock.txt"), ustr(g_dir / "modded.txt"), "data\\ui\\x.txt"});
+    check(code == 0 && out == "patch \"data/ui/x.txt\"\n{\n\tset Texture\n\t{\n\t\trect \"5 5 1 1\"\n\t}\n}\n",
+          "mod diff: " + out);
+
     // A server install: proxy in place, one exe whose build doesn't match, so status fails.
     const fs::path cloud = g_dir / "cloud";
     test::write_file(cloud / "libcrypto-1_1_tg.dll", "orig");

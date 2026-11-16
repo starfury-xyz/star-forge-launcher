@@ -1,8 +1,12 @@
 # Mods
 
-> **Status: design draft.** This page is the format we're building towards on
-> the `mods` branch. Nothing here is implemented yet; sections marked
-> *to verify* depend on things still to be tested in the game.
+> **Status: in progress** on the `mods` branch. Working: the loader
+> (`mods/` folder, zips, order, switches, requirements, conflicts),
+> [data patches](#data-patches), `scripts` in `mod.json`, whole files, and
+> `sc-launch mods` / `sc-launch mod diff`. Not yet: [Lua hooks](#lua-hooks)
+> (`sfmod.lua`), the launcher's Mods page, [pack restrictions](#packs-that-restrict-mods),
+> patching files that only exist inside a `.pak`, [text diffs](#text-diffs).
+> Sections marked *to verify* depend on things still to be tested in the game.
 
 A mod is an optional, client-side change a player adds to one profile: a UI
 layout, button prompts, icons, translations, textures. Players install mods
@@ -43,8 +47,23 @@ never touch:
   thing, the later one wins (see [Conflicts](#conflicts-and-load-order)).
 - `off`: mods that stay in the folder but aren't loaded.
 
-The **Mods** page and `sc-launch mods <profile> list|on|off|order` change
-these for you.
+The **Mods** page (to come) and the command line change these for you:
+
+```sh
+sc-launch mods <profile>                  # mods in load order, on/off, and why one didn't load
+sc-launch mods <profile> on|off <id>
+sc-launch mods <profile> order <id>...    # later ones win
+sc-launch mods <profile> check            # load them as a start would; conflicts and problems
+```
+
+Each start, the launcher tells you about mods it couldn't load, patches it
+left out and conflicts, and `agent.log` lists the loaded mods with a
+fingerprint of the set (worth including in bug reports).
+
+What the loader keeps in `mods/` (all of it rebuilt as needed; safe to
+delete): `.cache/` (unpacked zips), `.merged/` (game files with the mods'
+data patches applied), `.layers` (what the game is served from) and
+`.loaded.json` (the last start's report).
 
 Without STAR FORGE a player can still unzip a mod's `files/` folder into the
 game folder by hand. Plain files work that way; [data patches](#data-patches),
@@ -168,7 +187,15 @@ objects 18
 ```
 
 A data patch is a `.sfpatch` file in `patches/`, written in that same format,
-so values can be copied straight from the game file:
+so values can be copied straight from the game file. The easiest way to make
+one is to edit a copy of the game file, then let STAR FORGE write the patch:
+
+```sh
+sc-launch mod diff <stock file> <your edited copy> data/ui/textures/common/module_new.txt > patches/icons.sfpatch
+```
+
+It writes `set`/`unset` operations for changed, added and removed keys; blocks
+you added or removed still have to be written by hand. A patch looks like this:
 
 ```
 // patches/icons.sfpatch

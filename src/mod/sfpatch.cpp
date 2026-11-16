@@ -594,6 +594,12 @@ std::string name_segment(std::string_view t, const Node& n, const std::vector<No
             if (matches(t, o, s)) ++k;
         return k;
     };
+    // The fewest header words that name it alone: `objects`, not `objects 18` (a count other
+    // mods may change), but `object agen`, since `object` alone matches every object.
+    for (std::size_t words = 1; words < n.tokens.size(); ++words) {
+        std::string prefix(t.substr(n.tokens.front().begin, n.tokens[words - 1].end - n.tokens.front().begin));
+        if (count(prefix) == 1) return prefix;
+    }
     if (count(head) == 1) return head;
     for (const auto& c : n.children) {
         if (c.block || c.tokens.size() < 2) continue;

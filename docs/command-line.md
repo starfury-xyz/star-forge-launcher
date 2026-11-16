@@ -17,6 +17,10 @@ sc-launch updates                    # check installed packs for new versions
 sc-launch update <profile> [--yes]   # install the newest version of a profile's pack
 sc-launch patches <profile>          # a profile's game patches and which are on
 sc-launch patches <profile> on|off|default <exe> <id>   # switch one (saved in local.json)
+sc-launch mods <profile>             # a profile's mods in load order (see Mods)
+sc-launch mods <profile> on|off <id>
+sc-launch mods <profile> order <id>...
+sc-launch mods <profile> check       # load the mods without starting: conflicts, problems
 ```
 
 `<profile>` is the profile's folder name, as `list` shows it.
@@ -35,6 +39,14 @@ sc-launch pack files <folder> <list> [--base-url <url>] [--key <key file>]
 (it then needs `--base-url`), otherwise a STAR FORGE list; see
 [File lists](file-lists.md). The key can also come from the
 `STAR_FORGE_PACK_KEY` environment variable (the key file's text).
+
+## For mod authors
+
+```sh
+sc-launch mod diff <stock file> <modded file> <game path>   # print the .sfpatch between them
+```
+
+See [Mods](mods.md).
 
 ## For server hosts (experimental)
 

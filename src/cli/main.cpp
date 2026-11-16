@@ -1,6 +1,7 @@
 // sc-launch: the command-line launcher (port of crates/sc-launch/src/main.rs). Portable: on Linux
 // it starts the game through Proton, on Windows directly. A thin layer over sf_launch.
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -24,6 +25,7 @@
 #include "launch/env.hpp"
 #include "launch/gamescope.hpp"
 #include "launch/launch.hpp"
+#include "launch/mod_loader.hpp"
 #include "launch/mods.hpp"
 #include "launch/packs.hpp"
 #include "launch/patching.hpp"
@@ -33,6 +35,7 @@
 #include "launch/remote.hpp"
 #include "launch/servers.hpp"
 #include "launch/signing.hpp"
+#include "mod/sfpatch.hpp"
 #include "pack/serde.hpp"
 
 using namespace sf::launch;
@@ -59,6 +62,18 @@ const char* kUsage =
     "  sc-launch [OPTIONS] patches <profile> on|off|default <exe> <id>\n"
     "                                        Switch one of them on or off, or back to what\n"
     "                                        the pack says (saved in the profile's local.json)\n"
+    "  sc-launch [OPTIONS] mods <profile>    List a profile's mods in load order\n"
+    "  sc-launch [OPTIONS] mods <profile> on|off <id>\n"
+    "                                        Turn a mod on or off (saved in local.json)\n"
+    "  sc-launch [OPTIONS] mods <profile> order <id>...\n"
+    "                                        Set the load order (later mods win)\n"
+    "  sc-launch [OPTIONS] mods <profile> check\n"
+    "                                        Load the mods as a start would, without starting:\n"
+    "                                        conflicts, problems and layers\n"
+    "\n"
+    "FOR MOD AUTHORS:\n"
+    "  sc-launch mod diff <stock file> <modded file> <game path>\n"
+    "                                        Print the .sfpatch that turns one into the other\n"
     "\n"
     "FOR SERVER HOSTS:\n"
     "  sc-launch server status <cloud-dir>   Check a server install the way its processes\n"
@@ -493,6 +508,81 @@ int run(const std::vector<std::string>& args) {
         std::printf("%s: %s %s is %s\n", c[1].c_str(), c[3].c_str(), c[4].c_str(),
                     on ? (*on ? "on" : "off") : "back to the pack's default");
         warn_clashes(mods::client(dir, profiles::load(dir)), c[3], c[4]);
+        return 0;
+    }
+    if (c.size() >= 2 && c[0] == "mods") {
+        check_profile_name(c[1]);
+        const fs::path dir = profiles_dir / upath(c[1]);
+        profiles::load(dir);  // a real profile
+        if (is({"mods", nullptr})) {
+            const auto found = mod_loader::scan(dir);
+            const auto order = mod_loader::load_order(found, profiles::read_local(dir).mods);
+            const auto last = mod_loader::last(dir);
+            const auto local = profiles::read_local(dir);
+            if (found.empty()) std::printf("no mods in %s\n", ustr(dir / mod_loader::kModsDir).c_str());
+            for (const auto& id : order) {
+                const mod_loader::Found* f = nullptr;
+                for (const auto& x : found)
+                    if (x.id() == id && !f) f = &x;
+                const bool off = std::find(local.mods.off.begin(), local.mods.off.end(), id) != local.mods.off.end();
+                std::string status = off ? "off" : "on";
+                std::string why = f && !f->manifest ? f->error : "";
+                if (last)
+                    for (const auto& m : last->mods)
+                        if (m.id == id && !off) {
+                            status = m.loaded ? "on" : "on, not loaded";
+                            if (!m.loaded) why = m.reason;
+                        }
+                const std::string ver = f && f->manifest ? f->manifest->version : "";
+                const std::string name = f && f->manifest ? f->manifest->name : "";
+                std::printf("%s %s %s %s%s\n", pad(status, 15).c_str(), pad(id, 24).c_str(), pad(ver, 10).c_str(),
+                            name.c_str(), why.empty() ? "" : ("  (" + why + ")").c_str());
+            }
+            if (last && !last->conflicts.empty()) {
+                std::printf("conflicts at the last start:\n");
+                for (const auto& x : last->conflicts) {
+                    std::string ids;
+                    for (size_t i = 0; i < x.mods.size(); ++i) ids += (i ? ", " : "") + x.mods[i];
+                    std::printf("  %s: %s (%s wins)\n", x.what.c_str(), ids.c_str(), x.mods.back().c_str());
+                }
+            }
+            return 0;
+        }
+        if (is({"mods", nullptr, "on", nullptr}) || is({"mods", nullptr, "off", nullptr})) {
+            bool known = false;
+            for (const auto& f : mod_loader::scan(dir)) known |= f.id() == c[3];
+            if (!known) throw std::runtime_error("no mod \"" + c[3] + "\" in " + ustr(dir / mod_loader::kModsDir));
+            mod_loader::set_on(dir, c[3], c[2] == "on");
+            std::printf("%s: mod %s is %s\n", c[1].c_str(), c[3].c_str(), c[2].c_str());
+            return 0;
+        }
+        if (c.size() >= 3 && c[2] == "order") {
+            std::vector<std::string> order(c.begin() + 3, c.end());
+            mod_loader::set_order(dir, order);
+            std::printf("%s: load order saved\n", c[1].c_str());
+            return 0;
+        }
+        if (is({"mods", nullptr, "check"})) {
+            const Setup setup = resolve(cli.opts);
+            const auto r = mod_loader::build(dir, setup.game_dir, [&] {
+                std::error_code ec;
+                return signing::sha256_file(setup.game_exe(), nullptr, ec).value_or("");
+            });
+            size_t n = 0;
+            for (const auto& m : r.mods) n += m.loaded;
+            std::printf("%zu mod(s) loaded%s\n", n, r.fingerprint.empty() ? "" : (" (fingerprint " + r.fingerprint + ")").c_str());
+            for (const auto& l : r.layers) std::printf("layer: %s\n", l.c_str());
+            for (const auto& cp : r.core_patches) std::printf("core patch: %s\n", cp.c_str());
+            for (const auto& note : r.notes) std::printf("note: %s\n", note.c_str());
+            return 0;
+        }
+    }
+    if (is({"mod", "diff", nullptr, nullptr, nullptr})) {
+        std::string game_path = c[4];
+        std::replace(game_path.begin(), game_path.end(), '\\', '/');
+        const std::string patch = sf::mod::diff(read_or_throw(upath(c[2])), read_or_throw(upath(c[3])), game_path);
+        if (patch.empty()) std::fprintf(stderr, "no differences\n");
+        std::fputs(patch.c_str(), stdout);
         return 0;
     }
     if (is({"server", "status", nullptr})) return server_status(upath(c[2]));
