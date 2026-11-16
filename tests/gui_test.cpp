@@ -136,7 +136,7 @@ void prefs(const fs::path& data) {
     const json defaults = call("get_launcher_preferences");
     check(defaults.dump() ==
               R"({"backgroundFolder":"","checkUpdates":true,"closeBehavior":"exit","experimental":false,"factionTheme":"starforge","gameDirectory":"",)"
-              R"("launchBehavior":"tray","packBranding":true,"protonPath":"","runner":"","selectedProfile":"","setupDone":false,"winePrefix":""})",
+              R"("launchBehavior":"tray","packBranding":true,"prereleaseUpdates":false,"protonPath":"","runner":"","selectedProfile":"","setupDone":false,"winePrefix":""})",
           "defaults: " + defaults.dump());
 
     test::write_file(data / "launcher.json", R"({"selectedProfile":"x","bogus":1})");
@@ -154,7 +154,7 @@ void prefs(const fs::path& data) {
     check(test::read_file(data / "launcher.json") ==
               "{\n  \"selectedProfile\": \"\",\n  \"launchBehavior\": \"keepOpen\",\n  \"closeBehavior\": \"exit\",\n"
               "  \"factionTheme\": \"starforge\",\n  \"packBranding\": true,\n  \"backgroundFolder\": \"\",\n"
-              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"runner\": \"\",\n  \"winePrefix\": \"\",\n  \"checkUpdates\": true,\n  \"experimental\": false,\n"
+              "  \"gameDirectory\": \"\",\n  \"protonPath\": \"\",\n  \"runner\": \"\",\n  \"winePrefix\": \"\",\n  \"checkUpdates\": true,\n  \"prereleaseUpdates\": false,\n  \"experimental\": false,\n"
               "  \"setupDone\": false\n}",
           "launcher.json laid out as serde_json's to_string_pretty");
     check(!fs::exists(data / "launcher.json.tmp"), "no temporary file left");
@@ -176,6 +176,24 @@ void prefs(const fs::path& data) {
     check(error_of("update_launcher_preferences", {{"update", {{"key", "packBranding"}}}}) ==
               "invalid args `update` for command `update_launcher_preferences`: missing field `value`",
           "a missing field");
+    // Folder preferences: empty, or a folder that exists (the game folder must hold the game).
+    const fs::path game = data / "sc";
+    test::write_file(game / "win64" / "game.exe", "");
+    fs::create_directories(game / "data");
+    check(call("update_launcher_preferences", upd("backgroundFolder", sf::launch::ustr(data)))["backgroundFolder"] == sf::launch::ustr(data),
+          "a folder that exists");
+    check(call("update_launcher_preferences", upd("gameDirectory", sf::launch::ustr(game)))["gameDirectory"] == sf::launch::ustr(game),
+          "a game folder");
+    check(error_of("update_launcher_preferences", upd("winePrefix", "wine")) == "invalid value for winePrefix: not a folder: wine",
+          "a typed name is no folder");
+    check(error_of("update_launcher_preferences", upd("backgroundFolder", sf::launch::ustr(data / "nope"))) ==
+              "invalid value for backgroundFolder: not a folder: " + sf::launch::ustr(data / "nope"),
+          "a missing folder");
+    check(contains(error_of("update_launcher_preferences", upd("gameDirectory", sf::launch::ustr(data))), "doesn't hold Star Conflict"),
+          "a folder without the game");
+    call("update_launcher_preferences", upd("gameDirectory", ""));
+    call("update_launcher_preferences", upd("backgroundFolder", ""));
+    check(b.prefs().game_directory.empty() && b.prefs().background_folder.empty(), "cleared back to the defaults");
     check(b.prefs().pack_branding && b.prefs().launch_behavior == sf::gui::LaunchBehavior::KeepOpen, "failed updates change nothing");
     check(error_of("frob") == "command frob not found", "an unknown command");
 }
@@ -260,7 +278,7 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
     check(listed.size() == 3 && listed[0]["id"] == "gui-pack" && listed[0]["managed"] == true &&
               listed[0]["links"].dump() == R"([{"key":"website","label":"Website"},{"key":"source","label":"Source"}])" &&
               listed[1].dump() == R"({"description":"","error":null,"id":"my-server","links":[],"localServer":true,"managed":false,)"
-                                  R"("name":"Renamed","ownGameData":false,"packId":"local.my-server","patches":0,"server":null,"version":"1.0.0"})",
+                                  R"("name":"Renamed","ownGameData":false,"packId":"local.my-server","patches":0,"release":null,"server":null,"version":"1.0.0"})",
           "list: " + listed.dump());
 
     call("open_pack_link", {{"id", "gui-pack"}, {"key", "website"}});
@@ -731,6 +749,28 @@ void launcher_update(const fs::path& base, test::FileServer& srv) {
               "this platform (linux-x86_64) is not in latest.json",
           "update: no package for this platform");
     check(newer_error(latest("two", both)) == "latest.json's version `two` is not x.y.z", "update: a bad version");
+
+    // Pre-releases, in semver order.
+    check(up::compare_versions("0.3.1-rc.1", "0.3.1") < 0 && up::compare_versions("0.3.1", "0.3.1-rc.9") > 0,
+          "semver: a pre-release comes before its release");
+    check(up::compare_versions("0.3.1-rc.2", "0.3.1-rc.10") < 0 && up::compare_versions("0.3.1-rc.1", "0.3.1-beta.5") > 0 &&
+              up::compare_versions("0.3.1-rc", "0.3.1-rc.1") < 0 && up::compare_versions("0.3.1-1", "0.3.1-rc") < 0,
+          "semver: numeric, then alphabetic, then shorter first");
+    check(up::compare_versions("v0.3.0", "0.3.0+build.5") == 0 && up::compare_versions("0.3.2-rc.1", "0.3.1") > 0, "semver: v and +build");
+    check(up::newer(latest("0.3.1-rc.2", both), "0.3.1-rc.1", targets) && !up::newer(latest("0.3.1-rc.1", both), "0.3.1", targets) &&
+              up::newer(latest("0.3.1", both), "0.3.1-rc.2", targets),
+          "update: pre-releases in order; a release replaces its pre-releases");
+    auto rel = [](const char* tag, bool draft, bool with_latest) {
+        json assets = json::array({{{"name", "x.AppImage"}, {"browser_download_url", "https://e.org/x"}}});
+        if (with_latest) assets.push_back({{"name", "latest.json"}, {"browser_download_url", std::string("https://e.org/") + tag + "/latest.json"}});
+        return json{{"tag_name", tag}, {"draft", draft}, {"prerelease", true}, {"assets", assets}};
+    };
+    check(up::latest_in(json::array({rel("v0.3.0", false, true), rel("v0.3.1-rc.1", false, true), rel("v0.4.0", true, true),
+                                     rel("v0.3.2", false, false), rel("junk", false, true)})) ==
+              std::string("https://e.org/v0.3.1-rc.1/latest.json"),
+          "release list: the newest published release with a latest.json");
+    check(!up::latest_in(json::array()) && !up::latest_in(json::array({rel("v1.0.0", false, false)})), "release list: none usable");
+    check(newer_error(json::object()) == "latest.json has no version", "update: no version");
     check(newer_error(latest("2.0.0", {{"linux-x86_64", {{"url", "u"}}}})) == "latest.json's `linux-x86_64` needs a url and a signature",
           "update: a platform without a signature");
 

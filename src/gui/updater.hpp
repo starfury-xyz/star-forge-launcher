@@ -20,6 +20,8 @@ namespace fs = std::filesystem;
 // Where to look and what to trust. An empty endpoint means this build doesn't update itself.
 struct Config {
     std::string endpoint;  // latest.json's URL
+    // With pre-release updates on: a GitHub API release list (see latest_in); empty if none.
+    std::string prerelease_endpoint;
     std::string pubkey;    // tauri.conf.json's: base64 of a minisign public key file
     std::string current;   // this launcher's version
     // latest.json platform keys, most specific first ("linux-x86_64-appimage", "linux-x86_64").
@@ -33,6 +35,16 @@ struct Release {
     std::string version, url, signature;
     std::optional<std::string> page;  // release notes, when an https:// link
 };
+
+// Semantic-version order of "x.y.z", "x.y.z-pre" or the same with a leading v: <0, 0 or >0.
+// A pre-release comes before its release (0.3.1-rc.2 < 0.3.1); build metadata (+...) is ignored.
+// Throws std::runtime_error for a version that isn't x.y.z.
+int compare_versions(const std::string& a, const std::string& b);
+
+// The latest.json URL of the newest release in a GitHub API release list (pre-releases
+// included; drafts and releases without a latest.json skipped), or nullopt if there is none.
+// Throws std::runtime_error if `releases` isn't a release list.
+std::optional<std::string> latest_in(const nlohmann::json& releases);
 
 // The release in `latest` if it is newer than `current`; nullopt if not. Throws
 // std::runtime_error for a malformed latest.json or one without any of `targets`.

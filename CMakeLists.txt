@@ -14,7 +14,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #  - Windows (win64 presets): everything. The agent and injector only exist here.
 #  - Linux native (linux preset): the portable parts, i.e. the launcher (which runs the game
 #    through Proton) and the patch code it shares, with their tests.
-add_compile_definitions(SF_VERSION="${PROJECT_VERSION}")
+# A pre-release build (release.yml, for a tag like v0.3.1-rc.1) adds its label: 0.3.1-rc.1.
+set(SF_PRERELEASE "" CACHE STRING "pre-release label (rc.1 makes the version x.y.z-rc.1); empty for a release")
+set(SF_VERSION "${PROJECT_VERSION}")
+if(SF_PRERELEASE)
+    set(SF_VERSION "${PROJECT_VERSION}-${SF_PRERELEASE}")
+endif()
+add_compile_definitions(SF_VERSION="${SF_VERSION}")
 if(WIN32)
     # Static release CRT (/MT), like the patcher: the agent must not depend on a VC++ redist
     # inside game.exe, and xwin has no debug CRT anyway.
@@ -266,11 +272,15 @@ endif()
 # The launcher's self-update: latest.json's URL (empty: this build doesn't update itself) and the
 # minisign key its packages are signed with (tauri.conf.json's).
 set(SF_UPDATE_ENDPOINT "" CACHE STRING "URL of the latest.json the launcher updates from")
+# With "pre-release updates" on: a GitHub API release list (api.github.com/repos/<repo>/releases);
+# the newest release in it, pre-release or not, that carries a latest.json.
+set(SF_PRERELEASE_ENDPOINT "" CACHE STRING "URL of the GitHub release list pre-release updates come from")
 set(SF_UPDATE_PUBKEY "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5OEY4NUE4NjFFMTJGQUIKUldTckwrRmhxSVdQK2NKaTQ2Y0c5T2U0UGc2MTU4V3JIS2kyVlNlWnJCNXlnMkF2RWZteEhZVGYK"
     CACHE STRING "base64 minisign public key for launcher updates")
 if(SF_HAVE_GUI)
     target_include_directories(star_forge PRIVATE src)
-    target_compile_definitions(star_forge PRIVATE SF_UPDATE_ENDPOINT="${SF_UPDATE_ENDPOINT}" SF_UPDATE_PUBKEY="${SF_UPDATE_PUBKEY}")
+    target_compile_definitions(star_forge PRIVATE SF_UPDATE_ENDPOINT="${SF_UPDATE_ENDPOINT}"
+        SF_PRERELEASE_ENDPOINT="${SF_PRERELEASE_ENDPOINT}" SF_UPDATE_PUBKEY="${SF_UPDATE_PUBKEY}")
     set_target_properties(star_forge PROPERTIES OUTPUT_NAME star-forge)
 endif()
 

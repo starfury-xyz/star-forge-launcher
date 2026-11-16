@@ -15,6 +15,8 @@ function parseProfile(item) {
     error: value.error === null ? null : string(value.error),
     packId: value.packId === null ? null : string(value.packId),
     version: value.version === null ? null : string(value.version),
+    /** The release its game files came from (Star Fury's v1, v2, ...). @type {string | null} */
+    release: value.release === null || value.release === undefined ? null : string(value.release),
     description: string(value.description),
     managed: boolean(value.managed),
     links: array(value.links, (link) => {
@@ -43,6 +45,7 @@ function parseSample(item) {
     error: null,
     packId: string(value.packId),
     version: null,
+    release: /** @type {string | null} */ (null),
     description: string(value.description),
     managed: true,
     links: [],
@@ -50,6 +53,10 @@ function parseSample(item) {
   };
 }
 /** @typedef {ReturnType<typeof parseProfile>} ProfileInfo */
+
+/** The version to show: the release a pack's files came from (v7), else the pack's own (1.0.1).
+ * @param {{ version: string | null, release: string | null } | undefined} profile */
+const shownVersion = (profile) => profile?.release || profile?.version || null;
 
 const isLocalAddress = (/** @type {string} */ server) =>
   /^(127\.\d+\.\d+\.\d+|localhost)(:\d+)?$/i.test(server.trim());
@@ -118,8 +125,8 @@ export function bindProfiles(preferences, onChange) {
     required('summary-patches').textContent = profile ? String(profile.patches) : '–';
     required('summary-version').textContent = profile?.sample
       ? 'Not installed yet: Play installs it first'
-      : profile?.version
-        ? `${profile.version}${profile.managed ? '' : ' (your own)'}`
+      : shownVersion(profile)
+        ? `${shownVersion(profile)}${profile?.managed ? '' : ' (your own)'}`
         : '–';
     const description = required('summary-description');
     description.textContent = brand(profile?.description || '');
@@ -139,8 +146,11 @@ export function bindProfiles(preferences, onChange) {
     links.hidden = !profile?.links.length;
     const update = profile ? updates.get(profile.id) : undefined;
     required('summary-update-row').hidden = !update;
+    // A release-numbered pack's own version (1.0.1) means nothing to players, so it isn't named.
     required('summary-update-text').textContent = update
-      ? `Version ${update.version} of this pack is available.`
+      ? profile?.release
+        ? 'An update to this pack is available.'
+        : `Version ${update.version} of this pack is available.`
       : '';
     control('summary-folder', HTMLButtonElement).disabled = !profile || Boolean(profile.sample);
     edit.disabled = !profile || Boolean(profile.sample);
@@ -239,11 +249,15 @@ export function bindProfiles(preferences, onChange) {
         if (value) {
           updates.set(profile.id, { version: string(value.version), url: string(value.url) });
           relabel();
-          notice(`Version ${string(value.version)} of ${profile.name} is available.`);
+          notice(
+            profile.release
+              ? `An update to ${profile.name} is available.`
+              : `Version ${string(value.version)} of ${profile.name} is available.`,
+          );
         } else {
           updates.delete(profile.id);
           relabel();
-          notice(`${profile.name} ${profile.version ?? ''} is up to date.`, 'success');
+          notice(`${profile.name} ${shownVersion(profile) ?? ''} is up to date.`, 'success');
         }
       } catch (error) {
         notice(`Could not check ${profile.name} for updates: ${errorMessage(error)}`, 'error');

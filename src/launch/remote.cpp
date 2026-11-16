@@ -121,6 +121,7 @@ struct Recorded {
 
 struct Record {
     std::string source;
+    std::optional<std::string> release;
     std::map<std::string, Recorded> files;
 };
 
@@ -129,9 +130,10 @@ std::optional<Record> load_record(const fs::path& profile_dir) {
     if (!text) return std::nullopt;
     try {
         json j = json::parse(*text);
-        Obj o(j, "Record", {"source", "files"});
+        Obj o(j, "Record", {"source", "release", "files"});
         Record r;
         r.source = str(o.req("source"));
+        if (const json* v = o.opt("release")) r.release = str(*v);
         const json& files = o.req("files");
         if (!files.is_object()) invalid(files, "a map");
         for (auto it = files.begin(); it != files.end(); ++it) {
@@ -147,6 +149,7 @@ std::optional<Record> load_record(const fs::path& profile_dir) {
 void save_record(const fs::path& profile_dir, const Record& record) {
     ojson j;
     j["source"] = record.source;
+    if (record.release) j["release"] = *record.release;
     j["files"] = ojson::object();
     for (const auto& [path, f] : record.files) {
         j["files"][path]["sha256"] = f.sha256;
@@ -345,7 +348,17 @@ FileList fetch_list(const pack::FilesFrom& from, const signing::PublicKey* key) 
         }
         if (!seen.insert(lower(e.path)).second) throw ListError(false, url + ": " + e.path + " is listed twice");
     }
-    return FileList{url, std::move(entries), is_signed};
+    FileList list{url, std::move(entries), is_signed};
+    if (!from.scmod1) {
+        // Already parsed once, so this can't fail; a version that isn't a short string is ignored.
+        const json j = json::parse(*bytes, nullptr, false);
+        if (j.is_object() && j.contains("version") && j["version"].is_string()) {
+            const std::string v = j["version"].get<std::string>();
+            if (!v.empty() && v.size() <= 32 && std::all_of(v.begin(), v.end(), [](char ch) { return ch > ' ' && ch < 127; }))
+                list.release = v;
+        }
+    }
+    return list;
 }
 
 std::string build_list(const fs::path& folder, const std::optional<std::string>& base_url, bool scmod1) {
@@ -493,6 +506,7 @@ Synced sync(const fs::path& profile_dir, const FileList& list, const Progress& p
     const fs::path mark = profile_dir / kSwappingMark;
     write_or_throw(mark, "");
     record.source = list.source;
+    record.release = list.release;
     for (size_t i = 0; i < wanted.size(); ++i) {
         const Entry& e = *wanted[i];
         const fs::path path = target(profile_dir, e.path);
@@ -521,6 +535,11 @@ Synced sync(const fs::path& profile_dir, const FileList& list, const Progress& p
     fs::remove(mark, ec);
     fs::remove_all(staging, ec);
     return done;
+}
+
+std::optional<std::string> recorded_release(const fs::path& profile_dir) {
+    auto r = load_record(profile_dir);
+    return r ? r->release : std::nullopt;
 }
 
 bool intact(const fs::path& profile_dir) {

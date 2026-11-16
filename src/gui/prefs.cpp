@@ -5,6 +5,7 @@
 
 #include "gui/internal.hpp"
 #include "launch/profiles.hpp"
+#include "launch/steam.hpp"
 #include "pack/serde.hpp"
 
 namespace sf::gui {
@@ -61,6 +62,7 @@ nlohmann::ordered_json Preferences::to_json() const {
             {"runner", runner},
             {"winePrefix", wine_prefix},
             {"checkUpdates", check_updates},
+            {"prereleaseUpdates", prerelease_updates},
             {"experimental", experimental},
             {"setupDone", setup_done}};
 }
@@ -79,6 +81,7 @@ Preferences Preferences::from_json(const json& j) {
     if (auto v = o.get("runner")) p.runner = serde::str(*v);
     if (auto v = o.get("winePrefix")) p.wine_prefix = serde::str(*v);
     if (auto v = o.get("checkUpdates")) p.check_updates = serde::boolean(*v);
+    if (auto v = o.get("prereleaseUpdates")) p.prerelease_updates = serde::boolean(*v);
     if (auto v = o.get("experimental")) p.experimental = serde::boolean(*v);
     if (auto v = o.get("setupDone")) p.setup_done = serde::boolean(*v);
     return p;
@@ -138,6 +141,17 @@ json Backend::update_preferences(const json& update) {
         parsed = Preferences::from_json(fields);
     } catch (const pack::Error& e) {
         throw std::runtime_error("invalid value for " + key + ": " + e.what());
+    }
+    // Folders are picked, not typed: empty (the default) or a folder that exists.
+    if ((key == "gameDirectory" || key == "winePrefix" || key == "backgroundFolder") && value.is_string()) {
+        const std::string chosen = trim(value.get<std::string>());
+        if (!chosen.empty()) {
+            const fs::path dir = launch::upath(chosen);
+            std::error_code ec;
+            if (!dir.is_absolute() || !fs::is_directory(dir, ec)) throw std::runtime_error("invalid value for " + key + ": not a folder: " + chosen);
+            if (key == "gameDirectory" && !launch::steam::is_game_dir(dir))
+                throw std::runtime_error("That folder doesn't hold Star Conflict (no win64\\game.exe). Pick the folder Steam installed it in.");
+        }
     }
     Preferences next = modify_prefs([&](Preferences& p) { p = parsed; });
     if (key == "gameDirectory" || key == "protonPath" || key == "runner" || key == "winePrefix") refresh();

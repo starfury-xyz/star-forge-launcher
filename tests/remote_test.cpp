@@ -279,6 +279,26 @@ void syncs(const fs::path& base) {
         check(!intact(p2), "a swap that didn't finish: not intact");
     }
 
+    // A JSON list's "version" is the release the profile's files came from.
+    {
+        const fs::path p3 = test::fresh_dir(base / "profile3");
+        files.put("/v7.json", R"({"version":"v7","files":{"data/a.lua":{"sha256":")" + sha("two") + R"(","url":")" + url + R"(/a2"}}})");
+        sf::pack::FilesFrom json_from;
+        json_from.manifest = url + "/v7.json";
+        FileList l7 = fetch_list(json_from, nullptr);
+        check(l7.release == std::string("v7"), "a JSON list's version is its release");
+        check(!recorded_release(p3), "no release before a sync");
+        check(error_of([&] { sync(p3, l7, quiet); }).empty() && recorded_release(p3) == std::string("v7"), "the release is recorded");
+        check(contains(test::read_file(p3 / "remote-files.json"), "\"release\": \"v7\""), "... in remote-files.json");
+        check(intact(p3), "a record with a release still reads");
+        files.put("/odd.json", R"({"version":7,"files":{}})");
+        json_from.manifest = url + "/odd.json";
+        check(!fetch_list(json_from, nullptr).release, "a version that isn't a string is no release");
+        check(!fetch_list(from("v2.txt"), nullptr).release, "SCMOD1 lists have no release");
+        sync(p3, fetch_list(from("v2.txt"), nullptr), quiet);
+        check(!recorded_release(p3), "a list without one clears it");
+    }
+
     // One sync per profile at a time.
     {
         ProfileLock held = lock_profile(profile);

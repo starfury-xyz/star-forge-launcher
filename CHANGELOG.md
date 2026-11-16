@@ -6,6 +6,16 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- **Pre-release updates** (Settings → Launcher → Updates): testers can get
+  launcher test versions (tags like `v0.3.1-rc.1`, published as GitHub
+  pre-releases) before everyone else. Off by default; turning it off waits for
+  the next full release.
+- **Packs show their release number.** A pack whose file list carries a
+  version (Star Fury's v1, v2, ...) now shows that, not the pack's own 1.0.x.
+- **Folder settings are picked, not typed**: the game folder, Wine prefix and
+  background folder have Browse… and Clear buttons, and only accept a folder
+  that exists.
+
 - **Steam Deck Game Mode: the game no longer hangs at "Running" with no
   window.** Started from Steam, the launcher passed dozens of Steam's open
   handles on to the game's runtime, which then waited forever. Programs the

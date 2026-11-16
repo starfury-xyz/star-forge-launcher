@@ -1788,3 +1788,9 @@ input[type='checkbox']:disabled {
   align-items: center;
   gap: 8px;
 }
+
+/* Folder settings are picked with Browse…, not typed. */
+.folder-field input[readonly] {
+  cursor: default;
+  text-overflow: ellipsis;
+}

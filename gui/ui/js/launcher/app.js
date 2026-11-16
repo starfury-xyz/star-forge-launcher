@@ -103,9 +103,14 @@ async function start() {
   };
   preferences.subscribe(showExperimental);
   showExperimental();
+  // The game files sync while launching, which may move a pack to a new release (v7): list again.
+  let lastPhase = store.getSnapshot()?.phase;
   store.subscribe(() => {
     render();
     mods.update();
+    const phase = store.getSnapshot()?.phase;
+    if (lastPhase === 'launching' && phase !== 'launching') run(() => profiles.refresh());
+    lastPhase = phase;
   });
   /** @type {Awaited<ReturnType<typeof bindPacks>> | null} */
   let packs = null;

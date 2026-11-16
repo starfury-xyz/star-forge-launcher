@@ -47,21 +47,88 @@ std::vector<std::string> lines_of(const std::vector<uint8_t>& bytes) {
 
 bool starts_with(const std::string& s, const std::string& prefix) { return s.rfind(prefix, 0) == 0; }
 
-// "1.2.3" or "v1.2.3" (tauri-plugin-updater takes either).
-std::tuple<uint64_t, uint64_t, uint64_t> version_of(const std::string& v, const char* what) {
-    auto parsed = pack::parse_version(!v.empty() && v[0] == 'v' ? v.substr(1) : v);
-    if (!parsed) fail(std::string(what) + " version `" + v + "` is not x.y.z");
-    return *parsed;
+// The parts of "1.2.3", "v1.2.3" or either with a -pre suffix (tauri-plugin-updater takes a v).
+struct Version {
+    std::tuple<uint64_t, uint64_t, uint64_t> core;
+    std::vector<std::string> pre;  // dot-separated pre-release identifiers; empty for a release
+};
+
+std::optional<Version> parse(const std::string& text) {
+    std::string v = !text.empty() && text[0] == 'v' ? text.substr(1) : text;
+    v = v.substr(0, v.find('+'));
+    auto core = pack::parse_version(v);
+    if (!core) return std::nullopt;
+    Version out{*core, {}};
+    const size_t dash = v.find('-');
+    if (dash == std::string::npos) return out;
+    const std::string pre = v.substr(dash + 1);
+    for (size_t at = 0; at <= pre.size();) {
+        size_t end = pre.find('.', at);
+        if (end == std::string::npos) end = pre.size();
+        std::string id = pre.substr(at, end - at);
+        if (id.empty()) return std::nullopt;
+        out.pre.push_back(id);
+        at = end + 1;
+    }
+    return out;
+}
+
+bool numeric(const std::string& s) { return !s.empty() && s.size() <= 18 && s.find_first_not_of("0123456789") == std::string::npos; }
+
+// semver.org rule 11 for two pre-release identifiers.
+int compare_ids(const std::string& a, const std::string& b) {
+    const bool na = numeric(a), nb = numeric(b);
+    if (na && nb) {
+        const auto x = std::stoull(a), y = std::stoull(b);
+        return x < y ? -1 : x > y;
+    }
+    if (na != nb) return na ? -1 : 1;
+    return a.compare(b) < 0 ? -1 : a.compare(b) > 0;
 }
 
 }  // namespace
+
+int compare_versions(const std::string& a, const std::string& b) {
+    const auto x = parse(a), y = parse(b);
+    if (!x) fail("version `" + a + "` is not x.y.z");
+    if (!y) fail("version `" + b + "` is not x.y.z");
+    if (x->core != y->core) return x->core < y->core ? -1 : 1;
+    if (x->pre.empty() || y->pre.empty()) return x->pre.empty() == y->pre.empty() ? 0 : (x->pre.empty() ? 1 : -1);
+    for (size_t i = 0; i < x->pre.size() && i < y->pre.size(); ++i)
+        if (int c = compare_ids(x->pre[i], y->pre[i])) return c;
+    return x->pre.size() < y->pre.size() ? -1 : x->pre.size() > y->pre.size();
+}
+
+std::optional<std::string> latest_in(const json& releases) {
+    if (!releases.is_array()) fail("the release list is not a list");
+    std::optional<std::string> best_version, best_url;
+    for (const json& r : releases) {
+        if (!r.is_object() || r.value("draft", false)) continue;
+        const json tag = r.value("tag_name", json());
+        const json assets = r.value("assets", json());
+        if (!tag.is_string() || !assets.is_array() || !parse(tag.get<std::string>())) continue;
+        for (const json& a : assets) {
+            if (!a.is_object() || a.value("name", json()) != "latest.json") continue;
+            const json url = a.value("browser_download_url", json());
+            if (!url.is_string() || !starts_with(url.get<std::string>(), "https://")) continue;
+            if (!best_version || compare_versions(tag.get<std::string>(), *best_version) > 0) {
+                best_version = tag.get<std::string>();
+                best_url = url.get<std::string>();
+            }
+        }
+    }
+    return best_url;
+}
 
 std::optional<Release> newer(const json& latest, const std::string& current, const std::vector<std::string>& targets) {
     if (!latest.is_object() || !latest.contains("version") || !latest["version"].is_string())
         fail("latest.json has no version");
     Release r;
     r.version = latest["version"].get<std::string>();
-    if (!(version_of(r.version, "latest.json's") > version_of(current, "this launcher's"))) return std::nullopt;
+    if (!parse(r.version)) fail("latest.json's version `" + r.version + "` is not x.y.z");
+    if (!parse(current)) fail("this launcher's version `" + current + "` is not x.y.z");
+    // In semver order, as this launcher may be a pre-release itself (0.3.1-rc.1 < 0.3.1).
+    if (compare_versions(r.version, current) <= 0) return std::nullopt;
     if (!r.version.empty() && r.version[0] == 'v') r.version.erase(0, 1);
     const json platforms = latest.value("platforms", json::object());
     if (!platforms.is_object()) fail("latest.json has no platforms");
@@ -152,6 +219,7 @@ namespace sf::gui {
 namespace {
 
 constexpr uint64_t kLatestLimit = 1 << 20;            // latest.json
+constexpr uint64_t kReleaseListLimit = 8 << 20;       // GitHub's release list (pre-release updates)
 constexpr uint64_t kPackageLimit = uint64_t(1) << 30;  // the package itself
 
 }  // namespace
@@ -162,10 +230,20 @@ json Backend::check_launcher_update() {
     std::optional<updater::Release> found;
     try {
         const fs::path dir = launch::packs::new_staging_dir();
-        const fs::path file = dir / "latest.json";
-        launch::net::fetch(updater.endpoint, file, kLatestLimit);
-        std::ifstream in(file, std::ios::binary);
-        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        auto get = [&](const std::string& url, const char* name, uint64_t limit) {
+            const fs::path file = dir / name;
+            launch::net::fetch(url, file, limit);
+            std::ifstream in(file, std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        };
+        // Testers get the newest release, pre-release or not; everyone else the newest release.
+        std::string endpoint = updater.endpoint;
+        if (prefs().prerelease_updates && !updater.prerelease_endpoint.empty()) {
+            const json list = json::parse(get(updater.prerelease_endpoint, "releases.json", kReleaseListLimit), nullptr, false);
+            if (list.is_discarded()) throw std::runtime_error("the release list is not valid JSON");
+            if (auto url = updater::latest_in(list)) endpoint = *url;
+        }
+        const std::string text = get(endpoint, "latest.json", kLatestLimit);
         std::error_code ec;
         fs::remove_all(dir, ec);
         // An empty answer (HTTP 204) means there is nothing newer, as with tauri-plugin-updater.

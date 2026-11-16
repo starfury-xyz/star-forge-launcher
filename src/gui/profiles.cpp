@@ -9,6 +9,7 @@
 #include "gui/samples.hpp"  // generated from samples/ by CMake
 #include "launch/patching.hpp"
 #include "launch/profiles.hpp"
+#include "launch/remote.hpp"
 #include "launch/trust.hpp"
 #include "pack/serde.hpp"
 
@@ -143,6 +144,7 @@ json Backend::list_profiles() {
         } else {
             error = e.error;
         }
+        const auto release = pk && pk->files_from ? launch::remote::recorded_release(e.dir) : std::nullopt;
         out.push_back(json(ojson{
             {"id", e.name},
             {"name", name},
@@ -153,6 +155,8 @@ json Backend::list_profiles() {
             {"error", error},
             {"packId", pk ? json(pk->id) : json(nullptr)},
             {"version", pk ? json(pk->version) : json(nullptr)},
+            // The release its game files last synced to (Star Fury's v1, v2, ...), shown instead of the pack's version.
+            {"release", release ? json(*release) : json(nullptr)},
             {"description", pk ? pk->description : std::string()},
             {"managed", pk && pk->update.has_value()},
             {"links", links},

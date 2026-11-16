@@ -34,7 +34,7 @@ export function mountLayout() {
         <section id="overview-page" class="overview-page" hidden>
           <div class="profile-summary"><span class="eyebrow">Server profile</span><div class="summary-title"><h1 id="summary-name">No profile selected</h1><button class="icon-button" id="summary-folder" aria-label="Open profile folder" title="Open profile folder"><span data-icon="folder"></span></button></div>
             <p id="summary-description" class="summary-description" hidden></p>
-            <dl class="profile-facts"><dt>Server</dt><dd id="summary-server">–</dd><dt>Starts</dt><dd id="summary-mode">–</dd><dt>Game patches</dt><dd id="summary-patches">–</dd><dt>Pack version</dt><dd id="summary-version">–</dd></dl>
+            <dl class="profile-facts"><dt>Server</dt><dd id="summary-server">–</dd><dt>Starts</dt><dd id="summary-mode">–</dd><dt>Game patches</dt><dd id="summary-patches">–</dd><dt>Version</dt><dd id="summary-version">–</dd></dl>
             <div id="summary-update-row" class="update-row" hidden><span id="summary-update-text"></span><button class="button primary" id="summary-update">Review update</button></div>
             <div id="summary-links" class="setting-buttons summary-links" hidden></div>
             <div class="setting-buttons"><button class="button" id="summary-check-update">Check for updates</button><button class="button" id="summary-edit">Edit profile</button></div>

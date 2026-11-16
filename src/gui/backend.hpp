@@ -78,6 +78,7 @@ struct Preferences {
     std::string runner;             // empty = umu (Linux) / wine (macOS); steam-proton; or a Wine-style command
     std::string wine_prefix;        // prefix for umu and Wine-style runners; empty = <data dir>/prefixes/...
     bool check_updates = true;      // look for a new launcher version at startup
+    bool prerelease_updates = false;  // also offer pre-release launcher versions (for testers)
     bool experimental = false;      // show unfinished features (the Mods and Servers pages)
     bool setup_done = false;        // the first-run setup was finished
 

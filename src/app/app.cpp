@@ -281,6 +281,7 @@ private:
     void configure_updates() {
         auto& u = backend_.updater;
         u.endpoint = SF_UPDATE_ENDPOINT;
+        u.prerelease_endpoint = SF_PRERELEASE_ENDPOINT;
         u.pubkey = SF_UPDATE_PUBKEY;
         u.current = SF_VERSION;
 #ifdef _WIN32

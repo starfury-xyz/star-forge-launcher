@@ -8,7 +8,8 @@
 //
 // - STAR FORGE file list (JSON): {"files": {"data/x.lua": {"sha256": "...", "size": 123}}}, with
 //   each file at the list's folder plus its path (or base_url plus its path, or its own url).
-//   Extra fields such as version are ignored, so per-version manifests from other tools work.
+//   Extra fields are ignored, so per-version manifests from other tools work. A "version" string
+//   (Star Fury's v1, v2, ...) is kept as the release the launcher shows.
 // - SCMOD1: a text file whose first line is SCMOD1, then one path<TAB>sha256<TAB>https-url per
 //   file (# lines are comments).
 //
@@ -44,6 +45,7 @@ struct FileList {
     std::string source;
     std::vector<Entry> entries;
     bool is_signed = false;  // carried a valid signature by the pack's key
+    std::optional<std::string> release;  // a JSON list's "version", e.g. v7
 
     std::optional<uint64_t> bytes() const;  // total size, when the list gives every file's size
     std::string host() const;               // the host the files come from, for display
@@ -130,6 +132,9 @@ ProfileLock lock_profile(const fs::path& profile_dir);
 // downloads wait for the next try). Only one sync per profile runs at a time. Throws
 // std::runtime_error.
 Synced sync(const fs::path& profile_dir, const FileList& list, const Progress& progress);
+
+// The release (a JSON list's "version") the profile's files last synced to, if it gave one.
+std::optional<std::string> recorded_release(const fs::path& profile_dir);
 
 // Whether every file from the last sync is still there, at its size.
 bool intact(const fs::path& profile_dir);

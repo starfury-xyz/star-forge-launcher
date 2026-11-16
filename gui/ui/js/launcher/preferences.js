@@ -18,6 +18,7 @@ export function parsePreferences(input) {
     runner: string(value.runner),
     winePrefix: string(value.winePrefix),
     checkUpdates: boolean(value.checkUpdates),
+    prereleaseUpdates: boolean(value.prereleaseUpdates),
     experimental: boolean(value.experimental),
   };
 }

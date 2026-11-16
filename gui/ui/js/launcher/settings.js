@@ -15,6 +15,10 @@ export async function bindSettings(preferences, store) {
   /** @param {string} title @param {string} note @param {string} id @param {string} input */
   const row = (title, note, id, input) =>
     `<div class="setting-row"><label for="${id}">${title}<small>${note}</small></label>${input}</div>`;
+  // A folder setting: picked with Browse… (never typed), and Clear goes back to the default.
+  /** @param {string} id @param {string} key @param {string} placeholder @param {string} title */
+  const folder = (id, key, placeholder, title) =>
+    `<span class="folder-field"><input id="${id}" data-preference="${key}" type="text" readonly spellcheck="false" placeholder="${placeholder}" title=""><button class="button" data-browse="${key}" data-title="${title}">Browse…</button><button class="button" data-clear="${key}" aria-label="Use the default">Clear</button></span>`;
   const render = () => {
     area.innerHTML =
       tab === 'launcher'
@@ -23,8 +27,9 @@ export async function bindSettings(preferences, store) {
       ${row('When closing the launcher', 'Choose what happens when you click X.', 'close-behavior', '<select id="close-behavior" data-preference="closeBehavior"><option value="exit">Exit launcher</option><option value="tray">Minimize to tray</option></select>')}</section>
       <section class="setting-group"><h2>Appearance</h2>${row('Color theme', 'Hover a theme to preview it.', 'theme-button', `<div class="theme-picker"><button type="button" class="theme-button" id="theme-button" aria-haspopup="listbox" aria-expanded="false" aria-controls="theme-list"><span class="swatch"></span><span class="theme-name"></span><span class="caret" aria-hidden="true">▾</span></button><ul class="theme-list" id="theme-list" role="listbox" aria-label="Color theme" hidden>${factions.map((name) => `<li class="theme-option" role="option" id="theme-${name}" data-theme="${name}"><span class="swatch" data-faction="${name}"></span>${themeName(name)}</li>`).join('')}</ul></div>`)}
       ${row('Server pack look', 'Show the selected server pack’s logo, icon, background and color. Its color replaces the faction color.', 'pack-branding', '<input id="pack-branding" data-preference="packBranding" type="checkbox">')}
-      ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', '<span class="folder-field"><input id="background-folder" data-preference="backgroundFolder" type="text" spellcheck="false" placeholder="Steam banner"><button class="button" id="pick-background-folder">Browse…</button></span>')}</section>
+      ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', folder('background-folder', 'backgroundFolder', 'Steam banner', 'Background folder'))}</section>
       <section class="setting-group"><h2>Updates</h2>${row('Check for launcher updates', 'Look for a new STAR FORGE Launcher version each time it starts.', 'check-updates', '<input id="check-updates" data-preference="checkUpdates" type="checkbox">')}
+      ${row('Pre-release updates', 'Also offer test versions of the launcher before they are released to everyone. They may have bugs; turn this off to go back to the next full release.', 'prerelease-updates', '<input id="prerelease-updates" data-preference="prereleaseUpdates" type="checkbox">')}
       <div class="setting-buttons"><button class="button" id="check-launcher-update">Check now</button></div></section>`
         : tab === 'experimental'
           ? `
@@ -33,12 +38,12 @@ export async function bindSettings(preferences, store) {
       ${row('Mods and server hosting', 'Show the Mods page (switch a profile’s or server’s patches) and the Servers page (install the server patcher, start and stop servers, read their logs).', 'experimental', '<input id="experimental" data-preference="experimental" type="checkbox">')}</section>`
           : `
       <section class="setting-group"><h2>Installation</h2>
-      ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', '<input id="game-directory" data-preference="gameDirectory" type="text" spellcheck="false" placeholder="Found through Steam">')}
+      ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', folder('game-directory', 'gameDirectory', 'Found through Steam', 'Star Conflict folder'))}
       <p class="settings-path" id="detected-game"></p></section>
       <section class="setting-group" ${compat.supported ? '' : 'hidden'}><h2>Compatibility</h2>
       ${row('Run the game with', 'Automatic uses umu-launcher, which runs Proton without needing Steam (it downloads its runtime the first time). Or name a Wine-style command (wine, a Wine build or a wrapper script), run as <i>command</i> program.exe. <b>steam-proton</b> uses Steam’s own setup and will be removed in a later version.', 'runner', '<input id="runner" data-preference="runner" type="text" spellcheck="false" list="runner-list" placeholder="Automatic (umu)"><datalist id="runner-list"></datalist>')}
       <div id="proton-settings">${row('Proton version', 'Automatic uses umu’s own Proton (UMU-Proton), the same for every player. Pick another build (Steam’s, GE, CachyOS…) to use it instead.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}</div>
-      <div id="prefix-settings">${row('Prefix', 'Leave empty for the launcher’s own prefix in its data folder. Your settings are copied from Steam’s prefix the first time.', 'wine-prefix', '<input id="wine-prefix" data-preference="winePrefix" type="text" spellcheck="false" placeholder="Launcher’s own prefix">')}</div>
+      <div id="prefix-settings">${row('Prefix', 'Leave empty for the launcher’s own prefix in its data folder. Your settings are copied from Steam’s prefix the first time.', 'wine-prefix', folder('wine-prefix', 'winePrefix', 'Launcher’s own prefix', 'Wine prefix folder'))}</div>
       <p class="settings-path" id="detected-proton"></p></section>
       <section class="setting-group"><h2>Setup</h2>
       ${row('Run setup again', 'Pick the Star Conflict and profiles folders again, as on first start.', 'run-setup', '<span class="confirm-inline"><button class="button" id="run-setup">Run setup…</button><span id="run-setup-confirm" hidden>Open the setup now? <button class="button primary" id="run-setup-yes">Run setup</button><button class="button" id="run-setup-no">Cancel</button></span></span>')}</section>
@@ -72,6 +77,8 @@ export async function bindSettings(preferences, store) {
       else if (input instanceof HTMLInputElement && input.type === 'checkbox')
         input.checked = entry[1] === true;
       else input.value = String(entry[1]);
+      // Long paths don't fit: the whole one shows on hover.
+      if (input instanceof HTMLInputElement && input.readOnly) input.title = input.value;
     });
     const theme = area.querySelector('#theme-button');
     if (theme && !previewing) {
@@ -176,16 +183,12 @@ export async function bindSettings(preferences, store) {
       run(() => preferences.update(key, choice(input.value, ['tray', 'keepOpen', 'exit'])));
     else if (key === 'closeBehavior')
       run(() => preferences.update(key, choice(input.value, ['tray', 'exit'])));
-    else if ((key === 'packBranding' || key === 'checkUpdates' || key === 'experimental') && input instanceof HTMLInputElement)
-      run(() => preferences.update(key, input.checked));
     else if (
-      key === 'gameDirectory' ||
-      key === 'protonPath' ||
-      key === 'runner' ||
-      key === 'winePrefix' ||
-      key === 'backgroundFolder'
+      (key === 'packBranding' || key === 'checkUpdates' || key === 'prereleaseUpdates' || key === 'experimental') &&
+      input instanceof HTMLInputElement
     )
-      run(() => preferences.update(key, input.value.trim()));
+      run(() => preferences.update(key, input.checked));
+    else if (key === 'protonPath' || key === 'runner') run(() => preferences.update(key, input.value.trim()));
   });
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
@@ -209,11 +212,18 @@ export async function bindSettings(preferences, store) {
       button.closest('dialog')?.close();
       document.dispatchEvent(new Event('run-setup'));
     }
-    if (button.id === 'pick-background-folder')
+    const browse = button.dataset.browse;
+    if ((browse === 'gameDirectory' || browse === 'winePrefix' || browse === 'backgroundFolder') && button.closest('#settings-content'))
       run(async () => {
-        const dir = await invoke('pick_background_folder');
-        if (typeof dir === 'string') await preferences.update('backgroundFolder', dir);
+        const current = preferences.get()[browse];
+        const dir = await invoke('pick_folder', { title: button.dataset.title || 'Folder', start: current || null });
+        if (typeof dir !== 'string') return;
+        if (browse === 'gameDirectory') await invoke('check_game_folder', { path: dir });
+        await preferences.update(browse, dir);
       });
+    const clear = button.dataset.clear;
+    if ((clear === 'gameDirectory' || clear === 'winePrefix' || clear === 'backgroundFolder') && button.closest('#settings-content'))
+      run(() => preferences.update(clear, ''));
     if (button.dataset.command && button.closest('#settings-content'))
       run(() => invoke(button.dataset.command || ''));
   });
