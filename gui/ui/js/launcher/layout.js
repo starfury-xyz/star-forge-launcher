@@ -43,7 +43,14 @@ export function mountLayout() {
         <section id="mods-page" class="mods-page" hidden>
           <span class="eyebrow">Mods &amp; patches</span>
           <div class="summary-title"><h1>Mods</h1></div>
-          <label class="mods-target-row"><span>Patches of</span><select id="mods-target" aria-label="Whose patches"></select></label>
+          <label class="mods-target-row"><span>Mods and patches of</span><select id="mods-target" aria-label="Whose mods and patches"></select></label>
+          <div id="user-mods" hidden>
+            <div class="mods-section-head"><h2>Installed mods</h2><div class="setting-buttons"><button class="button" id="mods-open-folder">Open mods folder</button><button class="button" id="mods-check">Check mods</button></div></div>
+            <p id="user-mods-note" class="mods-note"></p>
+            <div id="user-mods-conflicts"></div>
+            <div id="user-mods-list" class="mods-list user-mods-list"></div>
+            <div class="mods-section-head"><h2>Patches</h2></div>
+          </div>
           <p id="mods-note" class="mods-note"></p>
           <div id="mods-problems"></div>
           <div id="mods-list" class="mods-list"></div>

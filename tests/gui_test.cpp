@@ -331,6 +331,48 @@ void profiles_and_packs(const fs::path& base, test::FileServer& srv) {
         check(contains(error_of("list_mods", {{"kind", "profile"}, {"id", "nope"}}), "does not exist"), "list_mods: unknown profile");
     }
 
+    // The Mods page, a profile's mods/ folder: listed in load order, switched, moved, opened.
+    {
+        const fs::path md = profiles / "gui-pack/mods";
+        auto man = [](const std::string& id) {
+            return R"({"format":1,"id":")" + id + R"(","name":"Mod )" + id + R"(","version":"1.0.0","authors":["me"]})";
+        };
+        test::write_file(md / "x/mod.json", man("x"));
+        test::write_file(md / "y/mod.json", man("y"));
+        test::write_file(md / "z/mod.json", "{}");
+        auto ids = [](const json& list) {
+            std::string out;
+            for (const auto& m : list["mods"]) out += m["id"].get<std::string>() + ":" + m["status"].get<std::string>() + " ";
+            return out;
+        };
+        json list = call("list_profile_mods", {{"id", "gui-pack"}});
+        check(ids(list) == "x:new y:new z:broken " && list["mods"][0]["name"] == "Mod x" && list["mods"][0]["authors"][0] == "me" &&
+                  list["mods"][2]["reason"].get<std::string>().find("missing field") != std::string::npos &&
+                  list["checked"] == false && list["conflicts"].empty() && list["folder"] == ustr(fs::path(md).make_preferred()),
+              "list_profile_mods: " + list.dump());
+        list = call("set_profile_mod", {{"id", "gui-pack"}, {"mod", "x"}, {"on", false}});
+        check(ids(list) == "x:off y:new z:broken " && list["mods"][0]["on"] == false, "set_profile_mod off: " + ids(list));
+        check(profiles::read_local(profiles / "gui-pack").mods.off == std::vector<std::string>{"x"}, "set_profile_mod: in local.json");
+        list = call("move_profile_mod", {{"id", "gui-pack"}, {"mod", "y"}, {"by", -1}});
+        check(ids(list) == "y:new x:off z:broken ", "move_profile_mod up: " + ids(list));
+        list = call("move_profile_mod", {{"id", "gui-pack"}, {"mod", "y"}, {"by", -5}});
+        check(ids(list) == "y:new x:off z:broken ", "move_profile_mod: stops at the top");
+        list = call("move_profile_mod", {{"id", "gui-pack"}, {"mod", "y"}, {"by", 2}});
+        check(ids(list) == "x:off z:broken y:new ", "move_profile_mod down: " + ids(list));
+        check(contains(error_of("set_profile_mod", {{"id", "gui-pack"}, {"mod", "nope"}, {"on", true}}), "no mod \"nope\""),
+              "set_profile_mod: unknown mod");
+        check(contains(error_of("move_profile_mod", {{"id", "gui-pack"}, {"mod", "x"}, {"by", "up"}}), "whole number"),
+              "move_profile_mod: by must be a number");
+        check(contains(error_of("check_profile_mods", {{"id", "gui-pack"}}), "game folder has not been found"),
+              "check_profile_mods: needs the game folder");
+        call("open_mods_folder", {{"id", "gui-pack"}});
+        check(host.last_opened() == ustr(fs::path(md).make_preferred()), "open_mods_folder");
+        fs::remove_all(md);
+        sf::pack::Local l = profiles::read_local(profiles / "gui-pack");
+        l.mods = {};
+        profiles::write_local(profiles / "gui-pack", l);
+    }
+
     // The Servers page: a server install in the list, checked, its patches switched in patcher.toml.
     {
         const fs::path cloud = base / "cloud";

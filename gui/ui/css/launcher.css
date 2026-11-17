@@ -1783,6 +1783,63 @@ input[type='checkbox']:disabled {
   border-color: #ff8a7a;
   color: #ff8a7a;
 }
+
+/* Installed mods (a profile's mods/ folder): in load order, with buttons to move them. */
+.mods-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 22px 0 4px;
+}
+.mods-section-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.mods-section-head .setting-buttons {
+  margin: 0;
+}
+.user-mods-list {
+  padding-bottom: 0;
+}
+.mod-order {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+.mod-order .button {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+.mod-order .button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.mod-row[data-status='failed'],
+.mod-row[data-status='broken'] {
+  border-color: #ff8a7a66;
+}
+.mod-badge-ok {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mod-conflict {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: #1c1916cc;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mod-conflict code {
+  font-size: 12px;
+}
 #add-server {
   display: inline-flex;
   align-items: center;

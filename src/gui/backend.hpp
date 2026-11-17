@@ -180,6 +180,11 @@ private:
     json list_mods(const std::string& kind, const std::string& id);  // mods.cpp
     json set_mod(const std::string& kind, const std::string& id, const std::string& module, const std::string& patch,
                  std::optional<bool> on);
+    json list_profile_mods(const std::string& id);  // a profile's mods/ folder
+    json set_profile_mod(const std::string& id, const std::string& mod, bool on);
+    json move_profile_mod(const std::string& id, const std::string& mod, int by);
+    json check_profile_mods(const std::string& id);
+    void open_mods_folder(const std::string& id);
     json list_servers();  // servers.cpp
     json add_server(const std::string& name, const std::string& cloud);
     void remove_server(const std::string& id);

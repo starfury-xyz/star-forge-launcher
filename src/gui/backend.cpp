@@ -264,6 +264,16 @@ json Backend::invoke(const std::string& command, const json& args) {
         return set_mod(arg_str(c, args, "kind"), arg_str(c, args, "id"), arg_str(c, args, "module"),
                        arg_str(c, args, "patch"), on.is_null() ? std::nullopt : std::optional<bool>(arg_bool(c, args, "on")));
     }
+    if (command == "list_profile_mods") return list_profile_mods(arg_str(c, args, "id"));
+    if (command == "set_profile_mod")
+        return set_profile_mod(arg_str(c, args, "id"), arg_str(c, args, "mod"), arg_bool(c, args, "on"));
+    if (command == "move_profile_mod") {
+        const json& by = arg(c, args, "by");
+        if (!by.is_number_integer()) throw std::runtime_error(std::string("invalid args `by` for command `") + c + "`: a whole number");
+        return move_profile_mod(arg_str(c, args, "id"), arg_str(c, args, "mod"), by.get<int>());
+    }
+    if (command == "check_profile_mods") return check_profile_mods(arg_str(c, args, "id"));
+    if (command == "open_mods_folder") return open_mods_folder(arg_str(c, args, "id")), nullptr;
     // servers.cpp (no Rust counterpart)
     if (command == "list_servers") return list_servers();
     if (command == "add_server") return add_server(arg_str(c, args, "name"), arg_str(c, args, "cloud"));

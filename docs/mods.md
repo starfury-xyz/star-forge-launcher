@@ -2,9 +2,10 @@
 
 > **Status: in progress** on the `mods` branch. Working: the loader
 > (`mods/` folder, zips, order, switches, requirements, conflicts),
-> [data patches](#data-patches), `scripts` in `mod.json`, whole files, and
-> `sc-launch mods` / `sc-launch mod diff`. Not yet: [Lua hooks](#lua-hooks)
-> (`sfmod.lua`), the launcher's Mods page, [pack restrictions](#packs-that-restrict-mods),
+> [data patches](#data-patches), `scripts` in `mod.json`, whole files,
+> [Lua hooks](#lua-hooks) (`sfmod.lua`), the launcher's Mods page (behind
+> **Settings → Experimental** for now), and `sc-launch mods` /
+> `sc-launch mod diff`. Not yet: [pack restrictions](#packs-that-restrict-mods),
 > patching files that only exist inside a `.pak`, [text diffs](#text-diffs).
 > Sections marked *to verify* depend on things still to be tested in the game.
 
@@ -47,7 +48,11 @@ never touch:
   thing, the later one wins (see [Conflicts](#conflicts-and-load-order)).
 - `off`: mods that stay in the folder but aren't loaded.
 
-The **Mods** page (to come) and the command line change these for you:
+The **Mods** page and the command line change these for you. The page lists
+the profile's mods top to bottom in load order, with a switch and ▲/▼ to
+move each one, what happened to it at the last start (loaded, not loaded and
+why, patches left out), and the conflicts. **Check mods** loads them the way
+Play would, without starting the game.
 
 ```sh
 sc-launch mods <profile>                  # mods in load order, on/off, and why one didn't load
@@ -117,7 +122,7 @@ retro-layout-1.0.0.zip
   "links": { "source": "https://github.com/..." },
   "game": ["<sha1 of win64/game.exe>"],
   "needs": ["loose-before-packed"],
-  "requires": { "sfmod": "1" },
+  "requires": { "sfmod": ">=1" },
   "after": ["retro-icons"],
   "scripts": [
     { "file": "ui\\mods\\retro-layout\\layout.lua",
@@ -282,8 +287,13 @@ patch "data/ui/uiresources.txt"
 }
 ```
 
-Without `after`, a script goes after the last script of its loading group.
-`"type": "TEXTURE"` registers a texture list (`textures/*.txt`) the same way.
+Without `after`, a script goes at the end of the list. `"type": "TEXTURE"`
+registers a texture list (`textures/*.txt`) the same way.
+
+`groups` (the `loadingGroups`) is optional: by default a script loads with
+the script it comes after, else at `APP_START`. That matters for hooks: the
+in-battle windows (`hudmoduleswnd.lua` and others) are `FIRST_LEVEL`
+scripts, and a hook on them has to load then too, not before they exist.
 
 Place a script **after the game script whose functions it changes**, so they
 exist when your script runs. That is the whole trick behind Lua hooks.
@@ -313,7 +323,7 @@ script. The loader registers its own script, `sfmod.lua`, first in
 
 ```lua
 -- runs after hudmoduleswnd.lua (mod.json: "after": "ui\\scripts\\windows\\hudmoduleswnd.lua")
-local M = SF.mod( "cooldown-clock" )   -- this mod's handle; also creates UI.CooldownClock settings table
+local M = SF.mod( "cooldown-clock" )   -- this mod's handle
 
 -- New function: no other mod can conflict with it as long as the name is yours.
 function UI.HudModulesWnd:CooldownClock_Update( slotWnd, slotData, module, left, total )
@@ -335,7 +345,7 @@ end )
 
 | Call | Meaning |
 |---|---|
-| `SF.mod(id)` | Handle for your mod: `wrap`, `replace`, `log`, and `settings` (the table `UI.<ModName>` your players change from the console). |
+| `SF.mod(id)` | Handle for your mod: `wrap`, `replace`, `log`, and `settings` (a table of your own, `SF.settings["<id>"]` from the console). |
 | `M:wrap(tbl, name, fn)` | `fn(orig, ...)` is called instead of `tbl[name]`; call `orig` to run what was there. |
 | `M:replace(tbl, name, fn)` | `fn` is the new base function. Wraps from other mods still run around it. |
 | `M:log(fmt, ...)` | `sys.log` with your mod id in front. |
@@ -354,6 +364,16 @@ How they combine, whatever the load order:
   two mods declare the same function in `lua.replaces`.
 - Functions are stored back into the class table itself (no metatable
   tricks), so the game's native code sees them like the originals.
+- Running a mod's script again updates its hooks in place (one wrap per mod
+  per function), and when the game's own script has run again, its new
+  function becomes the base.
+- Wrapping a function that doesn't exist wraps nothing (`orig` does nothing)
+  and logs it.
+
+The launcher registers `sfmod.lua` (as `ui\sfmod\sfmod.lua`, served from
+`mods/.merged`) whenever a loaded mod has `scripts`. Mods using it should
+say `"requires": { "sfmod": ">=1" }`, so a launcher with an older API
+refuses them with a reason instead of the game failing.
 
 Use `wrap` whenever the change can run before or after the original. Use
 `replace` only when it has to change something in the middle of a function,
@@ -458,12 +478,14 @@ already do it online).
   on `UI`, because it loads before `uigamefuncs.lua`. As a mod it registers
   with `scripts` (after `uigamefuncs.lua`) and uses `M:wrap` on
   `GetBindKeysStr`/`KeyName2Str`; the class `def` changes stay as they are.
-- **coms-retro-sc-ui** ships 18,600 lines to change about 500:
-  `module_new.txt` icon remaps become `set` patches, `equip_main2.sanim`
-  becomes `set` patches on its objects, and the changes to
-  `equipmentwnd.lua`, `hudmoduleswnd.lua` and `moduleswnd.lua` (about 17
-  existing functions and 6 new ones) become one hook script per window. Split
-  into `retro-icons`, `retro-layout` and `cooldown-clock`.
+- **coms-retro-sc-ui** (done on its `mod-format` branch) shipped 18,600
+  lines to change about 500. `module_new.txt` icon remaps are `set` patches,
+  `equip_main2.sanim` is `set` patches on its objects, and the three window
+  scripts are three hook files under `ui\mods\coms-retro-ui\`: the cooldown
+  clock wraps 11 functions and adds its own, and the equipment window
+  replaces 3 functions that change in the middle (declared in
+  `lua.replaces`). Still to do: split it into `retro-icons`, `retro-layout`
+  and `cooldown-clock`.
 
 ## Open questions (to verify in the game)
 
