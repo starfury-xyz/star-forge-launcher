@@ -14,6 +14,8 @@
 #include "launch/packs.hpp"
 #include "launch/profiles.hpp"
 #include "launch/signing.hpp"
+#include "mod/blocks.hpp"
+#include "mod/sfmod_lua.hpp"
 #include "mod/sfpatch.hpp"
 #include "patch/core.hpp"
 
@@ -26,6 +28,7 @@ using ojson = nlohmann::ordered_json;
 constexpr std::size_t kMaxEntries = 50000;
 constexpr uint64_t kMaxModBytes = 4ull << 30;
 constexpr const char* kComplete = ".complete";  // in a cache folder once it's fully unpacked
+const std::string kUiResources = "data/ui/uiresources.txt";  // lowercase: also a key of `merged`
 
 std::string lower(std::string s) {
     for (char& c : s)
@@ -202,25 +205,59 @@ std::string rel_slash(const fs::path& p, const fs::path& base) {
     return r;
 }
 
-// The uiresources.txt patch for a mod's `scripts`.
-std::string scripts_patch(const mod::Manifest& m) {
+// The loadingGroups of the script `file` in a uiresources.txt, or nullopt.
+std::optional<std::string> groups_of(const std::string& uiresources, const std::string& file) {
+    try {
+        mod::Doc doc = mod::parse(uiresources);
+        for (const mod::Node& n : doc.top) {
+            if (!n.block || !mod::iequals(n.key(), "Item")) continue;
+            const mod::Node* name = nullptr;
+            const mod::Node* groups = nullptr;
+            for (const mod::Node& c : n.children) {
+                if (c.block) continue;
+                if (mod::iequals(c.key(), "fileName")) name = &c;
+                if (mod::iequals(c.key(), "loadingGroups")) groups = &c;
+            }
+            if (name && groups && mod::iequals(name->value(doc.text), file)) return groups->value(doc.text);
+        }
+    } catch (const mod::ParseError&) {
+    }
+    return std::nullopt;
+}
+
+// The uiresources.txt patch for a mod's `scripts`. A script without `groups` loads with the
+// script it comes after (a hook on a FIRST_LEVEL script must run at FIRST_LEVEL too).
+std::string scripts_patch(const mod::Manifest& m, const std::optional<std::string>& uiresources) {
     std::string out = "patch \"data/ui/uiresources.txt\"\n{\n";
     // Entries keep the order they're listed in: one with the same `after` as the entry before it
     // goes after that entry, not straight after the shared anchor (which would reverse them).
     std::optional<std::string> prev_after, prev_file;
     for (mod::Script s : m.scripts) {
+        std::string groups = "APP_START";
+        if (s.groups) groups = *s.groups;
+        else if (s.after && uiresources)
+            if (auto g = groups_of(*uiresources, *s.after)) groups = *g;
         const std::optional<std::string> written = s.after;
         if (s.after && prev_after && *s.after == *prev_after) s.after = prev_file;
         prev_after = written;
         prev_file = s.file;
         std::string item = "\t\tItem\n\t\t{\n\t\t\tfileName \"" + s.file + "\"\n\t\t\tresourceType \"" + s.type +
-                           "\"\n\t\t\tloadingGroups \"" + s.groups + "\"\n\t\t}\n";
+                           "\"\n\t\t\tloadingGroups \"" + groups + "\"\n\t\t}\n";
         if (s.after)
             out += "\tadd after Item[fileName=\"" + *s.after + "\"]\n\t{\n" + item + "\t}\n";
         else
             out += "\tadd\n\t{\n" + item + "\t}\n";
     }
     return out + "}\n";
+}
+
+// uiresources.txt with sfmod.lua registered first, before every script.
+std::string with_sfmod(const std::string& text) {
+    const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    std::size_t at = text.rfind("\xEF\xBB\xBF", 0) == 0 ? 3 : 0;
+    std::string item = "Item" + eol + "{" + eol + "\tfileName \"" + mod::kSfmodScript + "\"" + eol +
+                       "\tresourceType \"SCRIPT\"" + eol + "\tloadingGroups \"APP_START\"" + eol + "}" + eol + eol;
+    return text.substr(0, at) + item + text.substr(at);
 }
 
 // --- report ---------------------------------------------------------------------------------
@@ -400,6 +437,16 @@ Result build(const fs::path& profile_dir, const fs::path& game_dir, const std::f
         for (auto& m : r.mods) {
             if (!m.loaded) continue;
             for (const auto& [rid, range] : by_id[m.id]->manifest->requires_) {
+                if (rid == mod::kSfmodId) {
+                    if (!mod::version_matches(mod::kSfmodVersion, range)) {
+                        m.reason = std::string("needs the Lua API (sfmod) ") + range + "; this launcher has " +
+                                   mod::kSfmodVersion + ", update it";
+                        m.loaded = false;
+                        changed = true;
+                        break;
+                    }
+                    continue;
+                }
                 auto it = loaded.find(rid);
                 if (it == loaded.end()) m.reason = "needs mod \"" + rid + "\"";
                 else if (!mod::version_matches(it->second->version, range))
@@ -496,7 +543,11 @@ Result build(const fs::path& profile_dir, const fs::path& game_dir, const std::f
     for (const Mod* m : loaded) {
         const mod::Manifest& man = *by_id[m->id]->manifest;
         std::vector<std::pair<std::string, std::string>> sources;  // name, text
-        if (!man.scripts.empty()) sources.emplace_back("mod.json scripts", scripts_patch(man));
+        if (!man.scripts.empty()) {
+            auto it = merged.find(kUiResources);
+            sources.emplace_back("mod.json scripts",
+                                 scripts_patch(man, it != merged.end() ? std::optional(it->second.text) : base_text(kUiResources)));
+        }
         for (const auto& rel : list_files(root[m->id] / mod::kPatchesDir)) {
             if (lower(ustr(fs::path(rel).extension())) != ".sfpatch") continue;
             sources.emplace_back(std::string(mod::kPatchesDir) + "/" + rel,
@@ -524,6 +575,18 @@ Result build(const fs::path& profile_dir, const fs::path& game_dir, const std::f
             }
         }
     }
+    // The Lua API, before every mod's script.
+    if (std::any_of(loaded.begin(), loaded.end(), [&](const Mod* m) { return !by_id[m->id]->manifest->scripts.empty(); })) {
+        if (!merged.count(kUiResources))
+            if (auto t = base_text(kUiResources)) merged[kUiResources] = Merged{kUiResources, *t, {}};
+        if (merged.count(kUiResources)) {
+            merged[kUiResources].text = with_sfmod(merged[kUiResources].text);
+            merged[lower(mod::kSfmodFile)] = Merged{mod::kSfmodFile, mod::kSfmodLua, {}};
+        } else {
+            r.notes.push_back("data/ui/uiresources.txt not found: mods' scripts won't load");
+        }
+    }
+
     // Two mods changing the same key or block.
     for (const auto& [key, mf] : merged) {
         std::map<std::string, std::vector<std::string>> by_addr;

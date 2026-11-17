@@ -28,6 +28,7 @@ Manifest read(const json& j) {
                     std::to_string(kModFormat) + "); update the launcher");
     m.id = str(o.req("id"));
     if (!valid_id(m.id)) throw Error("id " + debug_str(m.id) + ": use lowercase letters, digits and '-'");
+    if (m.id == kSfmodId) throw Error("id \"sfmod\" is the launcher's own; pick another");
     if (const json* v = o.opt("name")) m.name = str(*v);
     if (m.name.empty()) m.name = m.id;
     if (const json* v = o.opt("version")) m.version = str(*v);
@@ -57,7 +58,7 @@ Manifest read(const json& j) {
             if (const json* g = s.opt("groups")) sc.groups = str(*g);
             if (sc.type != "SCRIPT" && sc.type != "TEXTURE")
                 throw Error("scripts: type " + debug_str(sc.type) + ", expected \"SCRIPT\" or \"TEXTURE\"");
-            for (const std::string* f : {&sc.file, sc.after ? &*sc.after : nullptr})
+            for (const std::string* f : {&sc.file, sc.after ? &*sc.after : nullptr, sc.groups ? &*sc.groups : nullptr})
                 if (f && f->find_first_of("\"[]") != std::string::npos)
                     throw Error("scripts: " + debug_str(*f) + " may not contain \" [ or ]");
             m.scripts.push_back(std::move(sc));

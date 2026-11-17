@@ -15,11 +15,18 @@ inline constexpr const char* kFilesDir = "files";      // new and replaced files
 inline constexpr const char* kPatchesDir = "patches";  // *.sfpatch
 inline constexpr unsigned kModFormat = 1;
 
+// The Lua API (src/mod/sfmod.lua): `requires: {"sfmod": ">=1"}` checks against this, and the
+// loader registers sfmod.lua at this game path before any mod's script.
+inline constexpr const char* kSfmodId = "sfmod";
+inline constexpr const char* kSfmodVersion = "1.0.0";
+inline constexpr const char* kSfmodScript = "ui\\sfmod\\sfmod.lua";
+inline constexpr const char* kSfmodFile = "data/ui/sfmod/sfmod.lua";
+
 struct Script {
     std::string file;                  // game path with backslashes, as uiresources.txt writes it
     std::optional<std::string> after;  // a script already in the list; else after the last of `groups`
     std::string type = "SCRIPT";       // resourceType: SCRIPT or TEXTURE
-    std::string groups = "APP_START";  // loadingGroups
+    std::optional<std::string> groups;  // loadingGroups; unset: the `after` script's, else APP_START
 };
 
 struct Manifest {

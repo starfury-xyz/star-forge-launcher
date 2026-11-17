@@ -71,6 +71,7 @@ void manifest_tests() {
     check(contains(err(R"({"format":1,"id":"Bad Id"})"), "lowercase"), "mod.json: bad id refused");
     check(contains(err(R"({"format":2,"id":"a"})"), "update the launcher"), "mod.json: newer format refused");
     check(contains(err(R"({"format":1,"id":"a","game":["abc"]})"), "SHA-256"), "mod.json: bad game hash refused");
+    check(contains(err(R"({"format":1,"id":"sfmod"})"), "launcher's own"), "mod.json: id sfmod is reserved");
     check(sf::mod::valid_id("deck-glyphs") && sf::mod::valid_id("a.b_c") && !sf::mod::valid_id("-a") &&
               !sf::mod::valid_id("a--b") && !sf::mod::valid_id("A"),
           "valid_id");
@@ -91,7 +92,8 @@ int main() {
 
     // The game: a resource list and a texture list.
     write(game / "data/ui/uiresources.txt",
-          "Item\r\n{\r\n\tfileName \"ui\\scripts\\work\\uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n}\r\n");
+          "\xEF\xBB\xBFItem\r\n{\r\n\tfileName \"ui\\scripts\\work\\uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n"
+          "\tloadingGroups \"FIRST_LEVEL\"\r\n}\r\n");
     write(game / "data/ui/textures/common/icons.txt",
           "Texture\n{\n\tname \"I1\"\n\trect \"0 0 1 1\"\n}\nTexture\n{\n\tname \"I2\"\n\trect \"0 0 2 2\"\n}\n");
     // The pack ships its own copy of the icon list: patches must start from that one.
@@ -132,6 +134,9 @@ int main() {
     write(mods / "f/files/data/ui/f.txt", "f");
     write(mods / "g/mod.json", manifest("g", R"(,"needs":["no-such-patch"])"));
     write(mods / "h/mod.json", manifest("h", R"(,"server":true)"));
+    // i needs a newer Lua API than this launcher has; j's range is met.
+    write(mods / "i/mod.json", manifest("i", R"(,"requires":{"sfmod":">=2"})"));
+    write(mods / "j/mod.json", manifest("j", R"(,"requires":{"sfmod":">=1"})"));
     write(mods / "notes.txt", "a stray file, not a mod");
     // The player puts b before a; f is off.
     sf::pack::Local local;
@@ -142,8 +147,8 @@ int main() {
     auto r = ml::build(prof, game, nullptr);
     std::vector<std::string> ids;
     for (const auto& m : r.mods) ids.push_back(m.id);
-    check((ids == std::vector<std::string>{"b", "a", "c", "d", "b-1.0.0.zip", "e", "f", "g", "h"}) ||
-              (ids == std::vector<std::string>{"b", "a", "c", "d", "e", "f", "g", "h"}),
+    check((ids == std::vector<std::string>{"b", "a", "c", "d", "b-1.0.0.zip", "e", "f", "g", "h", "i", "j"}) ||
+              (ids == std::vector<std::string>{"b", "a", "c", "d", "e", "f", "g", "h", "i", "j"}),
           "load order: the player's, then the rest by id");
     check(find(r, "a") && find(r, "a")->loaded && find(r, "b") && find(r, "b")->loaded, "a and b load");
     check(find(r, "c") && !find(r, "c")->loaded && contains(find(r, "c")->reason, "needs mod \"zzz\""), "c: missing requirement");
@@ -152,6 +157,9 @@ int main() {
     check(find(r, "f") && !find(r, "f")->loaded && find(r, "f")->reason == "turned off", "f: turned off");
     check(find(r, "g") && contains(find(r, "g")->reason, "no-such-patch"), "g: unknown core patch");
     check(find(r, "h") && contains(find(r, "h")->reason, "server"), "h: server mods aren't loaded");
+    check(find(r, "i") && !find(r, "i")->loaded && contains(find(r, "i")->reason, "Lua API (sfmod) >=2"),
+          "i: needs a newer sfmod");
+    check(find(r, "j") && find(r, "j")->loaded, "j: sfmod requirement met");
     bool e_reported = false;
     for (const auto& m : r.mods)
         if (contains(m.reason, "missing field `id`")) e_reported = true;
@@ -168,8 +176,16 @@ int main() {
     check(broken_noted && !contains(icons, "rect \"5\""), "a failing .sfpatch is left out whole (its first op too)");
     // Script registered right after uigamefuncs.lua, CRLF kept.
     std::string res = test::read_file(mods / ".merged/data/ui/uiresources.txt");
-    check(contains(res, "uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n}\r\nItem\r\n{\r\n\tfileName \"ui\\mods\\a\\a.txt\"\r\n"),
+    check(contains(res, "uigamefuncs.lua\"\r\n\tresourceType \"SCRIPT\"\r\n\tloadingGroups \"FIRST_LEVEL\"\r\n}\r\n"
+                        "Item\r\n{\r\n\tfileName \"ui\\mods\\a\\a.txt\"\r\n"),
           "scripts: registered after the named script");
+    check(contains(res, "a\\a.lua\"\r\n\tresourceType \"SCRIPT\"\r\n\tloadingGroups \"FIRST_LEVEL\""),
+          "scripts: loading group from the script they come after");
+    check(res.rfind("\xEF\xBB\xBFItem\r\n{\r\n\tfileName \"ui\\sfmod\\sfmod.lua\"\r\n\tresourceType \"SCRIPT\"\r\n"
+                    "\tloadingGroups \"APP_START\"\r\n}\r\n\r\nItem", 0) == 0,
+          "sfmod.lua registered first, after the BOM");
+    check(contains(test::read_file(mods / ".merged/data/ui/sfmod/sfmod.lua"), "SF.version = VERSION"),
+          "sfmod.lua served from .merged");
     check(res.find("a\\a.txt") < res.find("a\\a.lua"), "scripts with the same anchor keep their order");
     // Whole files and Lua.
     check(has_conflict(r, "file data/ui/shared.dds", {"b", "a"}), "conflict: same file in two mods");
@@ -216,7 +232,7 @@ int main() {
 
     // Removing the zip removes its cache; nothing loaded removes .layers.
     fs::remove(mods / "b-1.0.0.zip");
-    for (const char* id : {"a", "f"}) ml::set_on(prof, id, false);
+    for (const char* id : {"a", "f", "j"}) ml::set_on(prof, id, false);
     auto none = ml::build(prof, game, nullptr);
     check(!fs::exists(mods / ".layers"), "nothing loaded: no .layers");
     check(fs::is_empty(mods / ".cache"), "a removed zip's cache is cleaned up");

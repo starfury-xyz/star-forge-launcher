@@ -176,6 +176,10 @@ foreach(lib monocypher miniz)
     target_compile_options(${lib} PRIVATE $<IF:$<BOOL:${MSVC}>,/w,-w>)
 endforeach()
 
+# The Lua API mods' scripts use (docs/mods.md#lua-hooks), built into the loader as text.
+file(READ src/mod/sfmod.lua SF_SFMOD_LUA)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS src/mod/sfmod.lua)
+configure_file(src/mod/sfmod_lua.hpp.in ${CMAKE_BINARY_DIR}/generated/mod/sfmod_lua.hpp @ONLY)
 add_library(sf_launch STATIC
     src/crypto/base64.cpp
     src/crypto/random.cpp
@@ -202,6 +206,7 @@ add_library(sf_launch STATIC
     src/mod/sfpatch.cpp
     src/pack/pack.cpp
 )
+target_include_directories(sf_launch PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher miniz)
 if(WIN32)
     target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt)  # registry (Steam's install path), downloads, random
@@ -402,6 +407,11 @@ if(BUILD_TESTING)
     add_executable(mod_loader_test tests/mod_loader_test.cpp)
     target_link_libraries(mod_loader_test PRIVATE sf_launch miniz)
     add_test(NAME mod_loader COMMAND mod_loader_test)
+    # sfmod.lua with a stand-alone Lua 5.1 (the game's is LuaJIT 2.1), if there is one.
+    find_program(SF_LUA NAMES luajit lua5.1)
+    if(SF_LUA AND NOT CMAKE_CROSSCOMPILING)
+        add_test(NAME sfmod COMMAND ${SF_LUA} ${CMAKE_SOURCE_DIR}/tests/sfmod_test.lua ${CMAKE_SOURCE_DIR}/src/mod/sfmod.lua)
+    endif()
     add_executable(sfpatch_test tests/sfpatch_test.cpp)
     target_link_libraries(sfpatch_test PRIVATE sf_launch)
     # Optional: the game folder and a coms-retro-sc-ui checkout, for the checks against real files.
