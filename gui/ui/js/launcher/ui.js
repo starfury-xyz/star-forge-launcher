@@ -4,10 +4,25 @@ export function control(id, kind) {
   if (!(element instanceof kind)) throw new Error(`Missing ${id} control`);
   return element;
 }
-/** Displayed text always spells brand names in capitals (STAR FORGE, STARFURY, STARFURY.XYZ); stored values stay as typed. @param {string} text */
-export const brand = (text) => text
-    .replace(/star\s?forge/gi, 'STAR FORGE')
-    .replace(/star\s?fury(\.xyz)?/gi, (name) => name.replace(/\s/, '').toUpperCase());
+/** Replaces each `pattern` match that stands as a word of its own; one that is part of a path, link or id
+ * (D:\starforge_profiles\starfury, https://starfury.web..., xyz.starfury, star-forge) is left as it is.
+ * @param {string} text @param {RegExp} pattern @param {(match: string) => string} replace */
+const brandWord = (text, pattern, replace) =>
+  text.replace(pattern, (match, ...rest) => {
+    const offset = rest[rest.length - 2];
+    const whole = rest[rest.length - 1];
+    const before = whole[offset - 1] || '';
+    const after = whole[offset + match.length] || '';
+    const next = whole[offset + match.length + 1] || '';
+    if (/[\w\\/.-]/.test(before) || /[\w\\/-]/.test(after) || (after === '.' && /\w/.test(next))) return match;
+    return replace(match);
+  });
+/** Displayed text always spells brand names in capitals (STAR FORGE, STARFURY, STARFURY.XYZ); stored values stay as typed,
+ * and form fields, which Save writes back, show them as stored. @param {string} text */
+export const brand = (text) =>
+  brandWord(brandWord(text, /star\s?forge/gi, () => 'STAR FORGE'), /star\s?fury(\.xyz)?/gi, (name) =>
+    name.replace(/\s/, '').toUpperCase(),
+  );
 /** @param {string} id */
 export const required = (id) => control(id, HTMLElement);
 

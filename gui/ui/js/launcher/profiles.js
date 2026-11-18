@@ -194,8 +194,9 @@ export function bindProfiles(preferences, onChange) {
     editing = profile;
     localTouched = false;
     required('profile-dialog-title').textContent = profile ? 'Edit server profile' : 'Add server profile';
-    nameInput.value = brand(profile?.name || '');
-    serverInput.value = brand(profile?.server || '');
+    // As stored, not brand()ed: Save writes these fields back.
+    nameInput.value = profile?.name || '';
+    serverInput.value = profile?.server || '';
     localInput.checked = profile ? profile.localServer : false;
     ownDataInput.checked = profile ? profile.ownGameData : true;
     formError.hidden = true;
