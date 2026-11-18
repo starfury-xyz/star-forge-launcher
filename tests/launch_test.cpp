@@ -2,7 +2,9 @@
 // Windows. Groups marked "Rust:" port sc-launch's tests case for case.
 
 #include <algorithm>
+#include <thread>
 
+#include "launch/diagnostics.hpp"
 #include "launch/env.hpp"
 #include "launch/gamescope.hpp"
 #include "launch/paths.hpp"
@@ -49,6 +51,96 @@ int main() {
     check(!plain_part(std::string("a\0", 2)), "not a plain part: a\\0");
     check(!plain_part("a\xc2\x85" "b"), "not a plain part: C1 control U+0085");
     check(plain_part("\xc3\xa9t\xc3\xa9"), "plain part: non-ASCII letters");
+
+    // File errors: read_text, write_or_throw, rename_replacing and the messages they give.
+    {
+        const fs::path dir = tmp / "files";
+        fs::create_directories(dir);
+        std::error_code ec;
+        check(!read_text(dir / "missing.json", &ec) && not_found(ec), "read_text: a missing file is not_found");
+        check(!read_text(dir / "no" / "such" / "dir.json", &ec) && not_found(ec), "read_text: a missing folder is not_found");
+        write_or_throw(dir / "a.json", "{}\n");
+        check(read_text(dir / "a.json", &ec) == std::optional<std::string>("{}\n") && !ec, "write_or_throw then read_text");
+        write_or_throw(dir / ".a.json.tmp", "new\n");
+        rename_replacing(dir / ".a.json.tmp", dir / "a.json", ec);
+        check(!ec && read_or_throw(dir / "a.json") == "new\n", "rename_replacing replaces the file");
+        std::string what;
+        try {
+            read_or_throw(dir / "missing.json");
+        } catch (const std::exception& e) {
+            what = e.what();
+        }
+        check(what.find("missing.json: ") != std::string::npos && what.find("(os error 2)") != std::string::npos,
+              "read_or_throw names the file and the error: " + what);
+#ifdef _WIN32
+        // Another program holding the file without letting others read: a sharing violation,
+        // reported as such (not errno 13), with what to do about it.
+        HANDLE held = CreateFileW((dir / "a.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        check(held != INVALID_HANDLE_VALUE, "test holds a.json open, unshared");
+        check(!read_text(dir / "a.json", &ec) && ec.value() == ERROR_SHARING_VIOLATION && ec.category() == std::system_category(),
+              "read_text: a file held open is a sharing violation (os error 32)");
+        const std::string msg = io_msg(ec);
+        check(msg.find("(os error 32)") != std::string::npos && msg.find("another program has the file open") != std::string::npos,
+              "io_msg: a sharing violation says another program has it open: " + msg);
+        CloseHandle(held);
+        // Let go of within the retry window: read_text waits for it.
+        held = CreateFileW((dir / "a.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        std::thread release([held] {
+            Sleep(300);
+            CloseHandle(held);
+        });
+        check(read_text(dir / "a.json", &ec) == std::optional<std::string>("new\n"), "read_text waits for a file let go of within a second");
+        release.join();
+        const std::string denied = io_msg(std::error_code(ERROR_ACCESS_DENIED, std::system_category()));
+        check(denied.find("(os error 5)") != std::string::npos && denied.find("permissions") != std::string::npos,
+              "io_msg: access denied points at permissions: " + denied);
+#endif
+    }
+
+    // Diagnostics: every profile's pack.json read, parsed and saved, with the exact error.
+    {
+        const fs::path profiles = tmp / "diag-profiles";
+        fs::create_directories(profiles / "good");
+        fs::create_directories(profiles / "broken");
+        test::write_file(profiles / "good" / "pack.json",
+                         "{\"format\": 1, \"id\": \"local.good\", \"name\": \"Good\", \"version\": \"1.0.0\"}\n");
+        test::write_file(profiles / "good" / "agent.log", "agent\n");
+        test::write_file(profiles / "broken" / "pack.json", "{\"format\": 1,");
+#ifdef _WIN32
+        HANDLE held = CreateFileW((profiles / "good" / "pack.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+#endif
+        const diagnostics::Report r = diagnostics::collect({"test", std::nullopt, profiles, std::nullopt, "no game here"});
+#ifdef _WIN32
+        CloseHandle(held);
+        check(r.text.find("pack.json: CANNOT READ: Sharing violation (os error 32)") != std::string::npos,
+              "diagnostics: a held pack.json is reported as a sharing violation");
+#else
+        check(r.text.find("pack.json: read ") != std::string::npos && r.text.find("parsed: local.good 1.0.0 \"Good\"") != std::string::npos,
+              "diagnostics: a good pack.json is read and parsed");
+#endif
+        check(r.text.find("[profile broken]") != std::string::npos && r.text.find("CANNOT PARSE") != std::string::npos,
+              "diagnostics: a broken pack.json can't be parsed");
+        check(r.text.find("save test: OK") != std::string::npos, "diagnostics: the profiles folder can be saved to");
+        check(r.text.find("not found: no game here") != std::string::npos, "diagnostics: says why the game wasn't found");
+        bool has_log = false;
+        for (const auto& [name, path] : r.files) has_log = has_log || name == "profiles/good/agent.log";
+        check(has_log, "diagnostics: a profile's agent.log goes in the zip");
+        const std::string z = diagnostics::zip(r);
+        check(z.size() > 100 && z.compare(0, 2, "PK") == 0, "diagnostics: zip() makes a zip");
+        std::error_code ec;
+        check(!fs::exists(profiles / "good" / ".sf-diagnostics.tmp", ec) && !fs::exists(profiles / "good" / ".sf-diagnostics-probe", ec),
+              "diagnostics: the save test cleans up");
+        if (auto h = get_env(
+#ifdef _WIN32
+                "USERPROFILE"
+#else
+                "HOME"
+#endif
+                )) {
+            check(diagnostics::redact("at " + *h + "/x") == "at ~/x", "diagnostics: redact writes the home folder as ~");
+        }
+    }
 
     // Rust (env.rs): parses_dotenv_lines
     {

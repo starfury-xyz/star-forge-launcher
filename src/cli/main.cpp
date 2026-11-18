@@ -21,6 +21,7 @@
 #include <unistd.h>
 #endif
 
+#include "launch/diagnostics.hpp"
 #include "launch/env.hpp"
 #include "launch/gamescope.hpp"
 #include "launch/launch.hpp"
@@ -46,6 +47,9 @@ const char* kUsage =
     "USAGE:\n"
     "  sc-launch [OPTIONS] list              List profiles\n"
     "  sc-launch [OPTIONS] info              Show the detected game, tools and Proton setup\n"
+    "  sc-launch [OPTIONS] diagnose [<zip>]  Check the setup and every profile (can each pack.json\n"
+    "                                        be read, parsed and saved?) and print the report; with\n"
+    "                                        <zip>, also save it with the logs, for support\n"
     "  sc-launch [OPTIONS] run <profile> [-- <game args>]\n"
     "                                        Start the game with a profile (game args\n"
     "                                        replace the profile's own)\n"
@@ -385,6 +389,21 @@ int run(const std::vector<std::string>& args) {
             } else {
                 std::printf("%s INVALID: %s\n", pad(e.name, 20).c_str(), e.error.c_str());
             }
+        }
+        return 0;
+    }
+    if (is({"diagnose"}) || is({"diagnose", nullptr})) {
+        diagnostics::Input in{"sc-launch", profiles::data_dir(), profiles_dir, std::nullopt, ""};
+        try {
+            in.setup = resolve(cli.opts);
+        } catch (const std::exception& e) {
+            in.setup_error = e.what();
+        }
+        const diagnostics::Report report = diagnostics::collect(in);
+        std::fputs(report.text.c_str(), stdout);
+        if (c.size() == 2) {
+            write_or_throw(upath(c[1]), diagnostics::zip(report));
+            std::fprintf(stderr, "saved %s (home folder paths written as ~)\n", c[1].c_str());
         }
         return 0;
     }

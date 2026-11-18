@@ -6,6 +6,24 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- **Save diagnostics** (Settings → Star Conflict → Folders and logs, or
+  `sc-launch diagnose <zip>`): saves a zip to Downloads to send when asking
+  for help. It holds a report of the launcher, the game setup and every
+  profile (can its pack.json be read, parsed and saved, and if not, exactly
+  why), plus the launcher's, profiles' and game's logs. Home folder paths are
+  written as ~; the game's chat log is left out.
+- **Clearer file errors on Windows.** A file the launcher can't open now
+  says why: "Access denied" (permissions, or a folder made while running as
+  administrator), or "Sharing violation" (another program, such as a scanner
+  or sync tool, has it open), with what to try, instead of "permission
+  denied (os error 13)" for both. A file another program holds for a moment
+  is tried again for about a second first. Windows errors are always in
+  English.
+- **Paths show as they are.** Error messages no longer capitalized
+  "starforge" and "starfury" inside paths and links (a profiles folder
+  `D:\starforge_profiles` showed as `D:\STAR FORGE_profiles`), and editing a
+  profile no longer changes its stored name or server to capitals.
+
 ## 0.3.1
 
 - **Pre-release updates** (Settings → Launcher → Updates): testers can get

@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "gui/internal.hpp"
+#include "launch/diagnostics.hpp"
 #include "launch/env.hpp"
 #include "launch/gamescope.hpp"
 #include "launch/prepare.hpp"
@@ -421,6 +422,26 @@ json Backend::view_launch_log() {
     if (!log || !fs::is_regular_file(*log, ec)) throw std::runtime_error("The game has not been started from the launcher yet.");
     host_.open(ustr(*log));
     return nullptr;
+}
+
+json Backend::save_diagnostics() {
+    launch::diagnostics::Input in{"STAR FORGE Launcher", launch::profiles::data_dir(), profiles_dir(), std::nullopt, ""};
+    {
+        std::lock_guard<std::mutex> lock(game_->mu);
+        in.setup = game_->setup;
+        if (!in.setup && game_->reason) in.setup_error = *game_->reason;
+    }
+    const launch::diagnostics::Report report = launch::diagnostics::collect(in);
+    auto dir = launch::diagnostics::default_dir();
+    if (!dir) dir = in.data_dir;
+    if (!dir) throw std::runtime_error("cannot work out where to save the diagnostics");
+    const fs::path out = launch::diagnostics::save(report, *dir);
+    try {
+        host_.open(ustr(*dir));
+    } catch (const std::exception&) {
+        // The notice still says where it is.
+    }
+    return json(ustr(out));
 }
 
 }  // namespace sf::gui

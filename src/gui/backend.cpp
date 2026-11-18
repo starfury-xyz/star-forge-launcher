@@ -216,6 +216,7 @@ json Backend::invoke(const std::string& command, const json& args) {
     }
     if (command == "view_game_install") return view_game_install();
     if (command == "view_launch_log") return view_launch_log();
+    if (command == "save_diagnostics") return save_diagnostics();
     if (command == "view_game_logs") return view_game_logs();
     // downloads.rs
     if (command == "cancel_download") return cancel_download(arg_u64(c, args, "id")), nullptr;

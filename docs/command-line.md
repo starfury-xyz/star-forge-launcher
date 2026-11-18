@@ -11,6 +11,7 @@ expects next to itself.
 ```sh
 sc-launch list                       # profiles, their servers and patches
 sc-launch info                       # the detected game, tools and Proton
+sc-launch diagnose [<zip>]           # check the setup and every profile; with <zip>, save it with the logs for support
 sc-launch run <profile> [-- args]    # start the game (args replace the profile's own)
 sc-launch install <zip|folder|url> [--yes]   # install a pack, or update the profile that has it
 sc-launch updates                    # check installed packs for new versions
@@ -20,6 +21,15 @@ sc-launch patches <profile> on|off|default <exe> <id>   # switch one (saved in l
 ```
 
 `<profile>` is the profile's folder name, as `list` shows it.
+
+`diagnose` prints a report: the launcher and system versions, the game and its
+tools, and for every profile whether its `pack.json` and `local.json` can be
+read, parsed and saved, with the exact error (on Windows also the file's owner,
+its attributes and which programs have it open). With a zip path it also saves
+the report with the launcher's, profiles' and game's logs. Paths in the home
+folder are written as `~`, and the game's `chat.log` is left out. The launcher's
+**Save diagnostics** button (Settings → Star Conflict → Folders and logs) saves
+the same zip to Downloads.
 
 ## For server teams
 

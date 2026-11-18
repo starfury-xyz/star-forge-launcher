@@ -180,6 +180,7 @@ add_library(sf_launch STATIC
     src/crypto/base64.cpp
     src/crypto/random.cpp
     src/crypto/sha256.cpp
+    src/launch/diagnostics.cpp
     src/launch/env.cpp
     src/launch/gamescope.cpp
     src/launch/launch.cpp
@@ -200,7 +201,7 @@ add_library(sf_launch STATIC
 )
 target_link_libraries(sf_launch PUBLIC sf_patch PRIVATE monocypher miniz)
 if(WIN32)
-    target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt)  # registry (Steam's install path), downloads, random
+    target_link_libraries(sf_launch PUBLIC advapi32 winhttp bcrypt rstrtmgr)  # registry (Steam's install path), downloads, random, which programs hold a file
 else()
     find_package(CURL REQUIRED)
     target_link_libraries(sf_launch PUBLIC CURL::libcurl ${CMAKE_DL_LIBS})  # dl: gamescope.cpp loads libxcb
