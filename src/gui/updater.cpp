@@ -208,7 +208,7 @@ void replace_file(const fs::path& target, const fs::path& package) {
     if (ec) {
         std::error_code ignored;
         fs::remove(next, ignored);
-        fail("cannot update " + target.u8string() + ": " + ec.message());
+        fail("cannot update " + target.u8string() + ": " + launch::io_msg(ec));
     }
 }
 

@@ -64,7 +64,7 @@ void copy_dir(const fs::path& from, const fs::path& to) {
         if (it->is_directory(ec)) {
             copy_dir(src, dst);
         } else if (!fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec)) {
-            throw std::runtime_error(ustr(src) + " -> " + ustr(dst) + ": " + ec.message());
+            throw std::runtime_error(ustr(src) + " -> " + ustr(dst) + ": " + io_msg(ec));
         }
     }
 }
@@ -221,7 +221,7 @@ void write_atomic(const fs::path& path, const std::string& text) {
     const fs::path tmp = path.parent_path() / upath("." + ustr(path.filename()) + ".tmp");
     write_or_throw(tmp, text);
     std::error_code ec;
-    fs::rename(tmp, path, ec);
+    rename_replacing(tmp, path, ec);
     if (ec) fail(path, ec);
 }
 
@@ -301,7 +301,7 @@ std::optional<fs::path> import_steam_data(const Setup& setup, const std::optiona
             std::error_code ec;
             fs::create_directories(to, ec);
             if (!ec) fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
-            if (ec) throw std::runtime_error("could not copy the game's data from Steam's prefix: " + ec.message());
+            if (ec) throw std::runtime_error("could not copy the game's data from Steam's prefix: " + io_msg(ec));
             copied = from;
         }
     }
@@ -339,7 +339,7 @@ void sync_file(const fs::path& a, const fs::path& b) {
     create_dirs(to->parent_path());
     std::error_code ec;
     if (!fs::copy_file(*from, *to, fs::copy_options::overwrite_existing, ec))
-        throw std::runtime_error(ustr(*from) + " -> " + ustr(*to) + ": " + ec.message());
+        throw std::runtime_error(ustr(*from) + " -> " + ustr(*to) + ": " + io_msg(ec));
 }
 
 }  // namespace

@@ -446,7 +446,7 @@ Command tool_command(const Setup& setup, const char* verb, const fs::path& exe, 
 Command command(const Setup& setup, const fs::path& profile_dir_in, const std::vector<std::string>& game_args) {
     std::error_code ec;
     fs::path profile_dir = fs::canonical(profile_dir_in, ec);
-    if (ec) throw std::runtime_error(ustr(profile_dir_in) + ": " + ec.message());
+    if (ec) throw std::runtime_error(io_error(profile_dir_in, ec));
 #ifdef _WIN32
     std::string p = ustr(profile_dir);
     if (p.rfind("\\\\?\\", 0) == 0) profile_dir = upath(p.substr(4));
@@ -474,7 +474,7 @@ Command server_command(const Setup& setup, const fs::path& cloud_dir, const std:
     if (!is_file(exe)) throw std::runtime_error(std::string(kServerExe) + " is missing from " + ustr(setup.tools_dir));
     std::error_code ec;
     const fs::path cloud = fs::absolute(cloud_dir, ec);
-    if (ec) throw std::runtime_error(ustr(cloud_dir) + ": " + ec.message());
+    if (ec) throw std::runtime_error(io_error(cloud_dir, ec));
     // `run`, not waitforexitandrun: the server can share the prefix with a game that's running.
     Command cmd = tool_command(setup, "run", exe, {verb, tool_path(cloud)}, {&cloud});
     cmd.cwd = cloud;

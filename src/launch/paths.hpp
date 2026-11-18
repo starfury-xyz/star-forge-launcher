@@ -24,10 +24,13 @@ std::optional<std::string> get_env(const char* name);
 // Sets (or, with nullopt, removes) an environment variable of this process.
 void set_env(const char* name, const std::optional<std::string>& value);
 
-// A whole file as bytes; nullopt if it can't be read (`ec`, if given, then says why).
+// A whole file as bytes; nullopt if it can't be read (`ec`, if given, then says why). On Windows
+// `ec` is the Windows error (system_category), and a file another program has open is tried
+// again for about a second first.
 std::optional<std::string> read_text(const fs::path& path, std::error_code* ec = nullptr);
 
-// "<why> (os error N)": a Rust io::Error printed on its own.
+// "<why> (os error N)": a Rust io::Error printed on its own. On Windows a Windows error is
+// worded in English, with what to try for the errors that keep a file from opening.
 std::string io_msg(const std::error_code& ec);
 // "<path>: <why> (os error N)", like Rust's "{path}: {e}" messages.
 std::string io_error(const fs::path& path, const std::error_code& ec);
@@ -35,6 +38,9 @@ std::string io_error(const fs::path& path, const std::error_code& ec);
 std::string read_or_throw(const fs::path& path);
 // Creates or replaces a file. Throws std::runtime_error(io_error(...)).
 void write_or_throw(const fs::path& path, const std::string& data);
+// fs::rename, but on Windows tried again for about a second while another program (a virus
+// scanner, an indexer) holds the file being replaced.
+void rename_replacing(const fs::path& from, const fs::path& to, std::error_code& ec);
 // Whether `ec` means the file (or a folder on its path) doesn't exist.
 bool not_found(const std::error_code& ec);
 

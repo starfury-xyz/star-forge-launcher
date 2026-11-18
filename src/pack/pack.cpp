@@ -305,7 +305,7 @@ Profile Profile::load(const fs::path& dir) {
     Local local;
     std::error_code ec;
     if (auto t = launch::read_text(dir / kLocalFile, &ec)) local = Local::from_json(*t);
-    else if (!launch::not_found(ec)) throw Error(std::string(kLocalFile) + ": " + ec.message() + " (os error " + std::to_string(ec.value()) + ")");
+    else if (!launch::not_found(ec)) throw Error(std::string(kLocalFile) + ": " + launch::io_msg(ec));
     Profile profile = from(pack, local);
     profile.address_cfg();
     return profile;

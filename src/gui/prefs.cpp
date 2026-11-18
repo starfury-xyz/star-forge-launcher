@@ -44,7 +44,7 @@ void save(const Preferences& p) {
     tmp += ".tmp";
     launch::write_or_throw(tmp, p.to_json().dump(2));
     std::error_code ec;
-    fs::rename(tmp, *path, ec);
+    launch::rename_replacing(tmp, *path, ec);
     if (ec) throw std::runtime_error(launch::io_error(*path, ec));
 }
 
