@@ -113,7 +113,8 @@ int main() {
         const diagnostics::Report r = diagnostics::collect({"test", std::nullopt, profiles, std::nullopt, "no game here"});
 #ifdef _WIN32
         CloseHandle(held);
-        check(r.text.find("pack.json: CANNOT READ: Sharing violation (os error 32)") != std::string::npos,
+        // Windows and Wine word it differently; the code is what counts.
+        check(r.text.find("pack.json: CANNOT READ: ") != std::string::npos && r.text.find("(os error 32)") != std::string::npos,
               "diagnostics: a held pack.json is reported as a sharing violation");
 #else
         check(r.text.find("pack.json: read ") != std::string::npos && r.text.find("parsed: local.good 1.0.0 \"Good\"") != std::string::npos,
