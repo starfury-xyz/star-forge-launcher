@@ -133,6 +133,11 @@ public:
                                          const std::vector<std::string>& extensions) override {
         return on_ui<std::optional<std::string>>([&] { return app::pick_file(main_.get(), title, filter, extensions); });
     }
+    std::optional<std::string> pick_save_file(const std::string& title, const std::string& filter, const std::string& extension,
+                                              const std::optional<std::string>& start, const std::string& name) override {
+        return on_ui<std::optional<std::string>>(
+            [&] { return app::pick_save_file(main_.get(), title, filter, extension, start, name); });
+    }
     void hide_to_tray() override {
         if (tray_) {
             on_ui<int>([&] {

@@ -46,6 +46,10 @@ public:
     virtual std::optional<std::string> pick_folder(const std::string& title, const std::optional<std::string>& start) = 0;
     virtual std::optional<std::string> pick_file(const std::string& title, const std::string& filter_name,
                                                  const std::vector<std::string>& extensions) = 0;
+    // A "Save as" picker starting in `start` with `name` filled in, asking before replacing a file.
+    virtual std::optional<std::string> pick_save_file(const std::string& title, const std::string& filter_name,
+                                                      const std::string& extension, const std::optional<std::string>& start,
+                                                      const std::string& name) = 0;
     // Hides the launcher to the tray (or minimizes it without one). Throws std::runtime_error.
     virtual void hide_to_tray() = 0;
     // Brings the launcher back (game exit, a pack link).
@@ -158,7 +162,7 @@ private:
     json get_artwork();
     json view_game_install();
     json view_launch_log();
-    json save_diagnostics();  // a diagnostics zip in Downloads, shown in the file manager; its path
+    json save_diagnostics();  // a diagnostics zip where the player picks (Downloads first); its path, or null if cancelled
     json view_game_logs();  // the game's own logs folder for the selected profile
     void cancel_download(uint64_t id);
     json list_profiles();

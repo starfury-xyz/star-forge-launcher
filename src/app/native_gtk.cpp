@@ -382,6 +382,32 @@ std::optional<std::string> pick_file(NativeWindow* parent, const std::string& ti
     return choose(parent, title, GTK_FILE_CHOOSER_ACTION_OPEN, std::nullopt, filter);
 }
 
+std::optional<std::string> pick_save_file(NativeWindow* parent, const std::string& title, const std::string& filter_name,
+                                          const std::string& extension, const std::optional<std::string>& start,
+                                          const std::string& name) {
+    GtkFileChooserNative* dialog = gtk_file_chooser_native_new(
+        title.c_str(), parent ? GTK_WINDOW(parent->handle()) : nullptr, GTK_FILE_CHOOSER_ACTION_SAVE, nullptr, nullptr);
+    GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
+    gtk_file_chooser_set_do_overwrite_confirmation(chooser, TRUE);
+    if (start) gtk_file_chooser_set_current_folder(chooser, start->c_str());
+    gtk_file_chooser_set_current_name(chooser, name.c_str());
+    GtkFileFilter* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, filter_name.c_str());
+    gtk_file_filter_add_pattern(filter, ("*." + extension).c_str());
+    gtk_file_chooser_add_filter(chooser, filter);
+    std::optional<std::string> out;
+    if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        if (char* file = gtk_file_chooser_get_filename(chooser)) {
+            out = file;
+            g_free(file);
+        }
+    }
+    g_object_unref(dialog);
+    // GTK leaves the extension to the player.
+    if (out && std::filesystem::path(*out).extension().empty()) *out += "." + extension;
+    return out;
+}
+
 namespace {
 
 // The listening socket for a data folder: an abstract one (no file to clean up), named after a

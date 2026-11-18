@@ -47,7 +47,7 @@ export async function bindSettings(preferences, store) {
       <p class="settings-path" id="detected-proton"></p></section>
       <section class="setting-group"><h2>Setup</h2>
       ${row('Run setup again', 'Pick the Star Conflict and profiles folders again, as on first start.', 'run-setup', '<span class="confirm-inline"><button class="button" id="run-setup">Run setup…</button><span id="run-setup-confirm" hidden>Open the setup now? <button class="button primary" id="run-setup-yes">Run setup</button><button class="button" id="run-setup-no">Cancel</button></span></span>')}</section>
-      <section class="setting-group"><h2>Folders and logs</h2><div class="setting-buttons"><button class="button" data-command="view_game_install">Open game folder</button><button class="button" data-command="open_profile_folder">Open profiles folder</button><button class="button" data-command="view_launch_log">Open last launch log</button><button class="button" data-command="view_game_logs">Open game logs</button><button class="button" id="save-diagnostics" title="Saves a zip of logs and checks to Downloads, to send when asking for help">Save diagnostics</button></div></section>`;
+      <section class="setting-group"><h2>Folders and logs</h2><div class="setting-buttons"><button class="button" data-command="view_game_install">Open game folder</button><button class="button" data-command="open_profile_folder">Open profiles folder</button><button class="button" data-command="view_launch_log">Open last launch log</button><button class="button" data-command="view_game_logs">Open game logs</button><button class="button" id="save-diagnostics" title="Saves a zip of logs and checks, to send when asking for help">Save diagnostics…</button></div></section>`;
     if (tab === 'game') {
       const select = area.querySelector('#proton-path');
       if (select instanceof HTMLSelectElement)
@@ -230,7 +230,9 @@ export async function bindSettings(preferences, store) {
       run(async () => {
         button.disabled = true;
         try {
-          const path = string(await invoke('save_diagnostics'));
+          const saved = await invoke('save_diagnostics');
+          if (typeof saved !== 'string') return;  // cancelled
+          const path = saved;
           notice(`Saved ${path}. Send this file when asking for help (paths in your home folder are shown as ~).`, 'success');
         } finally {
           button.disabled = false;

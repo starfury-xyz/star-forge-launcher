@@ -114,6 +114,10 @@ void post(std::function<void()> f);
 std::optional<std::string> pick_folder(NativeWindow* parent, const std::string& title, const std::optional<std::string>& start);
 std::optional<std::string> pick_file(NativeWindow* parent, const std::string& title, const std::string& filter_name,
                                      const std::vector<std::string>& extensions);
+// "Save as": starts in `start` with `name` filled in; asks before replacing a file.
+std::optional<std::string> pick_save_file(NativeWindow* parent, const std::string& title, const std::string& filter_name,
+                                          const std::string& extension, const std::optional<std::string>& start,
+                                          const std::string& name);
 // Opens a folder, file or web link with the desktop's default program. Any thread. Throws
 // std::runtime_error.
 void open(const std::string& target);
