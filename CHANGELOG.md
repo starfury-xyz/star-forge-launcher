@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.3.1
+
 - **Save diagnostics** (Settings → Star Conflict → Folders and logs, or
   `sc-launch diagnose <zip>`): saves a zip to Downloads to send when asking
   for help. It holds a report of the launcher, the game setup and every
@@ -23,8 +25,6 @@ to **Unreleased** as you go and rename it to the version when you tag
   "starforge" and "starfury" inside paths and links (a profiles folder
   `D:\starforge_profiles` showed as `D:\STAR FORGE_profiles`), and editing a
   profile no longer changes its stored name or server to capitals.
-
-## 0.3.1
 
 - **Pre-release updates** (Settings → Launcher → Updates): testers can get
   launcher test versions (tags like `v0.3.1-rc.1`, published as GitHub
