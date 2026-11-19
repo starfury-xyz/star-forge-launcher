@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the launcher's .deb and .rpm, laid out as Tauri's (same package name, the tools in
-# /usr/lib/STAR FORGE Launcher/tools), so either upgrades an installed star-forge package:
+# Builds the launcher's .deb and .rpm (same package name as Tauri's, so either upgrades an installed
+# star-forge package), the tools in /opt/star-forge/tools: the Steam Linux Runtime that umu and
+# Proton run the game in hides the host's /usr, so tools under /usr/lib can't start.
 #
 #   packaging/linux-packages.sh   -> build/packages/STAR_FORGE_Launcher_<version>_amd64.deb
 #                                    build/packages/STAR_FORGE_Launcher-<version>-1.x86_64.rpm
@@ -30,13 +31,13 @@ fi
 # The installed files, shared by both packages.
 files="$out/files"
 rm -rf "$out"
-mkdir -p "$files/usr/bin" "$files/usr/lib/STAR FORGE Launcher/tools" "$files/usr/share/applications"
+mkdir -p "$files/usr/bin" "$files/opt/star-forge/tools" "$files/usr/share/applications"
 install -m755 "$root/build/linux/star-forge" "$files/usr/bin/star-forge"
 strip "$files/usr/bin/star-forge"
-install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$files/usr/lib/STAR FORGE Launcher/tools/"
+install -m644 "$win_tools/sc-inject.exe" "$win_tools/sc_agent.dll" "$win_tools/sc-server.exe" "$files/opt/star-forge/tools/"
 umu="$("$root/packaging/fetch-umu.sh")"
-install -m755 "$umu/umu-run" "$files/usr/lib/STAR FORGE Launcher/tools/"
-install -m644 "$umu/umu-run.NOTICE" "$files/usr/lib/STAR FORGE Launcher/tools/"
+install -m755 "$umu/umu-run" "$files/opt/star-forge/tools/"
+install -m644 "$umu/umu-run.NOTICE" "$files/opt/star-forge/tools/"
 for size in 32x32 128x128; do
     install -Dm644 "$root/gui/icons/$size.png" "$files/usr/share/icons/hicolor/$size/apps/star-forge.png"
 done
@@ -100,7 +101,7 @@ cp -a "$files/." "%{buildroot}/"
 
 %files
 /usr/bin/star-forge
-"/usr/lib/STAR FORGE Launcher"
+/opt/star-forge
 "/usr/share/applications/STAR FORGE Launcher.desktop"
 /usr/share/icons/hicolor/32x32/apps/star-forge.png
 /usr/share/icons/hicolor/128x128/apps/star-forge.png

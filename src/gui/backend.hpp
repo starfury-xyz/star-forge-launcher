@@ -248,8 +248,8 @@ size_t random_below(size_t n);
 // Path::starts_with: whole components.
 bool path_starts_with(const fs::path& path, const fs::path& prefix);
 // Where a launcher in `exe_dir` has its tools: in a deb or rpm (<prefix>/bin/star-forge),
-// <prefix>/lib/STAR FORGE Launcher/tools, as Tauri's resource folder; else tools/ next to it, or
-// right beside it.
+// /opt/star-forge/tools (outside /usr, which the Steam Linux Runtime hides), then the older
+// <prefix>/lib/STAR FORGE Launcher/tools; else tools/ next to it, or right beside it.
 std::vector<fs::path> default_tool_folders(const fs::path& exe_dir);
 // "<path>: <why>" for a failed folder creation; throws std::runtime_error.
 void create_dirs(const fs::path& dir);
