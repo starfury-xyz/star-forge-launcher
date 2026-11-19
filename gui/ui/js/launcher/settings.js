@@ -41,7 +41,7 @@ export async function bindSettings(preferences, store) {
       ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', folder('game-directory', 'gameDirectory', 'Found through Steam', 'Star Conflict folder'))}
       <p class="settings-path" id="detected-game"></p></section>
       <section class="setting-group" ${compat.supported ? '' : 'hidden'}><h2>Compatibility</h2>
-      ${row('Run the game with', 'Automatic uses umu-launcher, which runs Proton without needing Steam (it downloads its runtime the first time). Or name a Wine-style command (wine, a Wine build or a wrapper script), run as <i>command</i> program.exe. <b>steam-proton</b> uses Steam’s own setup and will be removed in a later version.', 'runner', '<input id="runner" data-preference="runner" type="text" spellcheck="false" list="runner-list" placeholder="Automatic (umu)"><datalist id="runner-list"></datalist>')}
+      ${row('Run the game with', 'Automatic uses umu-launcher, which runs Proton without needing Steam (it downloads its runtime the first time). Or name a Wine-style command (wine, a Wine build or a wrapper script), run as <i>command</i> program.exe. <b>steam-proton</b> uses Steam’s own setup and will be removed in a later version.', 'runner', '<select id="runner" data-preference="runner"></select>')}
       <div id="proton-settings">${row('Proton version', 'Automatic uses umu’s own Proton (UMU-Proton), the same for every player. Pick another build (Steam’s, GE, CachyOS…) to use it instead.', 'proton-path', '<select id="proton-path" data-preference="protonPath"><option value="">Automatic</option></select>')}</div>
       <div id="prefix-settings">${row('Prefix', 'Leave empty for the launcher’s own prefix in its data folder. Your settings are copied from Steam’s prefix the first time.', 'wine-prefix', folder('wine-prefix', 'winePrefix', 'Launcher’s own prefix', 'Wine prefix folder'))}</div>
       <p class="settings-path" id="detected-proton"></p></section>
@@ -53,12 +53,10 @@ export async function bindSettings(preferences, store) {
       if (select instanceof HTMLSelectElement)
         for (const path of compat.proton)
           select.add(new Option(path.split(/[\\/]/).filter(Boolean).pop() || path, path));
-      const list = area.querySelector('#runner-list');
-      if (list)
+      const runner = area.querySelector('#runner');
+      if (runner instanceof HTMLSelectElement)
         for (const name of ['umu', 'steam-proton', ...compat.wine]) {
-          const option = document.createElement('option');
-          option.value = name;
-          list.append(option);
+          runner.add(new Option(name));
         }
     }
     sync();
