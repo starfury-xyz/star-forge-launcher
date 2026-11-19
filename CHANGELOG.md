@@ -6,18 +6,20 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.3.1
+
 - **The .deb and .rpm start the game again.** Their tools moved from
   `/usr/lib/STAR FORGE Launcher/tools` to `/opt/star-forge/tools`: the Steam
   Linux Runtime that umu and Proton run the game in puts its own `/usr` over
   the system's, so the game couldn't start from there. Tools set by hand in
   such a folder now get an error saying so instead of a game that won't start.
-
-## 0.3.1
-
+- **Runner picked from a list** (Settings → Compatibility → Run the game
+  with): umu, steam-proton or a Wine build found on the system, instead of
+  typing its name.
 - **Save diagnostics** (Settings → Star Conflict → Folders and logs, or
   `sc-launch diagnose <zip>`): saves a zip, wherever you pick (Downloads is
-  offered first), to send when asking for help. It holds a report of the launcher, the game setup and every
-  profile (can its pack.json be read, parsed and saved, and if not, exactly
+  offered first), to send when asking for help. It holds a report of the
+  launcher, the game setup and every profile (can its pack.json be read, parsed and saved, and if not, exactly
   why), plus the launcher's, profiles' and game's logs. Home folder paths are
   written as ~; the game's chat log is left out.
 - **Clearer file errors on Windows.** A file the launcher can't open now
