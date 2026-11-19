@@ -335,6 +335,10 @@ Setup resolve(const Options& given) {
                              " (pass --tools-dir or set STAR_FORGE_TOOLS_DIR)");
 
 #ifndef _WIN32
+    if ((*opts.runner == kUmuRunner || *opts.runner == kSteamProtonRunner) && runtime_hides(setup.tools_dir))
+        throw SetupError(ustr(setup.tools_dir) + " is hidden inside the Steam Linux Runtime, so the game can't start "
+                         "from there. Move the tools to another folder (such as /opt/star-forge/tools) and set it with "
+                         "--tools-dir or STAR_FORGE_TOOLS_DIR, or update the launcher package.");
     if (*opts.runner == kUmuRunner) {
         setup.wine = umu_setup(setup.tools_dir, opts.wine_prefix, opts.proton);
         return setup;
@@ -365,6 +369,17 @@ std::optional<std::string> inject_error(const fs::path& profile_dir) {
         start = end + 1;
     }
     return found;
+}
+
+bool runtime_hides(const fs::path& path) {
+    std::error_code ec;
+    fs::path real = fs::weakly_canonical(path, ec);
+    if (ec) real = path.lexically_normal();
+    auto it = real.begin();
+    if (it == real.end() || *it != "/" || ++it == real.end()) return false;
+    for (const char* top : {"usr", "etc", "bin", "sbin", "lib", "lib32", "lib64", "libx32", "app", "overrides"})
+        if (*it == top) return true;
+    return false;
 }
 
 std::string tool_path(const fs::path& path) {

@@ -157,6 +157,11 @@ int main() {
         }
         check(threw, std::string("tool_path refuses ") + bad);
     }
+    // runtime_hides: what pressure-vessel mounts its own files over.
+    for (const char* hidden : {"/usr/lib/STAR FORGE Launcher/tools", "/usr", "/etc/x", "/lib64/x", "/usr/../usr/lib"})
+        check(runtime_hides(hidden), std::string("runtime_hides: ") + hidden);
+    for (const char* shown : {"/opt/star-forge/tools", "/home/u/usr", "/", "/tmp/.mount_x/usr/lib/tools", "relative/usr"})
+        check(!runtime_hides(shown), std::string("runtime_hides: not ") + shown);
 #endif
 
     // find_game / resolve on a fake install: <library>/steamapps/common/star conflict.

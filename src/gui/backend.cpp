@@ -132,7 +132,11 @@ bool arg_bool(const char* command, const json& args, const char* key) {
 std::vector<fs::path> default_tool_folders(const fs::path& exe_dir) {
     std::vector<fs::path> out;
 #ifndef _WIN32
-    if (exe_dir.filename() == "bin") out.push_back(exe_dir.parent_path() / "lib" / "STAR FORGE Launcher" / "tools");
+    if (exe_dir.filename() == "bin") {
+        out.push_back("/opt/star-forge/tools");
+        // Before 0.3.1: hidden by the Steam Linux Runtime; still right for a Wine runner.
+        out.push_back(exe_dir.parent_path() / "lib" / "STAR FORGE Launcher" / "tools");
+    }
 #endif
     out.push_back(exe_dir / "tools");
     out.push_back(exe_dir);

@@ -140,6 +140,9 @@ std::optional<std::string> inject_error(const fs::path& profile_dir);
 // A path as the injector (a Windows program) sees it: unchanged on Windows; under wine Z:\...,
 // which needs an absolute path without ':', '\' or "..". Throws std::runtime_error.
 std::string tool_path(const fs::path& path);
+// Whether the Steam Linux Runtime's container (pressure-vessel, which umu and Proton run in) puts
+// its own files over `path`: /usr, /etc, /bin, /lib... A Windows tool there can't be started.
+bool runtime_hides(const fs::path& path);
 // The command that runs sc-inject.exe for the profile in `profile_dir`. Throws std::runtime_error.
 Command command(const Setup& setup, const fs::path& profile_dir, const std::vector<std::string>& game_args);
 // The command that runs `sc-server.exe <verb> <cloud>` (verb "run" or "stop") for a server

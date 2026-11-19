@@ -6,6 +6,12 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- **The .deb and .rpm start the game again.** Their tools moved from
+  `/usr/lib/STAR FORGE Launcher/tools` to `/opt/star-forge/tools`: the Steam
+  Linux Runtime that umu and Proton run the game in puts its own `/usr` over
+  the system's, so the game couldn't start from there. Tools set by hand in
+  such a folder now get an error saying so instead of a game that won't start.
+
 ## 0.3.1
 
 - **Save diagnostics** (Settings → Star Conflict → Folders and logs, or
