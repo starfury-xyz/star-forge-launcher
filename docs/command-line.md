@@ -28,8 +28,8 @@ read, parsed and saved, with the exact error (on Windows also the file's owner,
 its attributes and which programs have it open). With a zip path it also saves
 the report with the launcher's, profiles' and game's logs. Paths in the home
 folder are written as `~`, and the game's `chat.log` is left out. The launcher's
-**Save diagnostics** button (Settings → Star Conflict → Folders and logs) saves
-the same zip to Downloads.
+**Save diagnostics…** button (Settings → Star Conflict → Folders and logs) asks
+where to save the same zip, offering Downloads first.
 
 ## For server teams
 

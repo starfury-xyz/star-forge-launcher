@@ -34,11 +34,13 @@ Report collect(const Input& in);
 // The zip's bytes: report.txt, then each file (the last 2 MB of a bigger one), home paths as ~.
 std::string zip(const Report& report);
 
-// Writes starforge-diagnostics-<date>-<time>.zip into `dir` and returns its path. Throws
-// std::runtime_error.
-fs::path save(const Report& report, const fs::path& dir);
+// starforge-diagnostics-<date>-<time>.zip
+std::string default_name();
 
-// Where save() should put it: Downloads, else the home folder.
+// Writes the zip to `file`. Throws std::runtime_error.
+void save(const Report& report, const fs::path& file);
+
+// Where to offer to save it: Downloads, else the home folder.
 std::optional<fs::path> default_dir();
 
 // `text` with the player's home folder (in its Unix, Windows and Wine Z:\ spellings) as ~.

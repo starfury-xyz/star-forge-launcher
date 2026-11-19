@@ -58,6 +58,12 @@ struct FakeHost : sf::gui::Host {
         picks.push_back("file " + title + " (" + filter + ": " + exts.at(0) + ")");
         return pick_answer;
     }
+    std::optional<std::string> pick_save_file(const std::string& title, const std::string& filter, const std::string& ext,
+                                              const std::optional<std::string>& start, const std::string& name) override {
+        std::lock_guard<std::mutex> lock(mu);
+        picks.push_back("save " + title + " (" + filter + ": " + ext + ")" + (start ? " at " + *start : "") + " as " + name);
+        return pick_answer;
+    }
     void hide_to_tray() override {
         std::lock_guard<std::mutex> lock(mu);
         ++hidden;
@@ -639,6 +645,19 @@ void game(const fs::path& base) {
     check(phases == "launching running ready ", "phases: " + phases);
     call("view_launch_log");
     check(host.last_opened() == ustr(base / "data" / "game-launch.log") && fs::exists(base / "data" / "game-launch.log"), "the launch log opens");
+
+    // Save diagnostics: asks where first, and cancelling saves nothing.
+    host.pick_answer.reset();
+    check(call("save_diagnostics").is_null(), "save diagnostics: cancelled, nothing saved");
+    const std::string asked = host.picks.back();
+    check(contains(asked, "save Save diagnostics (Zip file: zip)") && contains(asked, " as starforge-diagnostics-") &&
+              contains(asked, ".zip"),
+          "save diagnostics asks where, with a name: " + asked);
+    const fs::path zip = base / "diag" / "picked.zip";
+    fs::create_directories(zip.parent_path());
+    host.pick_answer = ustr(zip);
+    check(call("save_diagnostics") == ustr(zip) && fs::file_size(zip) > 100, "save diagnostics writes the zip where picked");
+    host.pick_answer.reset();
 }
 
 void setup(const fs::path& base) {

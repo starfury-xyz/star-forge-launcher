@@ -425,22 +425,21 @@ json Backend::view_launch_log() {
 }
 
 json Backend::save_diagnostics() {
+    // Where first: collecting takes a moment (it hashes game.exe), and cancelling should be instant.
+    std::optional<fs::path> start = launch::diagnostics::default_dir();
+    if (!start) start = launch::profiles::data_dir();
+    const auto picked = host_.pick_save_file("Save diagnostics", "Zip file", "zip",
+                                             start ? std::optional<std::string>(ustr(*start)) : std::nullopt,
+                                             launch::diagnostics::default_name());
+    if (!picked) return nullptr;
+    const fs::path out = launch::upath(*picked);
     launch::diagnostics::Input in{"STAR FORGE Launcher", launch::profiles::data_dir(), profiles_dir(), std::nullopt, ""};
     {
         std::lock_guard<std::mutex> lock(game_->mu);
         in.setup = game_->setup;
         if (!in.setup && game_->reason) in.setup_error = *game_->reason;
     }
-    const launch::diagnostics::Report report = launch::diagnostics::collect(in);
-    auto dir = launch::diagnostics::default_dir();
-    if (!dir) dir = in.data_dir;
-    if (!dir) throw std::runtime_error("cannot work out where to save the diagnostics");
-    const fs::path out = launch::diagnostics::save(report, *dir);
-    try {
-        host_.open(ustr(*dir));
-    } catch (const std::exception&) {
-        // The notice still says where it is.
-    }
+    launch::diagnostics::save(launch::diagnostics::collect(in), out);
     return json(ustr(out));
 }
 

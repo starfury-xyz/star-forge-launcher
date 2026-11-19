@@ -15,8 +15,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 ## 0.3.1
 
 - **Save diagnostics** (Settings → Star Conflict → Folders and logs, or
-  `sc-launch diagnose <zip>`): saves a zip to Downloads to send when asking
-  for help. It holds a report of the launcher, the game setup and every
+  `sc-launch diagnose <zip>`): saves a zip, wherever you pick (Downloads is
+  offered first), to send when asking for help. It holds a report of the launcher, the game setup and every
   profile (can its pack.json be read, parsed and saved, and if not, exactly
   why), plus the launcher's, profiles' and game's logs. Home folder paths are
   written as ~; the game's chat log is left out.

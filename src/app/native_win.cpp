@@ -511,6 +511,37 @@ std::optional<std::string> pick_file(NativeWindow* parent, const std::string& ti
     return choose(parent, title, false, std::nullopt, wide(filter_name), patterns);
 }
 
+std::optional<std::string> pick_save_file(NativeWindow* parent, const std::string& title, const std::string& filter_name,
+                                          const std::string& extension, const std::optional<std::string>& start,
+                                          const std::string& name) {
+    Com<IFileSaveDialog> dialog;
+    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(dialog.put()))))
+        return std::nullopt;
+    FILEOPENDIALOGOPTIONS options = 0;
+    dialog->GetOptions(&options);
+    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_OVERWRITEPROMPT);
+    const std::wstring t = wide(title), fname = wide(filter_name), pattern = L"*." + wide(extension), ext = wide(extension),
+                       n = wide(name);
+    dialog->SetTitle(t.c_str());
+    COMDLG_FILTERSPEC spec{fname.c_str(), pattern.c_str()};
+    dialog->SetFileTypes(1, &spec);
+    dialog->SetDefaultExtension(ext.c_str());  // added when the player types a name without it
+    dialog->SetFileName(n.c_str());
+    if (start) {
+        Com<IShellItem> item;
+        const std::wstring s = wide(*start);
+        if (SUCCEEDED(SHCreateItemFromParsingName(s.c_str(), nullptr, IID_PPV_ARGS(item.put())))) dialog->SetFolder(item.p);
+    }
+    if (FAILED(dialog->Show(parent ? static_cast<HWND>(parent->handle()) : nullptr))) return std::nullopt;  // cancelled
+    Com<IShellItem> result;
+    if (FAILED(dialog->GetResult(result.put()))) return std::nullopt;
+    PWSTR path = nullptr;
+    if (FAILED(result->GetDisplayName(SIGDN_FILESYSPATH, &path))) return std::nullopt;
+    std::string out = utf8(path);
+    CoTaskMemFree(path);
+    return out;
+}
+
 // --- Tray: a notification-area icon, its messages going to a hidden window (a message-only one
 // would miss the TaskbarCreated broadcast sent when Explorer restarts). ---
 

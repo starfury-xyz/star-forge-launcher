@@ -453,14 +453,9 @@ std::string zip(const Report& report) {
     return out;
 }
 
-fs::path save(const Report& report, const fs::path& dir) {
-    std::error_code ec;
-    fs::create_directories(dir, ec);
-    if (ec) throw std::runtime_error(io_error(dir, ec));
-    const fs::path out = dir / upath("starforge-diagnostics-" + now_text("%Y%m%d-%H%M%S") + ".zip");
-    write_or_throw(out, zip(report));
-    return out;
-}
+std::string default_name() { return "starforge-diagnostics-" + now_text("%Y%m%d-%H%M%S") + ".zip"; }
+
+void save(const Report& report, const fs::path& file) { write_or_throw(file, zip(report)); }
 
 std::optional<fs::path> default_dir() {
     auto h = home();
