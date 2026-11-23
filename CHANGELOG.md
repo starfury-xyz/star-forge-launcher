@@ -6,6 +6,15 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.3.2
+
+- **Starts the game again after the 2026-11-23 game update** (game.exe
+  1.99.0.167303). The core patches are tied to the game builds they were
+  checked against, and the new build wasn't one of them, so launching stopped
+  with "The pack's game patches don't match this game". The update changed
+  only version strings in game.exe (its code is byte-for-byte the same as
+  1.99.0.167301), so the same patches are now allowed on it.
+
 ## 0.3.1
 
 - **The .deb and .rpm start the game again.** Their tools moved from

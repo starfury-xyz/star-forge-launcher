@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 if(POLICY CMP0141)
     cmake_policy(SET CMP0141 NEW)
 endif()
-project(starforge VERSION 0.3.1 LANGUAGES C CXX)
+project(starforge VERSION 0.3.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
